@@ -1,0 +1,84 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-sans: "Avenir Next", "Suisse Intl", "Segoe UI Variable", "Helvetica Neue", "Arial Nova", sans-serif;
+  --font-mono: "IBM Plex Mono", "SFMono-Regular", "Consolas", monospace;
+  --background: #f4f7f4;
+  --foreground: #13202a;
+  --card: rgba(255, 255, 255, 0.9);
+  --border: rgba(78, 102, 118, 0.18);
+  --muted: #5f7889;
+  --success: #157f52;
+  --warning: #bc6b00;
+  --danger: #b93826;
+}
+
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(244, 184, 96, 0.12), transparent 26%),
+    radial-gradient(circle at top right, rgba(215, 244, 226, 0.75), transparent 34%),
+    linear-gradient(180deg, #fbfcfa 0%, var(--background) 42%, #edf3f6 100%);
+  color: var(--foreground);
+  font-family: var(--font-sans), sans-serif;
+}
+
+a {
+  color: inherit;
+}
+
+input,
+textarea,
+select,
+button {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(244, 184, 96, 0.35);
+}
+
+@layer components {
+  .page-shell {
+    @apply mx-auto w-full max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8;
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  .card-panel {
+    @apply relative rounded-[28px] border border-white/70 bg-white/85 shadow-soft backdrop-blur sm:rounded-[32px];
+  }
+
+  .section-title {
+    @apply text-[11px] font-semibold uppercase tracking-[0.24em] text-slate sm:text-xs;
+  }
+
+  .status-pill {
+    @apply inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em];
+  }
+
+  .heading-xl {
+    @apply text-2xl font-semibold tracking-tight text-ink sm:text-3xl lg:text-4xl;
+  }
+
+  .heading-lg {
+    @apply text-xl font-semibold tracking-tight text-ink sm:text-2xl lg:text-3xl;
+  }
+
+  .heading-hero {
+    @apply text-3xl font-semibold tracking-tight text-ink sm:text-4xl lg:text-5xl;
+  }
+
+  .section-divider {
+    @apply border-t border-slate/10 pt-5 sm:pt-6;
+  }
+}
