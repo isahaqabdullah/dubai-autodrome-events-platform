@@ -1017,6 +1017,10 @@ export function EventBookingFlow({
                       <p className="mt-3 text-sm text-rose-700">
                         Your hold expired. Go back and continue again to restart the session.
                       </p>
+                    ) : step === "details" && !emailVerified && submissionState !== "submitting" ? (
+                      <p className="mt-3 text-sm text-amber-600">
+                        Please verify your email above to complete registration.
+                      </p>
                     ) : null}
                   </>
                 ) : null}

@@ -32,7 +32,7 @@ export function Pagination({
       params.set(paramKey, String(page));
     }
     const query = params.toString();
-    return query ? `?${query}` : "?";
+    return (query ? `?${query}` : "?") as __next_route_internal_types__.RouteImpl<string>;
   }
 
   const rangeStart = (clamped - 1) * pageSize + 1;
