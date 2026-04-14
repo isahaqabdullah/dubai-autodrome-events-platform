@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
+import { waitUntil } from "@vercel/functions";
 import { getClientIp } from "@/lib/request";
 import { registrationCompleteSchema } from "@/lib/validation/registration";
+import { runEmailWorker } from "@/services/email-worker";
 import { confirmRegistrationFromOtp } from "@/services/registration";
 
 export const maxDuration = 30;
@@ -17,6 +19,14 @@ export async function POST(request: Request) {
     ipAddress: getClientIp(request.headers),
     userAgent: request.headers.get("user-agent")
   });
+
+  if (result.outcome === "confirmed") {
+    waitUntil(
+      runEmailWorker().catch((error) => {
+        console.error("[confirm] background email worker failed", error);
+      })
+    );
+  }
 
   return NextResponse.json(result, {
     status:
