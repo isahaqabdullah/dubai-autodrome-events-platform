@@ -24,20 +24,19 @@ export async function executeEmailJob<TPayload extends Record<string, unknown>>(
     throw insertError ?? new Error("Unable to create email job.");
   }
 
-  handler()
-    .then(() =>
-      supabase
-        .from("email_jobs")
-        .update({ status: "sent", last_error: null })
-        .eq("id", job.id)
-    )
-    .catch(async (error) => {
-      await supabase
-        .from("email_jobs")
-        .update({
-          status: "failed",
-          last_error: error instanceof Error ? error.message : "Unknown email failure"
-        })
-        .eq("id", job.id);
-    });
+  try {
+    await handler();
+    await supabase
+      .from("email_jobs")
+      .update({ status: "sent", last_error: null })
+      .eq("id", job.id);
+  } catch (error) {
+    await supabase
+      .from("email_jobs")
+      .update({
+        status: "failed",
+        last_error: error instanceof Error ? error.message : "Unknown email failure"
+      })
+      .eq("id", job.id);
+  }
 }
