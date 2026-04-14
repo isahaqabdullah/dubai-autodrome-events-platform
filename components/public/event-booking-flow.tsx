@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, FileText, MapPin } from "lucide-react";
+import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Download, FileText, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
@@ -51,6 +51,47 @@ function formatEventDateTimeLine(event: EventRecord) {
   });
 
   return `${datePart} ${timePart.format(start)} - ${timePart.format(end)}`;
+}
+
+function drawWrappedText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  x: number,
+  y: number,
+  maxWidth: number,
+  lineHeight: number,
+  maxLines: number
+) {
+  const words = text.split(/\s+/);
+  const lines: string[] = [];
+  let current = "";
+
+  for (const word of words) {
+    const candidate = current ? `${current} ${word}` : word;
+    if (ctx.measureText(candidate).width <= maxWidth) {
+      current = candidate;
+    } else {
+      if (current) lines.push(current);
+      current = word;
+    }
+    if (lines.length >= maxLines) break;
+  }
+
+  if (lines.length < maxLines && current) {
+    lines.push(current);
+  }
+
+  if (lines.length === maxLines && current && lines[lines.length - 1] !== current) {
+    let truncated = lines[lines.length - 1];
+    while (truncated.length > 0 && ctx.measureText(`${truncated}…`).width > maxWidth) {
+      truncated = truncated.slice(0, -1);
+    }
+    lines[lines.length - 1] = `${truncated}…`;
+  }
+
+  lines.forEach((line, index) => {
+    ctx.fillText(line, x, y + index * lineHeight);
+  });
 }
 
 function formatTimer(totalSeconds: number) {
@@ -237,6 +278,136 @@ export function EventBookingFlow({
     }
   }
 
+  async function downloadTicket() {
+    if (!completedRegistration) {
+      return;
+    }
+
+    const qrSrc = `/api/qr?token=${encodeURIComponent(completedRegistration.qrToken)}`;
+    const dateLine = formatEventDateTimeLine(event);
+    const venue = event.venue ?? "Venue to be announced";
+
+    const qrImage = new window.Image();
+    qrImage.crossOrigin = "anonymous";
+    await new Promise<void>((resolve, reject) => {
+      qrImage.onload = () => resolve();
+      qrImage.onerror = () => reject(new Error("qr load failed"));
+      qrImage.src = qrSrc;
+    }).catch(() => null);
+
+    const W = 900;
+    const H = 1300;
+    const canvas = document.createElement("canvas");
+    canvas.width = W;
+    canvas.height = H;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.fillStyle = "#f4f5f7";
+    ctx.fillRect(0, 0, W, H);
+
+    const cardX = 50;
+    const cardY = 50;
+    const cardW = W - 100;
+    const cardH = H - 100;
+    const radius = 28;
+
+    ctx.fillStyle = "#ffffff";
+    ctx.beginPath();
+    ctx.moveTo(cardX + radius, cardY);
+    ctx.arcTo(cardX + cardW, cardY, cardX + cardW, cardY + cardH, radius);
+    ctx.arcTo(cardX + cardW, cardY + cardH, cardX, cardY + cardH, radius);
+    ctx.arcTo(cardX, cardY + cardH, cardX, cardY, radius);
+    ctx.arcTo(cardX, cardY, cardX + cardW, cardY, radius);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = "#0c1723";
+    ctx.beginPath();
+    ctx.moveTo(cardX + radius, cardY);
+    ctx.lineTo(cardX + cardW - radius, cardY);
+    ctx.arcTo(cardX + cardW, cardY, cardX + cardW, cardY + radius, radius);
+    ctx.lineTo(cardX + cardW, cardY + 200);
+    ctx.lineTo(cardX, cardY + 200);
+    ctx.lineTo(cardX, cardY + radius);
+    ctx.arcTo(cardX, cardY, cardX + radius, cardY, radius);
+    ctx.closePath();
+    ctx.fill();
+
+    const font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    ctx.fillStyle = "rgba(255,255,255,0.6)";
+    ctx.font = `bold 16px ${font}`;
+    ctx.textBaseline = "top";
+    ctx.fillText("YOUR EVENT TICKET", cardX + 40, cardY + 55);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = `bold 36px ${font}`;
+    drawWrappedText(ctx, event.title, cardX + 40, cardY + 95, cardW - 80, 44, 2);
+
+    const rows: Array<[string, string]> = [
+      ["ATTENDEE", fullName],
+      ["ADMISSION", completedRegistration.ticketTitle],
+      ["DATE & TIME", dateLine],
+      ["LOCATION", venue]
+    ];
+
+    let y = cardY + 250;
+    for (let i = 0; i < rows.length; i += 2) {
+      const colW = (cardW - 80) / 2;
+      for (let c = 0; c < 2 && i + c < rows.length; c++) {
+        const [label, value] = rows[i + c];
+        const x = cardX + 40 + c * colW;
+        ctx.fillStyle = "rgba(15,23,42,0.55)";
+        ctx.font = `bold 13px ${font}`;
+        ctx.fillText(label, x, y);
+        ctx.fillStyle = "#0c1723";
+        ctx.font = `600 20px ${font}`;
+        drawWrappedText(ctx, value, x, y + 24, colW - 20, 26, 2);
+      }
+      y += 100;
+    }
+
+    const dashY = y + 10;
+    ctx.strokeStyle = "rgba(15,23,42,0.2)";
+    ctx.setLineDash([6, 8]);
+    ctx.beginPath();
+    ctx.moveTo(cardX + 40, dashY);
+    ctx.lineTo(cardX + cardW - 40, dashY);
+    ctx.stroke();
+    ctx.setLineDash([]);
+
+    const qrSize = 360;
+    const qrX = cardX + (cardW - qrSize) / 2;
+    const qrY = dashY + 40;
+    if (qrImage.complete && qrImage.naturalWidth > 0) {
+      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
+    } else {
+      ctx.strokeStyle = "rgba(15,23,42,0.2)";
+      ctx.strokeRect(qrX, qrY, qrSize, qrSize);
+    }
+
+    ctx.fillStyle = "rgba(15,23,42,0.6)";
+    ctx.font = `500 18px ${font}`;
+    ctx.textAlign = "center";
+    ctx.fillText("Present this QR code at check-in", cardX + cardW / 2, qrY + qrSize + 30);
+    ctx.textAlign = "start";
+
+    const blob = await new Promise<Blob | null>((resolve) =>
+      canvas.toBlob((result) => resolve(result), "image/png")
+    );
+    if (!blob) return;
+
+    const safeName = event.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "event";
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${safeName}-ticket.png`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
   async function submitRegistration() {
     if (!fullName || !form.email || !form.phone || !form.age.trim() || !form.declarationAccepted || !canProceed || !otp.trim()) {
       return;
@@ -397,6 +568,14 @@ export function EventBookingFlow({
                         <p className="mt-4 text-center text-sm font-medium text-slate">
                           Present this QR code at check-in
                         </p>
+                        <button
+                          type="button"
+                          onClick={downloadTicket}
+                          className="mt-5 inline-flex items-center gap-2 rounded-2xl border border-slate/20 bg-white px-5 py-2.5 text-sm font-semibold text-ink shadow-sm transition hover:bg-mist"
+                        >
+                          <Download className="h-4 w-4" />
+                          Download ticket
+                        </button>
                       </div>
                     </div>
                   </div>
@@ -405,9 +584,9 @@ export function EventBookingFlow({
             ) : step === "tickets" ? (
               <div className="max-w-3xl">
                 <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{event.title}</h1>
-                <p className="mt-3 text-sm text-slate sm:text-base">{TRAIN_WITH_DUBAI_POLICE_INTRO}</p>
+                <p className="mt-1 text-sm text-slate sm:text-base">{TRAIN_WITH_DUBAI_POLICE_INTRO}</p>
 
-                <div className="mt-6 space-y-5 text-[15px] leading-8 text-slate">
+                <div className="mt-2 space-y-1 text-[15px] leading-6 text-slate">
                   {visibleParagraphs.map((paragraph) => (
                     <p key={paragraph}>{paragraph}</p>
                   ))}
@@ -416,7 +595,7 @@ export function EventBookingFlow({
                 <button
                   type="button"
                   onClick={() => setExpandedDescription((current) => !current)}
-                  className="mt-2 text-sm font-semibold text-[#2e768b] transition hover:text-[#205260]"
+                  className="mt-1 text-sm font-semibold text-[#2e768b] transition hover:text-[#205260]"
                 >
                   {expandedDescription ? "Show less ^" : "Show more v"}
                 </button>
@@ -804,6 +983,9 @@ export function EventBookingFlow({
                           }
 
                           setStep("details");
+                          if (typeof window !== "undefined") {
+                            window.scrollTo({ top: 0, behavior: "auto" });
+                          }
                           return;
                         }
 

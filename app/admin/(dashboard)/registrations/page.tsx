@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AnalyticsCards } from "@/components/admin/analytics-cards";
 import { DownloadDropdown } from "@/components/admin/download-dropdown";
+import { Pagination } from "@/components/admin/pagination";
 import { RegistrationsTable } from "@/components/admin/registrations-table";
 import { StatusPill } from "@/components/ui/status-pill";
 import { Input } from "@/components/ui/input";
@@ -10,10 +11,18 @@ import { getScanAnalytics } from "@/services/checkin";
 import { listRegistrations } from "@/services/admin";
 import { getEventById, listAdminEvents } from "@/services/events";
 
+const REGISTRATIONS_PAGE_SIZE = 25;
+const ACTIVITY_PAGE_SIZE = 10;
+
+function parsePage(value: string | undefined) {
+  const parsed = Number.parseInt(value ?? "1", 10);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
+}
+
 export default async function RegistrationsPage({
   searchParams
 }: {
-  searchParams: { eventId?: string; status?: string; q?: string };
+  searchParams: { eventId?: string; status?: string; q?: string; page?: string; aPage?: string };
 }) {
   const selectedEventId = searchParams.eventId?.trim() || undefined;
   const [events, rows, selectedEvent] = await Promise.all([
@@ -29,6 +38,28 @@ export default async function RegistrationsPage({
   const checkedInCount = rows.filter((row) => String(row.status ?? "") === "checked_in").length;
   const revokedCount = rows.filter((row) => String(row.status ?? "") === "revoked").length;
   const registrationState = selectedEvent ? getRegistrationWindowState(selectedEvent) : null;
+
+  const totalRows = rows.length;
+  const registrationsPage = Math.min(
+    parsePage(searchParams.page),
+    Math.max(1, Math.ceil(totalRows / REGISTRATIONS_PAGE_SIZE))
+  );
+  const pagedRows = rows.slice(
+    (registrationsPage - 1) * REGISTRATIONS_PAGE_SIZE,
+    registrationsPage * REGISTRATIONS_PAGE_SIZE
+  );
+
+  const totalActivity = analytics?.recentActivity.length ?? 0;
+  const activityPage = Math.min(
+    parsePage(searchParams.aPage),
+    Math.max(1, Math.ceil(totalActivity / ACTIVITY_PAGE_SIZE))
+  );
+  const pagedActivity = analytics
+    ? analytics.recentActivity.slice(
+        (activityPage - 1) * ACTIVITY_PAGE_SIZE,
+        activityPage * ACTIVITY_PAGE_SIZE
+      )
+    : [];
 
   return (
     <main className="admin-page">
@@ -158,7 +189,15 @@ export default async function RegistrationsPage({
         </form>
       </section>
 
-      <RegistrationsTable rows={rows} />
+      <RegistrationsTable rows={pagedRows} />
+
+      <Pagination
+        currentPage={registrationsPage}
+        totalItems={totalRows}
+        pageSize={REGISTRATIONS_PAGE_SIZE}
+        paramKey="page"
+        searchParams={searchParams}
+      />
 
       {analytics ? (
         <section className="admin-card p-3 sm:p-3.5">
@@ -174,7 +213,7 @@ export default async function RegistrationsPage({
               <div className="admin-card-muted px-3 py-3 text-xs text-slate">No scan activity yet.</div>
             ) : null}
 
-            {analytics.recentActivity.map((scan) => (
+            {pagedActivity.map((scan) => (
               <div
                 key={scan.id}
                 className="admin-card-muted flex items-center justify-between gap-2 px-3 py-2"
@@ -203,6 +242,14 @@ export default async function RegistrationsPage({
               </div>
             ))}
           </div>
+
+          <Pagination
+            currentPage={activityPage}
+            totalItems={totalActivity}
+            pageSize={ACTIVITY_PAGE_SIZE}
+            paramKey="aPage"
+            searchParams={searchParams}
+          />
         </section>
       ) : null}
     </main>

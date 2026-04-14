@@ -205,7 +205,7 @@ export function ScanConsole({
         const now = Date.now();
         const last = lastCameraTokenRef.current;
 
-        if (last.value !== rawValue || now - last.at > 1500) {
+        if (now - last.at > 2000) {
           lastCameraTokenRef.current = { value: rawValue, at: now };
           void submitToken(rawValue);
         }

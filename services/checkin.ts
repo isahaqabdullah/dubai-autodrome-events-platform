@@ -241,7 +241,7 @@ export async function getScanAnalytics(eventId: string) {
       .select("result, gate_name, scanned_at")
       .eq("event_id", eventId)
       .order("scanned_at", { ascending: true }),
-    getRecentCheckins(eventId, 12)
+    getRecentCheckins(eventId, 200)
   ]);
 
   if (registrationTotal.error) throw registrationTotal.error;
