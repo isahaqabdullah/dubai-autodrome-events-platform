@@ -21,5 +21,14 @@ export async function POST(request: Request) {
     userAgent: request.headers.get("user-agent")
   });
 
-  return NextResponse.json(result);
+  return NextResponse.json(result, {
+    status:
+      result.outcome === "pending_verification"
+        ? 200
+        : result.outcome === "rate_limited"
+          ? 429
+          : result.outcome === "already_registered"
+            ? 409
+            : 400
+  });
 }

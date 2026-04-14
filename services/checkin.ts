@@ -229,63 +229,48 @@ export async function getScanAnalytics(eventId: string) {
 
   const supabase = createAdminSupabaseClient();
 
-  const [
-    registrationTotal,
-    checkedInTotal,
-    totalScans,
-    duplicateScans,
-    invalidScans,
-    revokedScans,
-    wrongEventScans,
-    gateRows,
-    timelineRows,
-    recentActivity
-  ] = await Promise.all([
+  const [registrationTotal, checkedInTotal, allCheckins, recentActivity] = await Promise.all([
     supabase.from("registrations").select("*", { count: "exact", head: true }).eq("event_id", eventId),
-    supabase.from("registrations").select("*", { count: "exact", head: true }).eq("event_id", eventId).not("checked_in_at", "is", null),
-    supabase.from("checkins").select("*", { count: "exact", head: true }).eq("event_id", eventId),
     supabase
-      .from("checkins")
+      .from("registrations")
       .select("*", { count: "exact", head: true })
       .eq("event_id", eventId)
-      .eq("result", "already_checked_in"),
-    supabase.from("checkins").select("*", { count: "exact", head: true }).eq("event_id", eventId).eq("result", "invalid_token"),
-    supabase.from("checkins").select("*", { count: "exact", head: true }).eq("event_id", eventId).eq("result", "revoked"),
-    supabase.from("checkins").select("*", { count: "exact", head: true }).eq("event_id", eventId).eq("result", "wrong_event"),
-    supabase.from("checkins").select("gate_name").eq("event_id", eventId),
-    supabase.from("checkins").select("scanned_at").eq("event_id", eventId).order("scanned_at", { ascending: true }),
+      .not("checked_in_at", "is", null),
+    supabase
+      .from("checkins")
+      .select("result, gate_name, scanned_at")
+      .eq("event_id", eventId)
+      .order("scanned_at", { ascending: true }),
     getRecentCheckins(eventId, 12)
   ]);
 
-  [
-    registrationTotal,
-    checkedInTotal,
-    totalScans,
-    duplicateScans,
-    invalidScans,
-    revokedScans,
-    wrongEventScans,
-    gateRows,
-    timelineRows
-  ].forEach((result) => {
-    if ("error" in result && result.error) {
-      throw result.error;
-    }
-  });
+  if (registrationTotal.error) throw registrationTotal.error;
+  if (checkedInTotal.error) throw checkedInTotal.error;
+  if (allCheckins.error) throw allCheckins.error;
+
+  const checkinRows = allCheckins.data ?? [];
+  let duplicateCount = 0;
+  let invalidCount = 0;
+
+  for (const row of checkinRows) {
+    if (row.result === "already_checked_in") duplicateCount++;
+    else if (row.result === "invalid_token" || row.result === "revoked" || row.result === "wrong_event")
+      invalidCount++;
+  }
 
   const summary: EventAnalyticsSummary = {
     totalRegistered: registrationTotal.count ?? 0,
     totalCheckedIn: checkedInTotal.count ?? 0,
     remaining: Math.max((registrationTotal.count ?? 0) - (checkedInTotal.count ?? 0), 0),
-    totalScans: totalScans.count ?? 0,
-    duplicateScans: duplicateScans.count ?? 0,
-    invalidScans: (invalidScans.count ?? 0) + (revokedScans.count ?? 0) + (wrongEventScans.count ?? 0)
+    totalScans: checkinRows.length,
+    duplicateScans: duplicateCount,
+    invalidScans: invalidCount
   };
 
   return {
     summary,
-    scansByGate: countByGate((gateRows.data ?? []).map((row) => row.gate_name as string | null)),
-    scansOverTime: countByHour((timelineRows.data ?? []).map((row) => row.scanned_at as string)),
+    scansByGate: countByGate(checkinRows.map((row) => row.gate_name as string | null)),
+    scansOverTime: countByHour(checkinRows.map((row) => row.scanned_at as string)),
     recentActivity
   };
 }

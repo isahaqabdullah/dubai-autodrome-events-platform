@@ -96,16 +96,6 @@ export function formatShortDateTime(value: string, timeZone = "UTC") {
   }).format(new Date(value));
 }
 
-export function formatInputDateTime(value: string | null) {
-  if (!value) {
-    return "";
-  }
-
-  const date = new Date(value);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 16);
-}
-
 export function formatInputDateTimeInZone(value: string | null, timeZone: string) {
   if (!value) {
     return "";
@@ -121,15 +111,6 @@ export function formatInputDateTimeInZone(value: string | null, timeZone: string
 
 export function zonedInputToUtcIso(value: string, timeZone: string) {
   return fromZonedTime(value, timeZone).toISOString();
-}
-
-export function parseOptionalNumber(value: string | null | undefined) {
-  if (!value) {
-    return null;
-  }
-
-  const parsed = Number(value);
-  return Number.isNaN(parsed) ? null : parsed;
 }
 
 export function buildAbsoluteUrl(baseUrl: string, path: string) {

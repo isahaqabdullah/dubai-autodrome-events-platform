@@ -1,6 +1,12 @@
 import type { EventAnalyticsSummary } from "@/lib/types";
 
-export function AnalyticsCards({ summary }: { summary: EventAnalyticsSummary }) {
+export function AnalyticsCards({
+  summary,
+  hideDetail = false
+}: {
+  summary: EventAnalyticsSummary;
+  hideDetail?: boolean;
+}) {
   const items = [
     {
       label: "Registered",
@@ -35,13 +41,12 @@ export function AnalyticsCards({ summary }: { summary: EventAnalyticsSummary }) 
   ];
 
   return (
-    <div className="grid gap-3 sm:gap-4 md:grid-cols-2 xl:grid-cols-3">
+    <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
       {items.map((item) => (
-        <div key={item.label} className="card-panel overflow-hidden p-4 sm:p-5">
-          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-gold/60 via-ember/50 to-aurora/70" />
-          <p className="section-title">{item.label}</p>
-          <p className="mt-3 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{item.value}</p>
-          <p className="mt-2 text-sm text-slate">{item.detail}</p>
+        <div key={item.label} className="admin-card px-2.5 py-2">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-slate">{item.label}</p>
+          <p className="mt-0.5 text-lg font-semibold tracking-tight text-ink">{item.value}</p>
+          {!hideDetail ? <p className="mt-0.5 text-[11px] leading-tight text-slate">{item.detail}</p> : null}
         </div>
       ))}
     </div>

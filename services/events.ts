@@ -95,3 +95,36 @@ export async function getRegistrationCountForEvent(eventId: string) {
 
   return count ?? 0;
 }
+
+export async function getRegistrationSummaryForEvent(
+  eventId: string
+): Promise<{ count: number; ticketCounts: Record<string, number> }> {
+  if (isDemoMode()) {
+    return {
+      count: demoRegistrations.filter((r) => r.event_id === eventId).length,
+      ticketCounts: {}
+    };
+  }
+
+  const supabase = createAdminSupabaseClient();
+
+  const { data, error, count } = await supabase
+    .from("registrations")
+    .select("ticket_option_id", { count: "exact" })
+    .eq("event_id", eventId);
+
+  if (error) {
+    throw error;
+  }
+
+  const ticketCounts: Record<string, number> = {};
+
+  for (const row of data ?? []) {
+    const ticketId = row.ticket_option_id as string | null;
+    if (ticketId) {
+      ticketCounts[ticketId] = (ticketCounts[ticketId] ?? 0) + 1;
+    }
+  }
+
+  return { count: count ?? 0, ticketCounts };
+}

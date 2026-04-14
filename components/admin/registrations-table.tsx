@@ -20,40 +20,24 @@ function RegistrationCard({ row }: { row: Record<string, unknown> }) {
   const status = String(row.status ?? "registered");
 
   return (
-    <div className="card-panel overflow-hidden p-4">
-      <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-gold/60 via-ember/50 to-aurora/70" />
-      <div className="relative space-y-4">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-lg font-semibold tracking-tight text-ink">{String(row.full_name ?? "")}</p>
-            <p className="truncate text-sm text-slate">{String(row.email_raw ?? "")}</p>
-            {row.phone ? <p className="text-sm text-slate">{String(row.phone)}</p> : null}
-          </div>
-          <StatusPill tone={registrationTone(status)}>{status.replaceAll("_", " ")}</StatusPill>
+    <div className="admin-card p-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-sm font-semibold text-ink">{String(row.full_name ?? "")}</p>
+          <p className="truncate text-xs text-slate">{String(row.email_raw ?? "")}</p>
         </div>
-
-        <div className="grid gap-3 rounded-[22px] border border-slate/10 bg-mist/35 p-4 text-sm text-slate">
-          <div className="flex items-center justify-between gap-3">
-            <span>Event</span>
-            <div className="min-w-0 text-right">
-              <p className="truncate font-medium text-ink">{event?.title ?? "Unknown event"}</p>
-              {event?.slug ? <p className="font-mono text-xs text-slate">{event.slug}</p> : null}
-            </div>
-          </div>
-          <div className="flex items-center justify-between gap-3">
-            <span>Created</span>
-            <span className="text-right font-medium text-ink">{formatShortDateTime(String(row.created_at ?? ""))}</span>
-          </div>
-          {event?.slug ? (
-            <Link
-              href={`/check-in/${event.slug}`}
-              className="inline-flex items-center justify-center rounded-2xl border border-slate/15 bg-white/80 px-4 py-2.5 font-semibold text-ink transition hover:border-slate/30 hover:bg-white"
-            >
-              Open check-in desk
-            </Link>
-          ) : null}
-        </div>
-
+        <StatusPill tone={registrationTone(status)}>{status.replaceAll("_", " ")}</StatusPill>
+      </div>
+      <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-slate/10 pt-1.5 text-xs text-slate">
+        <span className="truncate font-medium text-ink">{event?.title ?? "Unknown event"}</span>
+        <span className="shrink-0">{formatShortDateTime(String(row.created_at ?? ""), "Asia/Dubai")}</span>
+      </div>
+      <div className="mt-1.5 flex items-center gap-1.5">
+        {event?.slug ? (
+          <Link href={`/check-in/${event.slug}`} className="admin-action text-xs !px-2 !py-1">
+            Check-in
+          </Link>
+        ) : null}
         <RegistrationActions registrationId={String(row.id)} status={status} />
       </div>
     </div>
@@ -67,9 +51,9 @@ export function RegistrationsTable({
 }) {
   return (
     <>
-      <div className="space-y-3 md:hidden">
+      <div className="space-y-2 md:hidden">
         {rows.length === 0 ? (
-          <div className="card-panel px-4 py-8 text-center text-sm text-slate">
+          <div className="admin-card px-4 py-8 text-center text-sm text-slate">
             No registrations found for the current filters.
           </div>
         ) : null}
@@ -78,22 +62,22 @@ export function RegistrationsTable({
         ))}
       </div>
 
-      <div className="card-panel hidden overflow-hidden md:block">
+      <div className="admin-card hidden overflow-hidden md:block">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="border-b border-slate/10 bg-mist/40 text-slate">
+            <thead className="border-b border-slate/10 bg-slate-50 text-xs text-slate">
               <tr>
-                <th className="px-6 py-4 font-semibold">Attendee</th>
-                <th className="px-6 py-4 font-semibold">Event</th>
-                <th className="px-6 py-4 font-semibold">Status</th>
-                <th className="px-6 py-4 font-semibold">Created</th>
-                <th className="px-6 py-4 font-semibold">Actions</th>
+                <th className="px-3 py-2 font-semibold">Attendee</th>
+                <th className="px-3 py-2 font-semibold">Event</th>
+                <th className="px-3 py-2 font-semibold">Status</th>
+                <th className="px-3 py-2 font-semibold">Created</th>
+                <th className="px-3 py-2 font-semibold">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate/10 bg-white/75">
+            <tbody className="divide-y divide-slate/10 bg-white">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-6 py-10 text-center text-slate">
+                  <td colSpan={5} className="px-3 py-6 text-center text-xs text-slate">
                     No registrations found for the current filters.
                   </td>
                 </tr>
@@ -104,24 +88,23 @@ export function RegistrationsTable({
 
                 return (
                   <tr key={String(row.id)} className="align-top">
-                    <td className="px-6 py-5">
-                      <p className="font-semibold text-ink">{String(row.full_name ?? "")}</p>
-                      <p className="mt-1 text-slate">{String(row.email_raw ?? "")}</p>
-                      {row.phone ? <p className="text-slate">{String(row.phone)}</p> : null}
+                    <td className="px-3 py-2">
+                      <p className="text-sm font-medium text-ink">{String(row.full_name ?? "")}</p>
+                      <p className="text-xs text-slate">{String(row.email_raw ?? "")}</p>
                     </td>
-                    <td className="px-6 py-5 text-slate">
+                    <td className="px-3 py-2 text-xs text-slate">
                       <p className="font-medium text-ink">{event?.title ?? "Unknown event"}</p>
                       {event?.slug ? (
-                        <Link href={`/check-in/${event.slug}`} className="mt-2 inline-flex text-xs font-semibold text-slate hover:text-ink">
-                          Open check-in desk
+                        <Link href={`/check-in/${event.slug}`} className="text-[11px] font-semibold text-slate hover:text-ink">
+                          Check-in desk
                         </Link>
                       ) : null}
                     </td>
-                    <td className="px-6 py-5">
+                    <td className="px-3 py-2">
                       <StatusPill tone={registrationTone(status)}>{status.replaceAll("_", " ")}</StatusPill>
                     </td>
-                    <td className="px-6 py-5 text-slate">{formatShortDateTime(String(row.created_at ?? ""))}</td>
-                    <td className="px-6 py-5">
+                    <td className="px-3 py-2 text-xs text-slate">{formatShortDateTime(String(row.created_at ?? ""), "Asia/Dubai")}</td>
+                    <td className="px-3 py-2">
                       <RegistrationActions registrationId={String(row.id)} status={status} />
                     </td>
                   </tr>

@@ -1,11 +1,19 @@
 import { adminEventSchema } from "@/lib/validation/admin";
 
 export function parseAdminEventFormData(formData: FormData) {
+  const rawTicketOptions = String(formData.get("ticketOptionsJson") ?? "[]");
+  let ticketOptions: unknown = [];
+
+  try {
+    ticketOptions = rawTicketOptions ? JSON.parse(rawTicketOptions) : [];
+  } catch {
+    ticketOptions = [];
+  }
+
   return adminEventSchema.parse({
     id: String(formData.get("id") ?? "") || undefined,
     slug: String(formData.get("slug") ?? ""),
     title: String(formData.get("title") ?? ""),
-    description: String(formData.get("description") ?? ""),
     venue: String(formData.get("venue") ?? ""),
     timezone: String(formData.get("timezone") ?? ""),
     startAt: String(formData.get("startAt") ?? ""),
@@ -17,9 +25,7 @@ export function parseAdminEventFormData(formData: FormData) {
     declarationVersion: Number(formData.get("declarationVersion") ?? 1),
     declarationText: String(formData.get("declarationText") ?? ""),
     submitLabel: String(formData.get("submitLabel") ?? ""),
-    introNote: String(formData.get("introNote") ?? ""),
-    successMessage: String(formData.get("successMessage") ?? ""),
-    showCompanyField: formData.get("showCompanyField") === "on",
-    showEmergencyFields: formData.get("showEmergencyFields") === "on"
+    mapLink: String(formData.get("mapLink") ?? ""),
+    ticketOptions
   });
 }

@@ -67,13 +67,13 @@ export async function requireAuthenticatedUser(scope: "staff" | "admin" = "staff
   const user = await getAuthenticatedAppUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/admin/login");
   }
 
   const allowedRoles = scope === "admin" ? ADMIN_ROLES : STAFF_ROLES;
 
   if (!allowedRoles.includes(user.role)) {
-    redirect("/login?error=insufficient_role");
+    redirect("/admin/login?error=insufficient_role");
   }
 
   return user;

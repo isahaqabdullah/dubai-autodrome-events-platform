@@ -2,10 +2,7 @@ import type { AppUserRole, EventFormConfig } from "@/lib/types";
 
 export const DEFAULT_FORM_CONFIG: EventFormConfig = {
   submitLabel: "Reserve my spot",
-  introNote: "Complete the registration form and verify your email to receive a QR code.",
-  successMessage: "Check your inbox to verify your email and complete registration.",
-  showCompanyField: true,
-  showEmergencyFields: true
+  ticketOptions: []
 };
 
 export const STAFF_ROLES: AppUserRole[] = ["staff", "admin"];

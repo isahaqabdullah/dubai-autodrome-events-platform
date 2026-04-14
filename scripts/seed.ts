@@ -96,11 +96,7 @@ async function seedEvents() {
       declaration_text:
         "I confirm that the details I submit are accurate, that I will follow event safety instructions, and that my QR code is unique to this event edition.",
       form_config: {
-        submitLabel: "Confirm attendance",
-        introNote: "Submit the shared registration form and verify your email to receive a single-use QR code.",
-        successMessage: "Verification sent. Complete the email step to lock in your registration.",
-        showCompanyField: true,
-        showEmergencyFields: true
+        submitLabel: "Confirm attendance"
       }
     },
     {
@@ -120,11 +116,7 @@ async function seedEvents() {
       declaration_text:
         "I confirm that the details I submit are accurate, that I will follow event safety instructions, and that the declaration applies to this event edition only.",
       form_config: {
-        submitLabel: "Reserve my spot",
-        introNote: "This edition is configured in the admin panel and will publish without any code changes.",
-        successMessage: "Check your inbox for the verification step.",
-        showCompanyField: true,
-        showEmergencyFields: true
+        submitLabel: "Reserve my spot"
       }
     }
   ];

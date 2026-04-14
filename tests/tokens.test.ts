@@ -17,4 +17,27 @@ describe("token utilities", () => {
     expect(hashOpaqueToken(token)).toEqual(hashOpaqueToken(token));
     expect(hashOpaqueToken(token)).not.toEqual(hashOpaqueToken(`${token}-other`));
   });
+
+  it("generates tokens with sufficient entropy (default 32 bytes = 43+ base64url chars)", () => {
+    const token = generateOpaqueToken();
+    expect(token.length).toBeGreaterThanOrEqual(43);
+  });
+
+  it("produces a 64-character hex hash", () => {
+    const hash = hashOpaqueToken("test-token");
+    expect(hash).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("hashing empty string does not throw", () => {
+    expect(() => hashOpaqueToken("")).not.toThrow();
+    expect(hashOpaqueToken("")).toMatch(/^[0-9a-f]{64}$/);
+  });
+
+  it("two sequential tokens never collide", () => {
+    const tokens = new Set<string>();
+    for (let i = 0; i < 100; i++) {
+      tokens.add(generateOpaqueToken());
+    }
+    expect(tokens.size).toBe(100);
+  });
 });

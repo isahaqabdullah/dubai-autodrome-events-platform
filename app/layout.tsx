@@ -21,10 +21,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className="min-h-screen bg-mesh-gradient text-ink antialiased">
-        <div className="relative min-h-screen">
-          <div className="pointer-events-none absolute inset-x-0 top-0 h-64 bg-gradient-to-b from-white/80 to-transparent" />
-          {children}
-        </div>
+        <div className="app-shell">{children}</div>
       </body>
     </html>
   );

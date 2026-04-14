@@ -35,10 +35,11 @@ export function RegistrationActions({ registrationId, status }: RegistrationActi
   }
 
   return (
-    <div className="flex flex-wrap gap-2">
+    <div className="flex flex-wrap gap-1">
       <Button
         type="button"
         variant="secondary"
+        className="!rounded-lg !px-2 !py-1 !text-xs"
         disabled={busy !== null || status === "revoked" || status === "cancelled"}
         onClick={async () => {
           await post("/api/admin/resend-qr", {
@@ -51,6 +52,7 @@ export function RegistrationActions({ registrationId, status }: RegistrationActi
       <Button
         type="button"
         variant="danger"
+        className="!rounded-lg !px-2 !py-1 !text-xs"
         disabled={busy !== null || status === "revoked"}
         onClick={async () => {
           const confirmed = window.confirm("Revoke this registration?");

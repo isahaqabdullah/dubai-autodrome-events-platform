@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find . -name \".DS_Store\" -not -path \"./.git/*\")",
+      "Bash(du -sh .next-build-backup-20260410-1615 .next.corrupt.1775809496 .next.rebuild.1775819346)"
+    ]
+  }
+}

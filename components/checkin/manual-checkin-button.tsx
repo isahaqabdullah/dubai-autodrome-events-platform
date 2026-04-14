@@ -3,13 +3,16 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export function ManualCheckinButton({
   eventId,
-  registrationId
+  registrationId,
+  className
 }: {
   eventId: string;
   registrationId: string;
+  className?: string;
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
@@ -19,6 +22,7 @@ export function ManualCheckinButton({
       type="button"
       variant="secondary"
       disabled={pending}
+      className={cn(className)}
       onClick={async () => {
         setPending(true);
         const response = await fetch("/api/admin/manual-checkin", {

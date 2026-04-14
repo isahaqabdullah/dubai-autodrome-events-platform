@@ -8,14 +8,6 @@ export function buildQrPayload(token: string) {
   return token;
 }
 
-export async function generateQrDataUrl(payload: string) {
-  return QRCode.toDataURL(payload, {
-    margin: 1,
-    width: 360,
-    errorCorrectionLevel: "M"
-  });
-}
-
 export async function generateQrPngBuffer(payload: string) {
   return QRCode.toBuffer(payload, {
     margin: 1,

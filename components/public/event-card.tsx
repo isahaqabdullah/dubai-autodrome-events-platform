@@ -1,33 +1,17 @@
 import Link from "next/link";
 import type { EventRecord } from "@/lib/types";
-import { formatEventDateRange, getRegistrationWindowState } from "@/lib/utils";
-import { StatusPill } from "@/components/ui/status-pill";
+import { formatEventDateRange } from "@/lib/utils";
 
 export function EventCard({ event }: { event: EventRecord }) {
-  const registrationState = getRegistrationWindowState(event);
-
   return (
-    <article className="card-panel flex h-full flex-col gap-4 p-4 sm:gap-5 sm:p-6">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1.5 sm:space-y-2">
-          <p className="section-title">Edition</p>
-          <h2 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">{event.title}</h2>
-        </div>
-        <StatusPill
-          tone={
-            registrationState.state === "open"
-              ? "success"
-              : registrationState.state === "not_open_yet"
-                ? "warning"
-                : "danger"
-          }
-        >
-          {registrationState.label}
-        </StatusPill>
+    <article className="card-panel flex h-full flex-col gap-3 p-4 sm:gap-5 sm:p-5 md:p-6">
+      <div className="min-w-0 space-y-1.5 sm:space-y-2">
+        <p className="section-title">Edition</p>
+        <h2 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">{event.title}</h2>
       </div>
 
       <div className="space-y-2 text-sm text-slate">
-        <p>{formatEventDateRange(event.start_at, event.end_at, event.timezone)}</p>
+        <p className="text-sm font-medium text-ink/70">{formatEventDateRange(event.start_at, event.end_at, event.timezone)}</p>
         {event.venue ? <p>{event.venue}</p> : null}
         <p className="line-clamp-3">{event.description ?? "Registration opens on this event page."}</p>
       </div>
