@@ -31,11 +31,18 @@ export async function executeEmailJob<TPayload extends Record<string, unknown>>(
       .update({ status: "sent", last_error: null })
       .eq("id", job.id);
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown email failure";
+    console.error("[email-job] failed", {
+      jobId: job.id,
+      kind,
+      payload,
+      error: message
+    });
     await supabase
       .from("email_jobs")
       .update({
         status: "failed",
-        last_error: error instanceof Error ? error.message : "Unknown email failure"
+        last_error: message
       })
       .eq("id", job.id);
   }

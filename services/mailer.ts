@@ -29,7 +29,12 @@ export async function sendMail(payload: MailPayload) {
   const toAddresses = Array.isArray(payload.to) ? payload.to : [payload.to];
 
   if (!resendConfigured) {
-    console.log("[mock-mailer]", {
+    console.warn("[mock-mailer] RESEND_API_KEY missing; email not sent", {
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: process.env.VERCEL,
+        VERCEL_ENV: process.env.VERCEL_ENV
+      },
       to: toAddresses,
       subject: payload.subject,
       from: env.MAIL_FROM_EMAIL,
@@ -58,6 +63,12 @@ export async function sendMail(payload: MailPayload) {
   });
 
   if (error) {
+    console.error("[resend] emails.send failed", {
+      to: toAddresses,
+      from: env.MAIL_FROM_EMAIL,
+      subject: payload.subject,
+      error: error.message
+    });
     throw new Error(error.message);
   }
 
