@@ -13,13 +13,7 @@ export default async function EventsPage() {
       <main className="page-shell page-stack">
         <section className="card-panel px-4 py-8 sm:px-6 sm:py-12">
           <p className="section-title">Public events</p>
-          <div className="mt-3 max-w-3xl space-y-3 sm:mt-4 sm:space-y-4">
-            <h1 className="heading-hero">Recurring editions managed as data, not code.</h1>
-            <p className="text-base text-slate sm:text-lg">
-              Each event occurrence is its own record with its own schedule, declaration version, registration window,
-              capacity, and check-in analytics.
-            </p>
-          </div>
+          <h1 className="heading-hero mt-3 sm:mt-4">Upcoming events</h1>
         </section>
 
         <section className="grid gap-4 sm:gap-5 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3">
