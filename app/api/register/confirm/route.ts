@@ -3,6 +3,8 @@ import { getClientIp } from "@/lib/request";
 import { registrationCompleteSchema } from "@/lib/validation/registration";
 import { confirmRegistrationFromOtp } from "@/services/registration";
 
+export const maxDuration = 30;
+
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => null);
   const parsed = registrationCompleteSchema.safeParse(payload);

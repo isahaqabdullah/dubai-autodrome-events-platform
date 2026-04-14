@@ -15,7 +15,8 @@ const serverEnvSchema = z.object({
   RESEND_API_KEY: z.string().optional(),
   MAIL_FROM_EMAIL: z.string().email().default("info@example.com"),
   MAIL_REPLY_TO_EMAIL: z.string().email().default("info@example.com"),
-  APP_URL: z.string().url()
+  APP_URL: z.string().url(),
+  CRON_SECRET: z.string().optional()
 });
 
 const rawServerEnv = {
@@ -25,7 +26,8 @@ const rawServerEnv = {
   RESEND_API_KEY: process.env.RESEND_API_KEY,
   MAIL_FROM_EMAIL: process.env.MAIL_FROM_EMAIL ?? "info@example.com",
   MAIL_REPLY_TO_EMAIL: process.env.MAIL_REPLY_TO_EMAIL ?? "info@example.com",
-  APP_URL: process.env.APP_URL
+  APP_URL: process.env.APP_URL,
+  CRON_SECRET: process.env.CRON_SECRET
 };
 
 export const env = serverEnvSchema.parse(rawServerEnv);

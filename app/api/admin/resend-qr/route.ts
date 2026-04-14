@@ -3,6 +3,8 @@ import { getAuthenticatedAppUser } from "@/lib/auth";
 import { resendQrSchema } from "@/lib/validation/admin";
 import { rotateQrAndResend } from "@/services/admin";
 
+export const maxDuration = 30;
+
 export async function POST(request: Request) {
   const user = await getAuthenticatedAppUser();
 

@@ -3,6 +3,8 @@ import { getClientIp } from "@/lib/request";
 import { resendVerificationSchema } from "@/lib/validation/registration";
 import { resendVerificationAttempt } from "@/services/registration";
 
+export const maxDuration = 30;
+
 export async function POST(request: Request) {
   const payload = await request.json().catch(() => null);
   const parsed = resendVerificationSchema.safeParse(payload);

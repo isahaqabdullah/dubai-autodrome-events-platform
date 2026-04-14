@@ -2,16 +2,14 @@ import "server-only";
 import { RATE_LIMIT_MAX_REQUESTS, RATE_LIMIT_WINDOW_SECONDS, VERIFICATION_TOKEN_TTL_MINUTES } from "@/lib/constants";
 import { demoEvents } from "@/lib/demo-data";
 import { isDemoMode } from "@/lib/demo-mode";
-import { env } from "@/lib/env";
-import { buildQrEmailAttachment, buildQrEmailCid } from "@/lib/qr";
 import { checkRateLimit } from "@/lib/rate-limit";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { generateOpaqueToken, hashOpaqueToken } from "@/lib/tokens";
 import type { EventRecord } from "@/lib/types";
-import { buildAbsoluteUrl, getRegistrationWindowState, normalizeEmail, normalizePhone } from "@/lib/utils";
+import { getRegistrationWindowState, normalizeEmail, normalizePhone } from "@/lib/utils";
 import { registrationCompleteSchema, registrationStartSchema } from "@/lib/validation/registration";
-import { buildConfirmationEmail, buildVerificationEmail } from "@/services/email-templates";
-import { executeEmailJob } from "@/services/email-jobs";
+import { buildVerificationEmail } from "@/services/email-templates";
+import { enqueueEmailJob, executeEmailJob } from "@/services/email-jobs";
 import { getEventById, getRegistrationCountForEvent } from "@/services/events";
 import { sendMail } from "@/services/mailer";
 import type { z } from "zod";
@@ -42,10 +40,6 @@ export interface RegistrationConfirmResult {
   qrToken?: string;
   email?: string;
   ticketTitle?: string;
-}
-
-function buildPosterImageUrl() {
-  return buildAbsoluteUrl(env.APP_URL, "/train-with-dubai-police-cover.png");
 }
 
 function ensureRegistrationOpen(event: EventRecord, registrationCount: number) {
@@ -94,7 +88,6 @@ function generateVerificationCode() {
 }
 
 async function queueConfirmationEmail(input: {
-  event: EventRecord;
   registrationId: string;
   eventId: string;
   email: string;
@@ -102,51 +95,17 @@ async function queueConfirmationEmail(input: {
   qrToken: string;
   ticketTitle: string;
 }) {
-  await executeEmailJob(
-    "registration_confirmed",
-    {
-      eventId: input.eventId,
-      registrationId: input.registrationId,
-      email: input.email
-    },
-    async () => {
-      const qrAttachment = await buildQrEmailAttachment(input.qrToken);
-      const mail = buildConfirmationEmail({
-        fullName: input.fullName,
-        eventTitle: input.event.title,
-        eventStartAt: input.event.start_at,
-        eventEndAt: input.event.end_at,
-        eventTimezone: input.event.timezone,
-        venue: input.event.venue,
-        mapLink: input.event.form_config?.mapLink,
-        ticketTitle: input.ticketTitle,
-        posterImageUrl: buildPosterImageUrl(),
-        qrImageSrc: buildQrEmailCid(qrAttachment.contentId)
-      });
-
-      await sendMail({
-        to: input.email,
-        subject: mail.subject,
-        html: mail.html,
-        text: mail.text,
-        attachments: [qrAttachment]
-      });
-
-      const { error } = await createAdminSupabaseClient()
-        .from("registrations")
-        .update({
-          confirmation_email_sent_at: new Date().toISOString()
-        })
-        .eq("id", input.registrationId);
-
-      if (error) {
-        console.error("[registration_confirmed] failed to mark confirmation email as sent", {
-          registrationId: input.registrationId,
-          error: error.message
-        });
-      }
-    }
-  );
+  // Async path: hand the payload to the cron worker and return immediately.
+  // The worker fetches the event, builds the QR, sends via Resend, and
+  // records confirmation_email_sent_at. See app/api/cron/email-worker.
+  await enqueueEmailJob("registration_confirmed", {
+    registrationId: input.registrationId,
+    eventId: input.eventId,
+    email: input.email,
+    fullName: input.fullName,
+    qrToken: input.qrToken,
+    ticketTitle: input.ticketTitle
+  });
 }
 
 export async function startRegistrationAttempt(
@@ -257,7 +216,7 @@ export async function startRegistrationAttempt(
       email: input.email.trim(),
       fullName: input.fullName.trim()
     },
-    async () => {
+    async (job) => {
       const mail = buildVerificationEmail({
         fullName: input.fullName.trim(),
         eventTitle: event.title,
@@ -268,7 +227,8 @@ export async function startRegistrationAttempt(
         to: input.email.trim(),
         subject: mail.subject,
         html: mail.html,
-        text: mail.text
+        text: mail.text,
+        idempotencyKey: job.id
       });
     }
   );
@@ -383,14 +343,7 @@ export async function confirmRegistrationFromToken(
     };
   }
 
-  const event = await getEventById(result.event_id);
-
-  if (!event) {
-    throw new Error("Event not found after confirmation.");
-  }
-
   await queueConfirmationEmail({
-    event,
     registrationId: result.registration_id,
     eventId: result.event_id,
     email: result.email_raw,
@@ -542,7 +495,6 @@ export async function confirmRegistrationFromOtp(
   const ticketTitle = selectedTicket.title;
 
   await queueConfirmationEmail({
-    event,
     registrationId: result.registration_id,
     eventId: result.event_id,
     email: result.email_raw,

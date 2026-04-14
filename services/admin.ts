@@ -382,7 +382,7 @@ export async function rotateQrAndResend(registrationId: string, actor: Authentic
       eventId: registration.event_id,
       email: registration.email_raw
     },
-    async () => {
+    async (job) => {
       const mail = buildConfirmationEmail({
         fullName: registration.full_name,
         eventTitle: event.title,
@@ -401,7 +401,8 @@ export async function rotateQrAndResend(registrationId: string, actor: Authentic
         subject: mail.subject,
         html: mail.html,
         text: mail.text,
-        attachments: [qrAttachment]
+        attachments: [qrAttachment],
+        idempotencyKey: job.id
       });
     }
   );
