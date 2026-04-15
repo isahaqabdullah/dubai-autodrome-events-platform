@@ -8,6 +8,7 @@ import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import type { EventRecord, RegistrationWindowState } from "@/lib/types";
 import { mergeFormConfig } from "@/lib/utils";
+import { PdfViewer } from "@/components/public/pdf-viewer";
 
 interface EventBookingFlowProps {
   event: EventRecord;
@@ -881,12 +882,8 @@ export function EventBookingFlow({
                     </p>
 
                     {pdfPreviewOpen && (
-                      <div className="mt-4 overflow-hidden rounded-2xl border border-slate/15">
-                        <iframe
-                          src="/disclaimer-dubai-autodrome.pdf"
-                          className="h-[60vh] min-h-[300px] max-h-[600px] w-full"
-                          title="Disclaimer document"
-                        />
+                      <div className="mt-4 overflow-auto rounded-2xl border border-slate/15 [-webkit-overflow-scrolling:touch]" style={{ maxHeight: "60vh" }}>
+                        <PdfViewer src="/disclaimer-dubai-autodrome.pdf" className="w-full" />
                       </div>
                     )}
                   </div>
