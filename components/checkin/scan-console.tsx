@@ -135,6 +135,8 @@ export function ScanConsole({
     message: string;
     full_name?: string | null;
   } | null>(null);
+  const [cameraOverlay, setCameraOverlay] = useState<{ result: string; name: string } | null>(null);
+  const cameraOverlayTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
     inputRef.current?.focus();
@@ -270,6 +272,7 @@ export function ScanConsole({
   useEffect(() => {
     return () => {
       stopCamera();
+      if (cameraOverlayTimer.current) clearTimeout(cameraOverlayTimer.current);
     };
   }, [stopCamera]);
 
@@ -311,6 +314,10 @@ export function ScanConsole({
           message: data?.message ?? "Unable to process scan.",
           full_name: data?.fullName ?? null
         });
+
+        if (cameraOverlayTimer.current) clearTimeout(cameraOverlayTimer.current);
+        setCameraOverlay({ result: "invalid_token", name: data?.fullName ?? "" });
+        cameraOverlayTimer.current = setTimeout(() => setCameraOverlay(null), 2000);
         return;
       }
 
@@ -321,6 +328,10 @@ export function ScanConsole({
         full_name: data?.fullName ?? null
       });
       setSummary((current) => applySummaryUpdate(current, nextResult));
+
+      if (cameraOverlayTimer.current) clearTimeout(cameraOverlayTimer.current);
+      setCameraOverlay({ result: nextResult, name: data?.fullName ?? "" });
+      cameraOverlayTimer.current = setTimeout(() => setCameraOverlay(null), 2000);
 
       if (data?.recentScan) {
         const nextScan = data.recentScan;
@@ -333,6 +344,9 @@ export function ScanConsole({
         full_name: null
       });
     } finally {
+      if (cameraState === "active") {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
       setBusy(false);
       setToken("");
       inputRef.current?.focus();
@@ -479,7 +493,7 @@ export function ScanConsole({
               </div>
 
               <div className="p-4 pt-3.5 sm:p-5 sm:pt-4">
-                <div className="mx-auto aspect-square w-full max-w-[300px] overflow-hidden rounded-2xl bg-[#0f172a]">
+                <div className="relative mx-auto aspect-square w-full max-w-[300px] overflow-hidden rounded-2xl bg-[#0f172a]">
                   <video
                     ref={videoRef}
                     muted
@@ -487,6 +501,32 @@ export function ScanConsole({
                     autoPlay
                     className="h-full w-full object-cover"
                   />
+
+                  {cameraOverlay && (() => {
+                    const isSuccess = cameraOverlay.result === "success";
+                    const isDuplicate = cameraOverlay.result === "already_checked_in";
+                    const bg = isSuccess
+                      ? "bg-emerald-600/90"
+                      : isDuplicate
+                        ? "bg-amber-600/90"
+                        : "bg-rose-600/90";
+                    const Icon = isSuccess ? CheckCircle2 : isDuplicate ? TimerReset : AlertTriangle;
+                    const label = isSuccess
+                      ? "Checked in"
+                      : isDuplicate
+                        ? "Already checked in"
+                        : "Invalid";
+
+                    return (
+                      <div className={cn("absolute inset-0 flex flex-col items-center justify-center gap-2 text-white", bg)}>
+                        <Icon className="h-10 w-10" />
+                        <span className="text-sm font-bold uppercase tracking-widest">{label}</span>
+                        {cameraOverlay.name && (
+                          <span className="mt-1 max-w-[80%] truncate text-center text-base font-semibold">{cameraOverlay.name}</span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 {cameraMessage ? (
                   <p className="mt-2 text-sm text-slate">{cameraMessage}</p>

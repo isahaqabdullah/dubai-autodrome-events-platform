@@ -41,12 +41,12 @@ export function AnalyticsCards({
   ];
 
   return (
-    <div className="grid grid-cols-3 gap-2 lg:grid-cols-6">
+    <div className="grid grid-cols-3 gap-1.5 sm:gap-2 lg:grid-cols-6">
       {items.map((item) => (
-        <div key={item.label} className="admin-card px-2.5 py-2">
-          <p className="text-[10px] font-medium uppercase tracking-wide text-slate">{item.label}</p>
-          <p className="mt-0.5 text-lg font-semibold tracking-tight text-ink">{item.value}</p>
-          {!hideDetail ? <p className="mt-0.5 text-[11px] leading-tight text-slate">{item.detail}</p> : null}
+        <div key={item.label} className="admin-card px-2 py-1.5 sm:px-2.5 sm:py-2">
+          <p className="text-[9px] font-medium uppercase tracking-wide text-slate sm:text-[10px]">{item.label}</p>
+          <p className="mt-0.5 text-base font-semibold tracking-tight text-ink sm:text-lg">{item.value}</p>
+          {!hideDetail ? <p className="mt-0.5 hidden text-[11px] leading-tight text-slate sm:block">{item.detail}</p> : null}
         </div>
       ))}
     </div>

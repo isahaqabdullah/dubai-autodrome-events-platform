@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { ArrowLeft, CalendarDays, CheckCircle2, Clock3, Download, FileText, MapPin } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, FileText, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
@@ -113,29 +113,61 @@ export function EventBookingFlow({
   ticketCounts
 }: EventBookingFlowProps) {
   const config = useMemo(() => mergeFormConfig(event.form_config), [event.form_config]);
-  const [step, setStep] = useState<Step>("tickets");
+  const storageKey = `booking-draft-${event.id}`;
+  const hydrated = useRef(false);
+
+  function loadDraft() {
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return null;
+  }
+
+  const draft = hydrated.current ? null : loadDraft();
+
+  const [step, setStep] = useState<Step>(draft?.step ?? "tickets");
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(true);
+  const [termsExpanded, setTermsExpanded] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(HOLD_DURATION_SECONDS);
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [otp, setOtp] = useState("");
   const [otpState, setOtpState] = useState<OtpState>("idle");
   const [otpMessage, setOtpMessage] = useState<{ text: string; error: boolean } | null>(null);
-  const [emailVerified, setEmailVerified] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(draft?.emailVerified ?? false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [completedRegistration, setCompletedRegistration] = useState<CompletedRegistration | null>(null);
   const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    age: "",
-    uaeResident: false,
-    declarationAccepted: false,
-    marketingOptIn: false,
+    firstName: draft?.form?.firstName ?? "",
+    lastName: draft?.form?.lastName ?? "",
+    email: draft?.form?.email ?? "",
+    phone: draft?.form?.phone ?? "",
+    age: draft?.form?.age ?? "",
+    uaeResident: draft?.form?.uaeResident ?? false,
+    declarationAccepted: draft?.form?.declarationAccepted ?? false,
+    marketingOptIn: draft?.form?.marketingOptIn ?? false,
     website: ""
   });
+  const [selectedBootcampId, setSelectedBootcampId] = useState<string | null>(draft?.selectedBootcampId ?? null);
+
+  const saveDraft = useCallback(() => {
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify({
+        form, step, emailVerified, selectedBootcampId
+      }));
+    } catch { /* quota exceeded — ignore */ }
+  }, [form, step, emailVerified, selectedBootcampId, storageKey]);
+
+  useEffect(() => {
+    hydrated.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (hydrated.current) saveDraft();
+  }, [saveDraft]);
 
 
 
@@ -172,7 +204,6 @@ export function EventBookingFlow({
   );
   const generalAdmission = ticketOptions[0];
   const bootcampOptions = ticketOptions.slice(1);
-  const [selectedBootcampId, setSelectedBootcampId] = useState<string | null>(null);
   const selectedBootcamp = selectedBootcampId
     ? bootcampOptions.find((ticket) => ticket.id === selectedBootcampId) ?? null
     : null;
@@ -183,6 +214,30 @@ export function EventBookingFlow({
   const canProceed = registrationState.state === "open" && !generalAdmission.soldOut;
   const fullName = `${form.firstName} ${form.lastName}`.trim();
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const showFieldErrors = step === "details" && submitAttempted && submissionState !== "submitting" && !completedRegistration;
+  const requiredErrors = useMemo(() => {
+    if (!showFieldErrors) {
+      return {
+        firstName: false,
+        lastName: false,
+        email: false,
+        emailVerified: false,
+        phone: false,
+        age: false,
+        declarationAccepted: false
+      };
+    }
+
+    return {
+      firstName: !form.firstName.trim(),
+      lastName: !form.lastName.trim(),
+      email: !form.email.trim() || !isValidEmail,
+      emailVerified: !emailVerified,
+      phone: !form.phone.trim(),
+      age: !form.age.trim(),
+      declarationAccepted: !form.declarationAccepted
+    };
+  }, [emailVerified, form, isValidEmail, showFieldErrors]);
   const mapLink = config.mapLink ?? null;
   const descriptionParagraphs = TRAIN_WITH_DUBAI_POLICE_DESCRIPTION;
   const visibleParagraphs = expandedDescription ? descriptionParagraphs : descriptionParagraphs.slice(0, 2);
@@ -452,6 +507,7 @@ export function EventBookingFlow({
     }
 
     setSubmissionState("success");
+    try { sessionStorage.removeItem(storageKey); } catch { /* ignore */ }
     setCompletedRegistration({
       email: result.email ?? form.email,
       qrToken: result.qrToken ?? "demo",
@@ -463,7 +519,7 @@ export function EventBookingFlow({
   return (
     <div className="w-full">
       <div className="overflow-hidden rounded-2xl border border-slate/10 bg-white shadow-soft">
-        <div className="flex items-center justify-between border-b border-slate/10 px-4 py-3 sm:px-6">
+        <div className="flex items-center justify-between border-b border-slate/10 px-3 py-2 sm:px-6 sm:py-3">
           <div>
             {step === "details" && !completedRegistration ? (
               <button
@@ -473,17 +529,17 @@ export function EventBookingFlow({
                   setSubmissionState("idle");
                   setMessage(null);
                 }}
-                className="inline-flex items-center gap-2 rounded-2xl px-2 py-2 text-sm text-slate transition hover:bg-mist hover:text-ink"
+                className="inline-flex items-center gap-2 rounded-xl p-1.5 text-sm text-slate transition hover:bg-mist hover:text-ink sm:rounded-2xl sm:px-2 sm:py-2"
               >
                 <ArrowLeft className="h-4 w-4" />
               </button>
             ) : (
-              <div className="h-10" />
+              <div className="h-8 sm:h-10" />
             )}
           </div>
 
           {step === "details" && !completedRegistration ? (
-            <div className="rounded-2xl border border-slate/15 bg-white px-4 py-2 text-sm font-medium text-ink shadow-sm">
+            <div className="rounded-xl border border-slate/15 bg-white px-3 py-1.5 text-xs font-medium text-ink shadow-sm sm:rounded-2xl sm:px-4 sm:py-2 sm:text-sm">
               Time remaining: {formatTimer(timeRemaining)}
             </div>
           ) : (
@@ -492,14 +548,14 @@ export function EventBookingFlow({
         </div>
 
         <div className={contentLayoutClass}>
-          <div className="px-4 py-5 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <div className="px-3.5 py-4 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
             {completedRegistration ? (
               <div className="mx-auto max-w-2xl">
-                <div className="flex flex-col items-center pt-2 pb-8 text-center">
-                  <CheckCircle2 className="h-12 w-12 text-[#2c7a86]" />
-                  <h1 className="mt-4 font-title text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-3xl">Registration complete!</h1>
-                  <p className="mt-2 text-sm text-slate">A confirmation email will be sent to {completedRegistration.email}</p>
-                  {message ? <p className="mt-3 text-sm text-slate">{message}</p> : null}
+                <div className="flex flex-col items-center pb-6 pt-1 text-center sm:pb-8 sm:pt-2">
+                  <CheckCircle2 className="h-10 w-10 text-[#2c7a86] sm:h-12 sm:w-12" />
+                  <h1 className="mt-3 font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:mt-4 sm:text-3xl">Registration complete!</h1>
+                  <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-sm">A confirmation email will be sent to {completedRegistration.email}</p>
+                  {message ? <p className="mt-2 text-[13px] text-slate sm:mt-3 sm:text-sm">{message}</p> : null}
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-slate/10 bg-white shadow-soft">
@@ -510,33 +566,33 @@ export function EventBookingFlow({
                       className="block w-full h-auto"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0c1723]/90 via-[#0c1723]/30 to-transparent" />
-                    <div className="absolute inset-x-0 bottom-0 px-6 pb-5 sm:px-8 sm:pb-7">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50 sm:text-xs">Your event ticket</p>
-                      <h2 className="mt-1.5 font-title text-lg font-black italic leading-tight tracking-tight text-white sm:text-xl lg:text-2xl">{event.title}</h2>
+                    <div className="absolute inset-x-0 bottom-0 px-4 pb-4 sm:px-8 sm:pb-7">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-white/50 sm:text-xs">Your event ticket</p>
+                      <h2 className="mt-1 font-title text-base font-black italic leading-tight tracking-tight text-white sm:mt-1.5 sm:text-xl lg:text-2xl">{event.title}</h2>
                     </div>
                   </div>
 
-                  <div className="px-6 py-6 sm:px-8 sm:py-8">
-                    <div className="grid gap-6 sm:grid-cols-2">
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate/60">Attendee</p>
-                        <p className="text-base font-semibold text-ink">{fullName}</p>
+                  <div className="px-4 py-4 sm:px-8 sm:py-8">
+                    <div className="grid gap-4 sm:gap-6 sm:grid-cols-2">
+                      <div className="space-y-0.5 sm:space-y-1">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate/60 sm:text-[10px]">Attendee</p>
+                        <p className="text-[13px] font-semibold text-ink sm:text-base">{fullName}</p>
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate/60">Admission</p>
-                        <p className="text-base font-semibold text-ink">{completedRegistration.ticketTitle}</p>
+                      <div className="space-y-0.5 sm:space-y-1">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate/60 sm:text-[10px]">Admission</p>
+                        <p className="text-[13px] font-semibold text-ink sm:text-base">{completedRegistration.ticketTitle}</p>
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate/60">Date & time</p>
-                        <div className="flex items-start gap-2.5 text-[15px] text-ink">
-                          <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#2c7a86]" />
+                      <div className="space-y-0.5 sm:space-y-1">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate/60 sm:text-[10px]">Date & time</p>
+                        <div className="flex items-start gap-2 text-[13px] text-ink sm:gap-2.5 sm:text-[15px]">
+                          <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2c7a86] sm:h-4 sm:w-4" />
                           <span>{formatEventDateTimeLine(event)}</span>
                         </div>
                       </div>
-                      <div className="space-y-1">
-                        <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate/60">Location</p>
-                        <div className="flex items-start gap-2.5 text-[15px] text-ink">
-                          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#2c7a86]" />
+                      <div className="space-y-0.5 sm:space-y-1">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate/60 sm:text-[10px]">Location</p>
+                        <div className="flex items-start gap-2 text-[13px] text-ink sm:gap-2.5 sm:text-[15px]">
+                          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2c7a86] sm:h-4 sm:w-4" />
                           <span>{event.venue ?? "Venue to be announced"}</span>
                         </div>
                         {mapLink ? (
@@ -553,27 +609,27 @@ export function EventBookingFlow({
                       </div>
                     </div>
 
-                    <div className="relative mt-8 pt-8">
+                    <div className="relative mt-6 pt-6 sm:mt-8 sm:pt-8">
                       <div className="absolute inset-x-0 top-0 flex items-center" aria-hidden="true">
-                        <div className="absolute -left-6 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-[#fbfbfc] sm:-left-8" />
+                        <div className="absolute -left-4 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-[#fbfbfc] sm:-left-8" />
                         <div className="w-full border-t border-dashed border-slate/15" />
-                        <div className="absolute -right-6 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-[#fbfbfc] sm:-right-8" />
+                        <div className="absolute -right-4 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-[#fbfbfc] sm:-right-8" />
                       </div>
                       <div className="flex flex-col items-center">
-                        <div className="rounded-2xl border border-slate/10 bg-white p-3 shadow-sm">
+                        <div className="rounded-xl border border-slate/10 bg-white p-2.5 shadow-sm sm:rounded-2xl sm:p-3">
                           <img
                             src={`/api/qr?token=${encodeURIComponent(completedRegistration.qrToken)}`}
                             alt="Ticket QR code"
-                            className="block h-auto w-[180px] sm:w-[200px]"
+                            className="block h-auto w-[160px] sm:w-[200px]"
                           />
                         </div>
-                        <p className="mt-4 text-center text-sm font-medium text-slate">
+                        <p className="mt-3 text-center text-[13px] font-medium text-slate sm:mt-4 sm:text-sm">
                           Present this QR code at check-in
                         </p>
                         <button
                           type="button"
                           onClick={downloadTicket}
-                          className="mt-5 inline-flex items-center gap-2 rounded-2xl border border-slate/20 bg-white px-5 py-2.5 text-sm font-semibold text-ink shadow-sm transition hover:bg-mist"
+                          className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate/20 bg-white px-4 py-2 text-[13px] font-semibold text-ink shadow-sm transition hover:bg-mist sm:mt-5 sm:rounded-2xl sm:px-5 sm:py-2.5 sm:text-sm"
                         >
                           <Download className="h-4 w-4" />
                           Download ticket
@@ -585,10 +641,10 @@ export function EventBookingFlow({
               </div>
             ) : step === "tickets" ? (
               <div className="max-w-3xl">
-                <h1 className="font-title text-3xl font-black italic leading-tight tracking-tight text-ink sm:text-4xl">{event.title}</h1>
-                <p className="mt-1 text-sm leading-snug text-slate sm:text-base">{TRAIN_WITH_DUBAI_POLICE_INTRO}</p>
+                <h1 className="font-title text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-4xl">{event.title}</h1>
+                <p className="mt-1 text-[13px] leading-snug text-slate sm:text-base">{TRAIN_WITH_DUBAI_POLICE_INTRO}</p>
 
-                <div className="mt-2 space-y-0.5 text-[15px] leading-snug text-slate">
+                <div className="mt-2 space-y-0.5 text-[13px] leading-snug text-slate sm:text-[15px]">
                   {visibleParagraphs.map((paragraph) => (
                     <p key={paragraph}>{paragraph}</p>
                   ))}
@@ -597,12 +653,12 @@ export function EventBookingFlow({
                 <button
                   type="button"
                   onClick={() => setExpandedDescription((current) => !current)}
-                  className="mt-1 text-sm font-semibold text-[#2e768b] transition hover:text-[#205260]"
+                  className="mt-1 text-[13px] font-semibold text-[#2e768b] transition hover:text-[#205260] sm:text-sm"
                 >
                   {expandedDescription ? "Show less ^" : "Show more v"}
                 </button>
 
-                <div className="mt-10 space-y-3 border-t border-slate/10 pt-7 text-[15px] text-slate">
+                <div className="mt-6 space-y-2 border-t border-slate/10 pt-5 text-[13px] text-slate sm:mt-10 sm:space-y-3 sm:pt-7 sm:text-[15px]">
                   <p>
                     <span className="font-semibold text-ink">Location:</span> {event.venue ?? "Venue to be announced"}
                     {mapLink ? (
@@ -625,25 +681,23 @@ export function EventBookingFlow({
                   </p>
                 </div>
 
-                <div className="mt-10 border-t border-slate/10 pt-6">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate">Tickets</p>
+                <div className="mt-6 border-t border-slate/10 pt-4 sm:mt-10 sm:pt-6">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate sm:text-xs">Tickets</p>
 
-                  <div className="mt-4 grid gap-0">
-                    <div className="border-b border-slate/10 py-6">
-                      <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                        <div className="max-w-2xl">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl md:text-[28px]">{generalAdmission.title}</h2>
-                          </div>
-                          {generalAdmission.note ? <p className="mt-2 text-[15px] text-slate">{generalAdmission.note}</p> : null}
+                  <div className="mt-3 grid gap-0 sm:mt-4">
+                    <div className="border-b border-slate/10 py-4 sm:py-6">
+                      <div className="flex items-start justify-between gap-3 sm:flex-row">
+                        <div className="min-w-0">
+                          <h2 className="font-title text-lg font-black italic leading-tight tracking-tight text-ink sm:text-2xl md:text-[28px]">{generalAdmission.title}</h2>
+                          {generalAdmission.note ? <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-[15px]">{generalAdmission.note}</p> : null}
                         </div>
                         <div className="shrink-0">
                           {generalAdmission.soldOut ? (
-                            <span className="inline-flex rounded-2xl border border-slate/15 bg-white px-4 py-3 text-sm font-medium text-slate">
+                            <span className="inline-flex rounded-xl border border-slate/15 bg-white px-3 py-2 text-xs font-medium text-slate sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
                               Unavailable
                             </span>
                           ) : (
-                            <span className="inline-flex min-w-[108px] items-center justify-center rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">
+                            <span className="inline-flex items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 sm:min-w-[108px] sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
                               Included
                             </span>
                           )}
@@ -652,10 +706,10 @@ export function EventBookingFlow({
                     </div>
 
                     {bootcampOptions.length > 0 ? (
-                      <div className="border-b border-slate/10 py-4">
-                        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate">Optional bootcamp add-on</p>
+                      <div className="border-b border-slate/10 py-3 sm:py-4">
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate sm:text-xs">Optional bootcamp add-on</p>
                         {bootcampOptions.length > 1 ? (
-                          <p className="mt-1 text-sm text-slate">Select one bootcamp session to add to your admission.</p>
+                          <p className="mt-0.5 text-[13px] text-slate sm:mt-1 sm:text-sm">Select one bootcamp session to add to your admission.</p>
                         ) : null}
                       </div>
                     ) : null}
@@ -664,23 +718,23 @@ export function EventBookingFlow({
                       const isSelected = selectedBootcampId === ticket.id;
 
                       return (
-                        <div key={ticket.id} className="border-b border-slate/10 py-6">
-                          <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-                            <div className="max-w-2xl">
-                              <div className="flex flex-wrap items-center gap-2">
-                                <h2 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl md:text-[28px]">{ticket.title}</h2>
+                        <div key={ticket.id} className="border-b border-slate/10 py-4 sm:py-6">
+                          <div className="flex items-start justify-between gap-3 sm:flex-row">
+                            <div className="min-w-0">
+                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                                <h2 className="font-title text-lg font-black italic leading-tight tracking-tight text-ink sm:text-2xl md:text-[28px]">{ticket.title}</h2>
                                 {ticket.badge ? (
-                                  <span className="rounded-full border border-slate/15 px-3 py-1 text-xs font-medium text-slate">
+                                  <span className="rounded-full border border-slate/15 px-2 py-0.5 text-[11px] font-medium text-slate sm:px-3 sm:py-1 sm:text-xs">
                                     {ticket.badge}
                                   </span>
                                 ) : null}
                               </div>
-                              {ticket.note ? <p className="mt-2 text-[15px] text-slate">{ticket.note}</p> : null}
+                              {ticket.note ? <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-[15px]">{ticket.note}</p> : null}
                             </div>
 
                             <div className="shrink-0">
                               {ticket.soldOut ? (
-                                <span className="inline-flex rounded-2xl border border-slate/15 bg-white px-4 py-3 text-sm font-medium text-slate">
+                                <span className="inline-flex rounded-xl border border-slate/15 bg-white px-3 py-2 text-xs font-medium text-slate sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
                                   Unavailable
                                 </span>
                               ) : (
@@ -690,7 +744,7 @@ export function EventBookingFlow({
                                     setSelectedBootcampId(isSelected ? null : ticket.id);
                                     setMessage(null);
                                   }}
-                                  className={`inline-flex min-w-[108px] items-center justify-center rounded-2xl border px-4 py-3 text-sm font-semibold transition ${
+                                  className={`inline-flex items-center justify-center rounded-xl border px-3 py-2 text-xs font-semibold transition sm:min-w-[108px] sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm ${
                                     isSelected
                                       ? "border-ink bg-ink text-white"
                                       : "border-slate/20 bg-white text-ink hover:bg-mist"
@@ -707,27 +761,31 @@ export function EventBookingFlow({
                   </div>
 
                   {registrationState.state !== "open" ? (
-                    <p className="mt-4 rounded-2xl bg-rose-50 px-4 py-3 text-sm text-rose-700">{registrationState.label}</p>
+                    <p className="mt-3 rounded-xl px-3.5 py-2.5 text-[13px] text-rose-700 bg-rose-50 sm:mt-4 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">{registrationState.label}</p>
                   ) : null}
                 </div>
               </div>
             ) : (
               <div className="max-w-3xl">
-                <h1 className="font-title text-3xl font-black italic leading-tight tracking-tight text-ink sm:text-4xl">{event.title}</h1>
-                <p className="mt-2 text-sm leading-snug text-slate sm:text-base">{formatEventDateTimeLine(event)}</p>
+                <h1 className="font-title text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-4xl">{event.title}</h1>
+                <p className="mt-1 text-[13px] leading-snug text-slate sm:mt-2 sm:text-base">{formatEventDateTimeLine(event)}</p>
 
-                <div className="mt-8 border-t border-slate/10 pt-7">
-                  <p className="text-[15px] font-semibold uppercase tracking-[0.03em] text-ink">Contact information</p>
+                <div className="mt-5 border-t border-slate/10 pt-5 sm:mt-8 sm:pt-7">
+                  <p className="text-[13px] font-semibold uppercase tracking-[0.03em] text-ink sm:text-[15px]">Contact information</p>
 
-                  <div className="mt-6 grid gap-4 sm:grid-cols-2">
+                  <div className="mt-4 grid gap-3 sm:mt-6 sm:gap-4 sm:grid-cols-2">
                     <Field label="First name" hint="Required">
                       <Input
                         value={form.firstName}
                         onChange={(eventObject) =>
                           setForm((current) => ({ ...current, firstName: eventObject.target.value }))
                         }
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.firstName}
+                        className={`rounded-2xl px-3.5 py-3 ${requiredErrors.firstName ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
+                      {requiredErrors.firstName ? (
+                        <p className="mt-2 text-sm text-rose-700">First name is required.</p>
+                      ) : null}
                     </Field>
                     <Field label="Last name" hint="Required">
                       <Input
@@ -735,12 +793,16 @@ export function EventBookingFlow({
                         onChange={(eventObject) =>
                           setForm((current) => ({ ...current, lastName: eventObject.target.value }))
                         }
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.lastName}
+                        className={`rounded-2xl px-3.5 py-3 ${requiredErrors.lastName ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
+                      {requiredErrors.lastName ? (
+                        <p className="mt-2 text-sm text-rose-700">Last name is required.</p>
+                      ) : null}
                     </Field>
                   </div>
 
-                  <div className="mt-5">
+                  <div className="mt-3 sm:mt-5">
                     <Field label="Email address" hint="Required">
                       <Input
                         type="email"
@@ -755,10 +817,20 @@ export function EventBookingFlow({
                             setOtpMessage(null);
                           }
                         }}
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.email || requiredErrors.emailVerified}
+                        className={`rounded-2xl px-3.5 py-3 ${
+                          requiredErrors.email || requiredErrors.emailVerified
+                            ? "border-rose-400 focus-visible:ring-rose-400"
+                            : "border-slate/25"
+                        }`}
                       />
                     </Field>
                     <p className="mt-2 text-sm text-slate">This will be used for your confirmation email.</p>
+                    {requiredErrors.email ? (
+                      <p className="mt-2 text-sm text-rose-700">Enter a valid email address.</p>
+                    ) : requiredErrors.emailVerified ? (
+                      <p className="mt-2 text-sm text-rose-700">Please verify your email.</p>
+                    ) : null}
                     {emailVerified ? (
                       <div className="mt-4 flex items-center gap-2 text-sm font-medium text-emerald-600">
                         <CheckCircle2 className="h-4 w-4" />
@@ -816,15 +888,19 @@ export function EventBookingFlow({
                     ) : null}
                   </div>
 
-                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                  <div className="mt-3 grid gap-3 sm:mt-5 sm:gap-4 sm:grid-cols-2">
                     <Field label="Phone number" hint="Required">
                       <Input
                         value={form.phone}
                         onChange={(eventObject) =>
                           setForm((current) => ({ ...current, phone: eventObject.target.value }))
                         }
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.phone}
+                        className={`rounded-2xl px-3.5 py-3 ${requiredErrors.phone ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
+                      {requiredErrors.phone ? (
+                        <p className="mt-2 text-sm text-rose-700">Phone number is required.</p>
+                      ) : null}
                     </Field>
                     <Field label="Age" hint="Required">
                       <Input
@@ -835,12 +911,16 @@ export function EventBookingFlow({
                         onChange={(eventObject) =>
                           setForm((current) => ({ ...current, age: eventObject.target.value }))
                         }
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.age}
+                        className={`rounded-2xl px-3.5 py-3 ${requiredErrors.age ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
+                      {requiredErrors.age ? (
+                        <p className="mt-2 text-sm text-rose-700">Age is required.</p>
+                      ) : null}
                     </Field>
                   </div>
 
-                  <div className="mt-5">
+                  <div className="mt-3 sm:mt-5">
                     <Field label="UAE resident" hint="Required">
                       <select
                         value={form.uaeResident ? "yes" : "no"}
@@ -855,9 +935,9 @@ export function EventBookingFlow({
                     </Field>
                   </div>
 
-                  <div className="mt-8 border-t border-slate/10 pt-7">
-                    <div className="flex items-center justify-between">
-                      <p className="text-[15px] font-semibold uppercase tracking-[0.03em] text-ink">Disclaimer</p>
+                  <div className="mt-5 border-t border-slate/10 pt-5 sm:mt-8 sm:pt-7">
+                    <div className="flex items-center justify-between gap-2">
+                      <p className="text-[13px] font-semibold uppercase tracking-[0.03em] text-ink sm:text-[15px]">Disclaimer</p>
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
@@ -870,7 +950,7 @@ export function EventBookingFlow({
                           href="/disclaimer-dubai-autodrome.pdf"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
+                          className="hidden items-center gap-1.5 text-sm font-medium text-[#2e768b] transition hover:text-[#205260] sm:inline-flex"
                         >
                           <FileText className="h-4 w-4" />
                           Open full PDF
@@ -882,14 +962,46 @@ export function EventBookingFlow({
                     </p>
 
                     {pdfPreviewOpen && (
-                      <div className="mt-4 overflow-auto rounded-2xl border border-slate/15 [-webkit-overflow-scrolling:touch]" style={{ maxHeight: "60vh" }}>
+                      <div className="mt-4">
+                        <div
+                          className="relative overflow-auto rounded-2xl border border-slate/15 [-webkit-overflow-scrolling:touch]"
+                          style={{ maxHeight: "60vh" }}
+                        >
                         <PdfViewer src="/disclaimer-dubai-autodrome.pdf" className="w-full" />
+                        </div>
+
+                        <a
+                          href="/disclaimer-dubai-autodrome.pdf"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate/20 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm transition active:bg-mist sm:hidden"
+                        >
+                          <FileText className="h-4 w-4 text-[#2e768b]" />
+                          View full PDF
+                        </a>
                       </div>
                     )}
                   </div>
 
-                  <div className="mt-8 space-y-4 border-t border-slate/10 pt-7 text-[15px] leading-relaxed text-slate text-justify">
-                    <p>{event.declaration_text}</p>
+                  <div className="mt-5 space-y-3 border-t border-slate/10 pt-5 text-[13px] leading-relaxed text-slate text-justify sm:mt-8 sm:space-y-4 sm:pt-7 sm:text-[15px]">
+                    <div>
+                      <p className={termsExpanded ? "" : "line-clamp-5"}>
+                        {event.declaration_text}
+                      </p>
+                      {event.declaration_text && event.declaration_text.length > 120 && (
+                        <button
+                          type="button"
+                          onClick={() => setTermsExpanded((v) => !v)}
+                          className="mt-1 text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
+                        >
+                          {termsExpanded ? (
+                            <>View less <ChevronUp className="inline h-4 w-4" /></>
+                          ) : (
+                            <>View more <ChevronDown className="inline h-4 w-4" /></>
+                          )}
+                        </button>
+                      )}
+                    </div>
 
                     <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
                       <Checkbox
@@ -899,8 +1011,11 @@ export function EventBookingFlow({
                         }
                         className="mt-1 rounded border-slate/35"
                       />
-                      <span>I agree to the Terms & Conditions</span>
+                      <span className={requiredErrors.declarationAccepted ? "text-rose-700" : ""}>I agree to the Terms & Conditions</span>
                     </label>
+                    {requiredErrors.declarationAccepted ? (
+                      <p className="text-sm text-rose-700">You must accept the Terms & Conditions.</p>
+                    ) : null}
 
                     <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
                       <Checkbox
@@ -925,7 +1040,7 @@ export function EventBookingFlow({
                     }
                   />
 
-                  {message ? (
+                  {message && (submissionState === "error" || submissionState === "success") ? (
                     <div
                       className={`mt-6 rounded-2xl px-4 py-3 text-sm ${
                         submissionState === "error" ? "bg-rose-100 text-rose-900" : "bg-emerald-100 text-emerald-900"
@@ -940,25 +1055,25 @@ export function EventBookingFlow({
           </div>
 
           {!completedRegistration ? (
-            <aside className="border-t border-slate/10 bg-[#fbfbfc] px-4 py-6 sm:px-6 sm:py-8 md:border-l md:border-t-0 lg:px-8">
+            <aside className="border-t border-slate/10 bg-[#fbfbfc] px-3.5 py-4 sm:px-6 sm:py-8 md:border-l md:border-t-0 lg:px-8">
             <div className="lg:sticky lg:top-6">
-              <div className="mx-auto max-w-[276px] overflow-hidden rounded-2xl border border-slate/10 bg-white">
+              <div className="mx-auto hidden max-w-[276px] overflow-hidden rounded-2xl border border-slate/10 bg-white sm:block">
                 <div className="relative bg-white">
                   <img src="/train-with-dubai-police-cover.png" alt={event.title} className="block h-auto w-full" />
                 </div>
               </div>
 
-              <div className="mt-6">
-                <h3 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]">Registration summary</h3>
+              <div className="sm:mt-6">
+                <h3 className="font-title text-lg font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]">Registration summary</h3>
 
-                <div className="mt-6 space-y-4 text-[15px] text-slate">
-                  <div className="flex items-start justify-between gap-4">
+                <div className="mt-3 space-y-3 text-[13px] text-slate sm:mt-6 sm:space-y-4 sm:text-[15px]">
+                  <div className="flex items-start justify-between gap-3 sm:gap-4">
                     <div>
                       <p className="text-ink">{selectedTicketTitle}</p>
-                      <div className="mt-3 space-y-2 text-sm">
+                      <div className="mt-2 space-y-1.5 text-[12px] sm:mt-3 sm:space-y-2 sm:text-sm">
                         <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4" />
-                          <span>{event.venue ?? "Venue to be announced"}</span>
+                          <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          <span className="line-clamp-1">{event.venue ?? "Venue to be announced"}</span>
                         </div>
                         {mapLink ? (
                           <a
@@ -967,12 +1082,12 @@ export function EventBookingFlow({
                             rel="noopener noreferrer"
                             className="flex items-center gap-2 font-medium text-[#2e768b] transition hover:text-[#205260]"
                           >
-                            <MapPin className="h-4 w-4" />
+                            <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                             <span>View on map</span>
                           </a>
                         ) : null}
                         <div className="flex items-center gap-2">
-                          <Clock3 className="h-4 w-4" />
+                          <Clock3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                           <span>{formatEventDateTimeLine(event)}</span>
                         </div>
                       </div>
@@ -1001,6 +1116,7 @@ export function EventBookingFlow({
                         }
 
                         if (submissionState === "submitting") return;
+                        setSubmitAttempted(true);
 
                         if (timeRemaining === 0) {
                           setMessage("Your hold expired. Go back and continue again to restart the session.");
@@ -1038,7 +1154,7 @@ export function EventBookingFlow({
                           ? !canProceed
                           : submissionState === "submitting"
                       }
-                      className="mt-6 w-full rounded-2xl bg-black py-3 text-base text-white hover:bg-black/90"
+                      className="mt-4 w-full rounded-xl py-2.5 text-[13px] text-white bg-black hover:bg-black/90 sm:mt-6 sm:rounded-2xl sm:py-3 sm:text-base"
                     >
                       {step === "tickets"
                         ? "Continue"

@@ -20,21 +20,21 @@ function RegistrationCard({ row }: { row: Record<string, unknown> }) {
   const status = String(row.status ?? "registered");
 
   return (
-    <div className="admin-card p-2.5">
+    <div className="admin-card p-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="text-sm font-semibold text-ink">{String(row.full_name ?? "")}</p>
-          <p className="truncate text-xs text-slate">{String(row.email_raw ?? "")}</p>
+          <p className="text-[13px] font-semibold text-ink">{String(row.full_name ?? "")}</p>
+          <p className="truncate text-[11px] text-slate">{String(row.email_raw ?? "")}</p>
         </div>
         <StatusPill tone={registrationTone(status)}>{status.replaceAll("_", " ")}</StatusPill>
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-slate/10 pt-1.5 text-xs text-slate">
+      <div className="mt-1 flex items-center justify-between gap-2 border-t border-slate/10 pt-1 text-[11px] text-slate">
         <span className="truncate font-medium text-ink">{event?.title ?? "Unknown event"}</span>
         <span className="shrink-0">{formatShortDateTime(String(row.created_at ?? ""), "Asia/Dubai")}</span>
       </div>
-      <div className="mt-1.5 flex items-center gap-1.5">
+      <div className="mt-1.5 flex items-center gap-1">
         {event?.slug ? (
-          <Link href={`/check-in/${event.slug}`} className="admin-action text-xs !px-2 !py-1">
+          <Link href={`/check-in/${event.slug}`} className="admin-action !px-2 !py-1">
             Check-in
           </Link>
         ) : null}
@@ -51,7 +51,7 @@ export function RegistrationsTable({
 }) {
   return (
     <>
-      <div className="space-y-2 md:hidden">
+      <div className="space-y-1.5 md:hidden">
         {rows.length === 0 ? (
           <div className="admin-card px-4 py-8 text-center text-sm text-slate">
             No registrations found for the current filters.

@@ -33,12 +33,12 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="admin-card grid gap-4 p-4 sm:gap-5 sm:p-6 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]">
+    <section className="admin-card grid gap-3 p-3 sm:gap-5 sm:p-6 md:grid-cols-[200px_minmax(0,1fr)] lg:grid-cols-[220px_minmax(0,1fr)]">
       <div>
         <p className="admin-label">{eyebrow}</p>
-        <h3 className="mt-2 text-lg font-semibold tracking-tight text-ink sm:text-xl">{title}</h3>
+        <h3 className="mt-1 text-sm font-semibold tracking-tight text-ink sm:mt-2 sm:text-xl">{title}</h3>
       </div>
-      <div className="grid gap-4 sm:gap-5">{children}</div>
+      <div className="grid gap-3 sm:gap-5">{children}</div>
     </section>
   );
 }
@@ -248,12 +248,12 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
           </div>
         ) : null}
 
-        <div className="admin-card sticky bottom-3 z-10 flex flex-col gap-3 px-4 py-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between sm:px-6">
-          <div>
+        <div className="admin-card sticky bottom-3 z-10 flex items-center justify-between gap-3 px-3 py-3 backdrop-blur sm:px-6 sm:py-4">
+          <div className="min-w-0">
             <p className="admin-label">{event ? "Editing event" : "Create event"}</p>
-            <p className="mt-1 text-sm font-medium text-ink">{event ? "Ready to save changes." : "Ready to create the event."}</p>
+            <p className="mt-0.5 hidden text-sm font-medium text-ink sm:block">{event ? "Ready to save changes." : "Ready to create the event."}</p>
           </div>
-          <Button type="submit" disabled={isPending} className="min-w-[150px] rounded-2xl">
+          <Button type="submit" disabled={isPending} className="shrink-0 rounded-xl px-4 py-2 text-xs sm:min-w-[150px] sm:rounded-2xl sm:text-sm">
             {isPending ? "Saving..." : event ? "Save event" : "Create event"}
           </Button>
         </div>

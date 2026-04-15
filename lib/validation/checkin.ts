@@ -13,3 +13,8 @@ export const manualCheckinSchema = z.object({
   gateName: z.string().trim().max(100).optional().or(z.literal("")),
   deviceId: z.string().trim().max(100).optional().or(z.literal(""))
 });
+
+export const manualCheckinByEmailSchema = z.object({
+  eventId: z.string().uuid(),
+  email: z.string().trim().email().max(320)
+});

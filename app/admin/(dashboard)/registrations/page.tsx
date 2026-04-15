@@ -63,18 +63,18 @@ export default async function RegistrationsPage({
 
   return (
     <main className="admin-page">
-      <section className="admin-card p-3 sm:p-3.5">
+      <section className="admin-card p-2.5 sm:p-3.5">
         <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
-            <div className="mb-1 flex flex-wrap items-center gap-1.5 text-xs">
+            <div className="mb-0.5 flex flex-wrap items-center gap-1.5 text-[11px] sm:mb-1 sm:text-xs">
               <Link href="/admin" className="font-medium text-slate transition hover:text-ink">
                 Admin
               </Link>
               <span className="text-slate/50">/</span>
-              <span className="font-medium text-slate">Registrations &amp; Analytics</span>
+              <span className="font-medium text-slate">Registrations</span>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <h2 className="text-sm font-semibold tracking-tight text-ink sm:text-base">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+              <h2 className="text-[13px] font-semibold tracking-tight text-ink sm:text-base">
                 {selectedEvent?.title ?? "All events"}
               </h2>
               {selectedEvent ? (
@@ -107,43 +107,43 @@ export default async function RegistrationsPage({
               ) : null}
             </div>
             {selectedEvent ? (
-              <p className="mt-0.5 text-xs text-slate">
+              <p className="mt-0.5 text-[11px] text-slate sm:text-xs">
                 {formatEventDateRange(selectedEvent.start_at, selectedEvent.end_at, selectedEvent.timezone)}
               </p>
             ) : null}
           </div>
 
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1 sm:gap-1.5">
             {selectedEvent ? (
               <>
                 <DownloadDropdown eventId={selectedEvent.id} />
-                <Link href={`/check-in/${selectedEvent.slug}`} className="admin-action-primary text-xs">
+                <Link href={`/check-in/${selectedEvent.slug}`} className="admin-action-primary">
                   Check in
                 </Link>
-                <Link href={`/admin/events/${selectedEvent.id}/edit`} className="admin-action text-xs">
+                <Link href={`/admin/events/${selectedEvent.id}/edit`} className="admin-action">
                   Edit
                 </Link>
-                <Link href={`/events/${selectedEvent.slug}`} className="admin-action text-xs">
-                  Public view
+                <Link href={`/events/${selectedEvent.slug}`} className="admin-action">
+                  Public
                 </Link>
               </>
             ) : (
               <>
-                <div className="admin-card-muted flex items-center gap-2 px-3 py-1.5">
-                  <span className="text-xs text-slate">Rows</span>
-                  <span className="text-sm font-semibold text-ink">{rows.length}</span>
+                <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
+                  <span className="text-[10px] text-slate sm:text-xs">Rows</span>
+                  <span className="text-xs font-semibold text-ink sm:text-sm">{rows.length}</span>
                 </div>
-                <div className="admin-card-muted flex items-center gap-2 px-3 py-1.5">
-                  <span className="text-xs text-slate">Checked in</span>
-                  <span className="text-sm font-semibold text-ink">{checkedInCount}</span>
+                <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
+                  <span className="text-[10px] text-slate sm:text-xs">Checked in</span>
+                  <span className="text-xs font-semibold text-ink sm:text-sm">{checkedInCount}</span>
                 </div>
-                <div className="admin-card-muted flex items-center gap-2 px-3 py-1.5">
-                  <span className="text-xs text-slate">Revoked</span>
-                  <span className="text-sm font-semibold text-ink">{revokedCount}</span>
+                <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
+                  <span className="text-[10px] text-slate sm:text-xs">Revoked</span>
+                  <span className="text-xs font-semibold text-ink sm:text-sm">{revokedCount}</span>
                 </div>
-                <div className="admin-card-muted flex items-center gap-2 px-3 py-1.5">
-                  <span className="text-xs text-slate">Events</span>
-                  <span className="text-sm font-semibold text-ink">{events.length}</span>
+                <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
+                  <span className="text-[10px] text-slate sm:text-xs">Events</span>
+                  <span className="text-xs font-semibold text-ink sm:text-sm">{events.length}</span>
                 </div>
               </>
             )}
@@ -153,9 +153,9 @@ export default async function RegistrationsPage({
 
       {analytics ? <AnalyticsCards summary={analytics.summary} hideDetail /> : null}
 
-      <section className="rounded-xl border-2 border-ink/25 bg-ink/[0.03] p-3 sm:p-3.5">
-        <form className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <span className="shrink-0 rounded bg-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Filter</span>
+      <section className="rounded-xl border-2 border-ink/25 bg-ink/[0.03] p-2 sm:p-3.5">
+        <form className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
+          <span className="shrink-0 self-start rounded bg-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Filter</span>
           <Select
             name="eventId"
             defaultValue={selectedEventId ?? ""}
@@ -200,15 +200,15 @@ export default async function RegistrationsPage({
       />
 
       {analytics ? (
-        <section className="admin-card p-3 sm:p-3.5">
+        <section className="admin-card p-2.5 sm:p-3.5">
           <div className="flex items-center justify-between gap-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-slate">Recent activity</h3>
-            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate">
+            <h3 className="text-[11px] font-semibold uppercase tracking-wide text-slate sm:text-xs">Recent activity</h3>
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate sm:text-xs">
               {analytics.recentActivity.length}
             </span>
           </div>
 
-          <div className="mt-2 space-y-1.5">
+          <div className="mt-1.5 space-y-1 sm:mt-2 sm:space-y-1.5">
             {analytics.recentActivity.length === 0 ? (
               <div className="admin-card-muted px-3 py-3 text-xs text-slate">No scan activity yet.</div>
             ) : null}
@@ -216,13 +216,13 @@ export default async function RegistrationsPage({
             {pagedActivity.map((scan) => (
               <div
                 key={scan.id}
-                className="admin-card-muted flex items-center justify-between gap-2 px-3 py-2"
+                className="admin-card-muted flex items-center justify-between gap-2 px-2 py-1.5 sm:px-3 sm:py-2"
               >
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-medium text-ink">{scan.registration?.full_name ?? "Unknown attendee"}</p>
-                  {scan.registration?.email_raw ? <p className="truncate text-xs text-slate">{scan.registration.email_raw}</p> : null}
+                  <p className="truncate text-xs font-medium text-ink sm:text-sm">{scan.registration?.full_name ?? "Unknown attendee"}</p>
+                  {scan.registration?.email_raw ? <p className="hidden truncate text-xs text-slate sm:block">{scan.registration.email_raw}</p> : null}
                 </div>
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
                   <StatusPill
                     tone={
                       scan.result === "success"
@@ -234,7 +234,7 @@ export default async function RegistrationsPage({
                   >
                     {scan.result.replaceAll("_", " ")}
                   </StatusPill>
-                  <span className="text-xs text-slate">
+                  <span className="hidden text-xs text-slate sm:inline">
                     {scan.gate_name ? `${scan.gate_name} · ` : ""}
                     {formatShortDateTime(scan.scanned_at)}
                   </span>

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedAppUser } from "@/lib/auth";
-import { manualCheckinSchema } from "@/lib/validation/checkin";
-import { manualCheckin } from "@/services/checkin";
+import { manualCheckinSchema, manualCheckinByEmailSchema } from "@/lib/validation/checkin";
+import { manualCheckin, manualCheckinByEmail } from "@/services/checkin";
 
 export async function POST(request: Request) {
   const user = await getAuthenticatedAppUser();
@@ -11,6 +11,26 @@ export async function POST(request: Request) {
   }
 
   const payload = await request.json().catch(() => null);
+
+  const emailParsed = manualCheckinByEmailSchema.safeParse(payload);
+
+  if (emailParsed.success) {
+    const result = await manualCheckinByEmail({
+      ...emailParsed.data,
+      staffUserId: user.id
+    });
+
+    if (!result.ok) {
+      return NextResponse.json({ message: result.message }, { status: 404 });
+    }
+
+    return NextResponse.json({
+      ok: true,
+      result: result.result,
+      message: result.message
+    });
+  }
+
   const parsed = manualCheckinSchema.safeParse(payload);
 
   if (!parsed.success) {
