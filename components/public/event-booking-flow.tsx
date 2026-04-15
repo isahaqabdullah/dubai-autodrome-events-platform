@@ -1003,20 +1003,43 @@ export function EventBookingFlow({
                           return;
                         }
 
+                        if (submissionState === "submitting") return;
+
+                        if (timeRemaining === 0) {
+                          setMessage("Your hold expired. Go back and continue again to restart the session.");
+                          return;
+                        }
+                        if (!form.firstName.trim() || !form.lastName.trim()) {
+                          setMessage("Please enter your first and last name.");
+                          return;
+                        }
+                        if (!form.email.trim()) {
+                          setMessage("Please enter your email address.");
+                          return;
+                        }
+                        if (!emailVerified) {
+                          setMessage("Please verify your email above to complete registration.");
+                          return;
+                        }
+                        if (!form.phone.trim()) {
+                          setMessage("Please enter your phone number.");
+                          return;
+                        }
+                        if (!form.age.trim()) {
+                          setMessage("Please enter your age.");
+                          return;
+                        }
+                        if (!form.declarationAccepted) {
+                          setMessage("Please accept the Terms & Conditions.");
+                          return;
+                        }
+
                         void submitRegistration();
                       }}
                       disabled={
                         step === "tickets"
                           ? !canProceed
-                          : submissionState === "submitting" ||
-                            !emailVerified ||
-                            !form.firstName.trim() ||
-                            !form.lastName.trim() ||
-                            !form.email.trim() ||
-                            !form.phone.trim() ||
-                            !form.age.trim() ||
-                            !form.declarationAccepted ||
-                            timeRemaining === 0
+                          : submissionState === "submitting"
                       }
                       className="mt-6 w-full rounded-2xl bg-black py-3 text-base text-white hover:bg-black/90"
                     >
@@ -1027,14 +1050,8 @@ export function EventBookingFlow({
                           : "Complete registration"}
                     </Button>
 
-                    {step === "details" && timeRemaining === 0 ? (
-                      <p className="mt-3 text-sm text-rose-700">
-                        Your hold expired. Go back and continue again to restart the session.
-                      </p>
-                    ) : step === "details" && !emailVerified && submissionState !== "submitting" ? (
-                      <p className="mt-3 text-sm text-amber-600">
-                        Please verify your email above to complete registration.
-                      </p>
+                    {step === "details" && message && submissionState !== "submitting" ? (
+                      <p className="mt-3 text-sm text-rose-700">{message}</p>
                     ) : null}
                   </>
                 ) : null}
