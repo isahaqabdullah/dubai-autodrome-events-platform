@@ -888,7 +888,7 @@ export function EventBookingFlow({
                     )}
                   </div>
 
-                  <div className="mt-8 space-y-4 border-t border-slate/10 pt-7 text-[15px] leading-snug text-slate">
+                  <div className="mt-8 space-y-4 border-t border-slate/10 pt-7 text-[15px] leading-relaxed text-slate text-justify">
                     <p>{event.declaration_text}</p>
 
                     <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
