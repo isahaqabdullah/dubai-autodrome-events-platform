@@ -44,7 +44,7 @@ export function PdfViewer({ src, className }: PdfViewerProps) {
 
           const ctx = canvas.getContext("2d")!;
           ctx.scale(2, 2);
-          await page.render({ canvasContext: ctx, viewport }).promise;
+          await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
         }
       } catch {
         if (!cancelled) setError(true);
