@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, FileText, MapPin } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -113,7 +113,20 @@ export function EventBookingFlow({
   ticketCounts
 }: EventBookingFlowProps) {
   const config = useMemo(() => mergeFormConfig(event.form_config), [event.form_config]);
-  const [step, setStep] = useState<Step>("tickets");
+  const storageKey = `booking-draft-${event.id}`;
+  const hydrated = useRef(false);
+
+  function loadDraft() {
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (raw) return JSON.parse(raw);
+    } catch { /* ignore */ }
+    return null;
+  }
+
+  const draft = hydrated.current ? null : loadDraft();
+
+  const [step, setStep] = useState<Step>(draft?.step ?? "tickets");
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(true);
   const [termsExpanded, setTermsExpanded] = useState(false);
@@ -123,20 +136,37 @@ export function EventBookingFlow({
   const [otp, setOtp] = useState("");
   const [otpState, setOtpState] = useState<OtpState>("idle");
   const [otpMessage, setOtpMessage] = useState<{ text: string; error: boolean } | null>(null);
-  const [emailVerified, setEmailVerified] = useState(false);
+  const [emailVerified, setEmailVerified] = useState(draft?.emailVerified ?? false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [completedRegistration, setCompletedRegistration] = useState<CompletedRegistration | null>(null);
   const [form, setForm] = useState({
-    firstName: "",
-    lastName: "",
-    email: "",
-    phone: "",
-    age: "",
-    uaeResident: false,
-    declarationAccepted: false,
-    marketingOptIn: false,
+    firstName: draft?.form?.firstName ?? "",
+    lastName: draft?.form?.lastName ?? "",
+    email: draft?.form?.email ?? "",
+    phone: draft?.form?.phone ?? "",
+    age: draft?.form?.age ?? "",
+    uaeResident: draft?.form?.uaeResident ?? false,
+    declarationAccepted: draft?.form?.declarationAccepted ?? false,
+    marketingOptIn: draft?.form?.marketingOptIn ?? false,
     website: ""
   });
+  const [selectedBootcampId, setSelectedBootcampId] = useState<string | null>(draft?.selectedBootcampId ?? null);
+
+  const saveDraft = useCallback(() => {
+    try {
+      sessionStorage.setItem(storageKey, JSON.stringify({
+        form, step, emailVerified, selectedBootcampId
+      }));
+    } catch { /* quota exceeded — ignore */ }
+  }, [form, step, emailVerified, selectedBootcampId, storageKey]);
+
+  useEffect(() => {
+    hydrated.current = true;
+  }, []);
+
+  useEffect(() => {
+    if (hydrated.current) saveDraft();
+  }, [saveDraft]);
 
 
 
@@ -173,7 +203,6 @@ export function EventBookingFlow({
   );
   const generalAdmission = ticketOptions[0];
   const bootcampOptions = ticketOptions.slice(1);
-  const [selectedBootcampId, setSelectedBootcampId] = useState<string | null>(null);
   const selectedBootcamp = selectedBootcampId
     ? bootcampOptions.find((ticket) => ticket.id === selectedBootcampId) ?? null
     : null;
@@ -453,6 +482,7 @@ export function EventBookingFlow({
     }
 
     setSubmissionState("success");
+    try { sessionStorage.removeItem(storageKey); } catch { /* ignore */ }
     setCompletedRegistration({
       email: result.email ?? form.email,
       qrToken: result.qrToken ?? "demo",
