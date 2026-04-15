@@ -129,7 +129,6 @@ export function EventBookingFlow({
   const [step, setStep] = useState<Step>(draft?.step ?? "tickets");
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(true);
-  const [pdfMobileOverlayOpen, setPdfMobileOverlayOpen] = useState(false);
   const [termsExpanded, setTermsExpanded] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(HOLD_DURATION_SECONDS);
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
@@ -971,45 +970,17 @@ export function EventBookingFlow({
                           style={{ maxHeight: "60vh" }}
                         >
                         <PdfViewer src="/disclaimer-dubai-autodrome.pdf" className="w-full" />
-                        {pdfMobileOverlayOpen ? (
-                          <div
-                            className="absolute inset-0 bg-black/40 text-white backdrop-blur-[2px] sm:hidden"
-                            onClick={(eventObject) => {
-                              // Prevent clicks inside the overlay from re-triggering open/close behavior.
-                              eventObject.stopPropagation();
-                            }}
-                          >
-                            <button
-                              type="button"
-                              onClick={() => setPdfMobileOverlayOpen(false)}
-                              className="absolute right-3 top-3 inline-flex h-10 w-10 items-center justify-center rounded-full bg-white/15 text-white transition active:bg-white/25"
-                              aria-label="Close"
-                            >
-                              ×
-                            </button>
-                            <div className="flex h-full items-center justify-center px-6">
-                              <a
-                                href="/disclaimer-dubai-autodrome.pdf"
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-2 rounded-2xl bg-white/20 px-5 py-3 text-sm font-semibold backdrop-blur-sm transition active:bg-white/25"
-                              >
-                                <FileText className="h-4 w-4" />
-                                View full PDF
-                              </a>
-                            </div>
-                          </div>
-                        ) : null}
                         </div>
 
-                        <button
-                          type="button"
-                          onClick={() => setPdfMobileOverlayOpen(true)}
+                        <a
+                          href="/disclaimer-dubai-autodrome.pdf"
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate/20 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm transition active:bg-mist sm:hidden"
                         >
                           <FileText className="h-4 w-4 text-[#2e768b]" />
                           View full PDF
-                        </button>
+                        </a>
                       </div>
                     )}
                   </div>
