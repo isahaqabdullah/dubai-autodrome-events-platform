@@ -10,6 +10,7 @@ interface PdfViewerProps {
 export function PdfViewer({ src, className }: PdfViewerProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -20,34 +21,47 @@ export function PdfViewer({ src, className }: PdfViewerProps) {
     async function render() {
       try {
         const pdfjsLib = await import("pdfjs-dist");
-        pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
 
-        const pdf = await pdfjsLib.getDocument(src).promise;
+        // v5 requires setting the worker
+        if ("GlobalWorkerOptions" in pdfjsLib) {
+          pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
+            "pdfjs-dist/build/pdf.worker.min.mjs",
+            import.meta.url
+          ).toString();
+        }
+
+        const loadingTask = pdfjsLib.getDocument(src);
+        const pdf = await loadingTask.promise;
 
         if (cancelled) return;
         container!.innerHTML = "";
 
         for (let i = 1; i <= pdf.numPages; i++) {
           const page = await pdf.getPage(i);
-          const containerWidth = container!.clientWidth;
+          const containerWidth = container!.clientWidth || 600;
           const unscaledViewport = page.getViewport({ scale: 1 });
-          const scale = containerWidth / unscaledViewport.width;
+          const scale = (containerWidth / unscaledViewport.width) * 2;
           const viewport = page.getViewport({ scale });
 
           const canvas = document.createElement("canvas");
-          canvas.width = viewport.width * 2;
-          canvas.height = viewport.height * 2;
+          canvas.width = viewport.width;
+          canvas.height = viewport.height;
           canvas.style.width = "100%";
           canvas.style.height = "auto";
           canvas.style.display = "block";
           container!.appendChild(canvas);
 
           const ctx = canvas.getContext("2d")!;
-          ctx.scale(2, 2);
-          await page.render({ canvasContext: ctx, viewport, canvas } as any).promise;
+          await page.render({ canvasContext: ctx, viewport } as any).promise;
         }
-      } catch {
-        if (!cancelled) setError(true);
+
+        if (!cancelled) setLoading(false);
+      } catch (err) {
+        console.error("PDF render error:", err);
+        if (!cancelled) {
+          setError(true);
+          setLoading(false);
+        }
       }
     }
 
@@ -71,5 +85,10 @@ export function PdfViewer({ src, className }: PdfViewerProps) {
     );
   }
 
-  return <div ref={containerRef} className={className} />;
+  return (
+    <div className={className}>
+      {loading && <p className="p-4 text-sm text-slate">Loading PDF...</p>}
+      <div ref={containerRef} />
+    </div>
+  );
 }
