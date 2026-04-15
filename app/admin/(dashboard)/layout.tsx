@@ -12,22 +12,22 @@ export default async function AdminLayout({
 
   return (
     <div className="page-shell page-stack-compact">
-      <header className="admin-card px-4 py-3 sm:px-6 sm:py-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <header className="admin-card px-3 py-2.5 sm:px-6 sm:py-4">
+        <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
             <Link href="/admin" className="block">
               <p className="admin-label">Dubai Autodrome</p>
-              <h1 className="mt-1 text-lg font-semibold tracking-tight text-ink sm:text-xl">Event Admin</h1>
+              <h1 className="mt-0.5 text-[15px] font-semibold tracking-tight text-ink sm:mt-1 sm:text-xl">Event Admin</h1>
             </Link>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-end">
-            <p className="truncate text-sm text-slate">{user.email ?? "Signed-in staff user"}</p>
-            <SignOutButton className="rounded-2xl px-4 py-2.5" />
+          <div className="flex items-center gap-2 sm:gap-3">
+            <p className="hidden truncate text-sm text-slate sm:block">{user.email ?? "Signed-in staff user"}</p>
+            <SignOutButton className="rounded-xl px-3 py-1.5 text-xs sm:rounded-2xl sm:px-4 sm:py-2.5 sm:text-sm" />
           </div>
         </div>
 
-        <div className="mt-4 border-t border-slate/10 pt-4">
+        <div className="mt-2.5 border-t border-slate/10 pt-2.5 sm:mt-4 sm:pt-4">
           <AdminNav hideOnDashboard activeStyle="line" />
         </div>
       </header>

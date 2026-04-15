@@ -23,11 +23,11 @@ function ActionLink({
       href={href as Route}
       className={
         variant === "primary"
-          ? `inline-flex items-center justify-center rounded-2xl border border-ink bg-ink font-semibold text-white transition hover:bg-ink/92 ${
-              compact ? "px-3 py-2 text-xs sm:text-sm" : "px-4 py-3 text-sm"
+          ? `inline-flex items-center justify-center font-semibold text-white transition hover:bg-ink/92 ${
+              compact ? "rounded-lg border border-ink bg-ink px-2.5 py-1.5 text-[11px] sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs" : "rounded-2xl border border-ink bg-ink px-4 py-3 text-sm"
             }`
-          : `inline-flex items-center justify-center rounded-2xl border border-slate/15 bg-white font-semibold text-ink transition hover:border-slate/30 hover:bg-slate-50 ${
-              compact ? "px-3 py-2 text-xs sm:text-sm" : "px-4 py-3 text-sm"
+          : `inline-flex items-center justify-center font-semibold text-ink transition hover:border-slate/30 hover:bg-slate-50 ${
+              compact ? "rounded-lg border border-slate/15 bg-white px-2.5 py-1.5 text-[11px] sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs" : "rounded-2xl border border-slate/15 bg-white px-4 py-3 text-sm"
             }`
       }
     >
@@ -50,13 +50,13 @@ function EventSection({
   }
 
   return (
-    <section className="space-y-4">
+    <section className="space-y-2 sm:space-y-4">
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="admin-label">{title}</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink sm:text-xl">{title}</h2>
+          <h2 className="mt-0.5 text-sm font-semibold tracking-tight text-ink sm:mt-1 sm:text-xl">{title}</h2>
         </div>
-        <span className="rounded-full border border-slate/15 bg-white/80 px-3 py-1 text-sm font-medium text-slate">
+        <span className="rounded-full border border-slate/15 bg-white/80 px-2.5 py-0.5 text-xs font-medium text-slate sm:px-3 sm:py-1 sm:text-sm">
           {events.length} event{events.length === 1 ? "" : "s"}
         </span>
       </div>
@@ -66,11 +66,11 @@ function EventSection({
           const registrationState = getRegistrationWindowState(event);
 
           return (
-            <article key={event.id} className="border-b border-slate/10 px-4 py-3.5 last:border-b-0 sm:px-5">
-              <div className="flex flex-col gap-2.5 xl:flex-row xl:items-center xl:justify-between">
+            <article key={event.id} className="border-b border-slate/10 px-3 py-2.5 last:border-b-0 sm:px-5 sm:py-3.5">
+              <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
                 <div className="min-w-0 xl:flex-1">
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    <h3 className="truncate text-[15px] font-semibold tracking-tight text-ink sm:text-base">
+                  <div className="flex flex-wrap items-center gap-1.5 sm:gap-2.5">
+                    <h3 className="truncate text-[13px] font-semibold tracking-tight text-ink sm:text-base">
                       {event.title}
                     </h3>
                     {showStatusPills && (
@@ -100,12 +100,12 @@ function EventSection({
                       </>
                     )}
                   </div>
-                  <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-ink/70 sm:text-sm">
-                    <span className="font-medium">{formatEventDateRange(event.start_at, event.end_at, event.timezone)}</span>
-                  </div>
+                  <p className="mt-0.5 text-xs font-medium text-ink/70 sm:mt-1 sm:text-sm">
+                    {formatEventDateRange(event.start_at, event.end_at, event.timezone)}
+                  </p>
                 </div>
 
-                <div className="flex flex-wrap gap-1.5 sm:gap-2 xl:justify-end">
+                <div className="flex flex-wrap gap-1 sm:gap-2 xl:justify-end">
                   <ActionLink href={`/check-in/${event.slug}`} variant="primary" compact>
                     Check in
                   </ActionLink>
@@ -113,10 +113,10 @@ function EventSection({
                     Edit
                   </ActionLink>
                   <ActionLink href={`/admin/registrations?eventId=${event.id}`} compact>
-                    Registrations & analytics
+                    Registrations
                   </ActionLink>
                   <ActionLink href={`/events/${event.slug}`} compact>
-                    Public view
+                    Public
                   </ActionLink>
                   <DeleteEventButton eventId={event.id} eventTitle={event.title} />
                 </div>
@@ -154,38 +154,38 @@ export default async function AdminDashboardPage() {
 
   return (
     <main className="admin-page">
-      <section className="admin-card p-3.5 sm:p-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+      <section className="admin-card p-2.5 sm:p-4">
+        <div className="flex flex-col gap-2 sm:gap-3 xl:flex-row xl:items-center xl:justify-between">
           <div className="min-w-0">
             <p className="admin-label">Dashboard</p>
-            <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink sm:text-xl">Events</h2>
+            <h2 className="mt-0.5 text-sm font-semibold tracking-tight text-ink sm:mt-1 sm:text-xl">Events</h2>
           </div>
 
-          <div className="grid gap-2 grid-cols-2 md:grid-cols-4 xl:min-w-[680px]">
-            <div className="admin-card-muted flex items-center justify-between px-3.5 py-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate">All events</p>
-              <p className="text-xl font-semibold tracking-tight text-ink">{events.length}</p>
+          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-4 sm:gap-2 md:grid-cols-4 xl:min-w-[680px]">
+            <div className="admin-card-muted flex items-center justify-between px-2 py-1.5 sm:px-3.5 sm:py-2.5">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate sm:text-[10px] sm:tracking-[0.16em]">All</p>
+              <p className="text-base font-semibold tracking-tight text-ink sm:text-xl">{events.length}</p>
             </div>
-            <div className="admin-card-muted flex items-center justify-between px-3.5 py-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate">Registration open</p>
-              <p className="text-xl font-semibold tracking-tight text-ink">{registrationOpenCount}</p>
+            <div className="admin-card-muted flex items-center justify-between px-2 py-1.5 sm:px-3.5 sm:py-2.5">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate sm:text-[10px] sm:tracking-[0.16em]">Open</p>
+              <p className="text-base font-semibold tracking-tight text-ink sm:text-xl">{registrationOpenCount}</p>
             </div>
-            <div className="admin-card-muted flex items-center justify-between px-3.5 py-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate">Live now</p>
-              <p className="text-xl font-semibold tracking-tight text-ink">{liveEvents.length}</p>
+            <div className="admin-card-muted flex items-center justify-between px-2 py-1.5 sm:px-3.5 sm:py-2.5">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate sm:text-[10px] sm:tracking-[0.16em]">Live</p>
+              <p className="text-base font-semibold tracking-tight text-ink sm:text-xl">{liveEvents.length}</p>
             </div>
-            <div className="admin-card-muted flex items-center justify-between px-3.5 py-2.5">
-              <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate">Past editions</p>
-              <p className="text-xl font-semibold tracking-tight text-ink">{pastEvents.length}</p>
+            <div className="admin-card-muted flex items-center justify-between px-2 py-1.5 sm:px-3.5 sm:py-2.5">
+              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate sm:text-[10px] sm:tracking-[0.16em]">Past</p>
+              <p className="text-base font-semibold tracking-tight text-ink sm:text-xl">{pastEvents.length}</p>
             </div>
           </div>
         </div>
       </section>
 
-      <section className="space-y-3">
+      <section className="space-y-2 sm:space-y-3">
         <div>
           <p className="admin-label">Quick Actions</p>
-          <h3 className="mt-1 text-lg font-semibold tracking-tight text-ink sm:text-xl">
+          <h3 className="mt-0.5 text-sm font-semibold tracking-tight text-ink sm:mt-1 sm:text-xl">
             Events, creation, registrations, and analytics
           </h3>
         </div>

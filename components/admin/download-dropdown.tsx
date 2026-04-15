@@ -25,7 +25,7 @@ export function DownloadDropdown({ eventId }: { eventId: string }) {
       <button
         type="button"
         onClick={() => setOpen((prev) => !prev)}
-        className="admin-action text-xs"
+        className="admin-action"
       >
         Download ▾
       </button>

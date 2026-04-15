@@ -41,26 +41,26 @@ export default async function EditEventPage({
 
   return (
     <main className="admin-page">
-      <section className="admin-card p-5 sm:p-6 lg:p-7">
-        <div className="space-y-5">
-          <div className="flex flex-wrap items-center gap-2">
-            <Link href="/admin" className="text-sm font-medium text-slate transition hover:text-ink">
+      <section className="admin-card p-3 sm:p-6 lg:p-7">
+        <div className="space-y-3 sm:space-y-5">
+          <div className="flex flex-wrap items-center gap-1.5 text-[11px] sm:gap-2 sm:text-sm">
+            <Link href="/admin" className="font-medium text-slate transition hover:text-ink">
               Admin
             </Link>
             <span className="text-slate/50">/</span>
             <Link
               href={`/admin/registrations?eventId=${event.id}`}
-              className="text-sm font-medium text-slate transition hover:text-ink"
+              className="font-medium text-slate transition hover:text-ink"
             >
-              Registrations &amp; Analytics
+              Registrations
             </Link>
             <span className="text-slate/50">/</span>
-            <span className="text-sm font-medium text-slate">Edit</span>
+            <span className="font-medium text-slate">Edit</span>
           </div>
 
-          <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="flex flex-col gap-3 sm:gap-4 xl:flex-row xl:items-start xl:justify-between">
             <div className="max-w-3xl">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <StatusPill
                   tone={
                     event.status === "live"
@@ -84,8 +84,8 @@ export default async function EditEventPage({
                   {registrationState.label}
                 </StatusPill>
               </div>
-              <h1 className="mt-3 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{event.title}</h1>
-              <p className="mt-3 text-sm text-slate sm:text-base">
+              <h1 className="mt-2 text-xl font-semibold tracking-tight text-ink sm:mt-3 sm:text-4xl">{event.title}</h1>
+              <p className="mt-1.5 text-xs text-slate sm:mt-3 sm:text-base">
                 {formatEventDateRange(event.start_at, event.end_at, event.timezone)}
               </p>
             </div>
@@ -94,13 +94,13 @@ export default async function EditEventPage({
               href={`/admin/registrations?eventId=${event.id}`}
               className="admin-action"
             >
-              Back to registrations &amp; analytics
+              Back to registrations
             </Link>
           </div>
         </div>
       </section>
 
-      <section className="admin-card p-5 sm:p-6">
+      <section className="admin-card p-3 sm:p-6">
         <EventForm event={event} action={updateEventAction} hideRegistrationSections />
       </section>
     </main>

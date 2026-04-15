@@ -344,6 +344,9 @@ export function ScanConsole({
         full_name: null
       });
     } finally {
+      if (cameraState === "active") {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
       setBusy(false);
       setToken("");
       inputRef.current?.focus();

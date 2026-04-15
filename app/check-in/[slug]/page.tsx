@@ -33,46 +33,46 @@ export default async function CheckinPage({
   return (
     <main className="page-shell page-stack-compact">
       <section className="card-panel overflow-hidden">
-        <div className="px-4 py-3.5 sm:px-6 sm:py-4 lg:px-7">
-            <div className="flex flex-wrap items-center gap-2">
+        <div className="px-3.5 py-2.5 sm:px-6 sm:py-4 lg:px-7">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <StatusPill tone="success">staff access</StatusPill>
               <StatusPill tone="neutral">check-in desk</StatusPill>
             </div>
 
-            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-              <Link href="/admin" className="inline-flex items-center gap-2 font-medium text-slate transition hover:text-ink">
-                <ArrowLeft className="h-4 w-4" />
+            <div className="mt-2 flex flex-wrap items-center gap-3 text-[13px] sm:mt-3 sm:text-sm">
+              <Link href="/admin" className="inline-flex items-center gap-1.5 font-medium text-slate transition hover:text-ink sm:gap-2">
+                <ArrowLeft className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                 Back to admin
               </Link>
             </div>
 
-            <p className="section-title mt-3">Operations</p>
-            <h1 className="mt-1.5 text-xl font-semibold tracking-tight text-ink sm:text-2xl">{event.title}</h1>
+            <p className="section-title mt-2 sm:mt-3">Operations</p>
+            <h1 className="mt-1 text-base font-semibold tracking-tight text-ink sm:mt-1.5 sm:text-2xl">{event.title}</h1>
 
-            <div className="mt-3 grid gap-3 text-sm text-slate sm:mt-4 sm:grid-cols-2">
-              <div className="inline-flex items-start gap-3 rounded-2xl border border-slate/10 bg-[#f7fafc] px-4 py-3">
-                <CalendarDays className="mt-0.5 h-4 w-4 shrink-0 text-[#2f7b76]" />
+            <div className="mt-2 grid gap-2 text-[13px] text-slate sm:mt-4 sm:gap-3 sm:grid-cols-2 sm:text-sm">
+              <div className="inline-flex items-start gap-2 rounded-xl border border-slate/10 bg-[#f7fafc] px-3 py-2 sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3">
+                <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2f7b76] sm:h-4 sm:w-4" />
                 <span>{formatEventDateRange(event.start_at, event.end_at, event.timezone)}</span>
               </div>
-              <div className="inline-flex items-start gap-3 rounded-2xl border border-slate/10 bg-[#f7fafc] px-4 py-3">
-                <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-[#d27a30]" />
-                <span>{event.venue ?? "Venue to be announced"}</span>
+              <div className="inline-flex items-start gap-2 rounded-xl border border-slate/10 bg-[#f7fafc] px-3 py-2 sm:gap-3 sm:rounded-2xl sm:px-4 sm:py-3">
+                <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#d27a30] sm:h-4 sm:w-4" />
+                <span className="line-clamp-1">{event.venue ?? "Venue to be announced"}</span>
               </div>
             </div>
 
-            <div className="mt-3 grid gap-3 sm:mt-4 sm:grid-cols-2 md:grid-cols-3">
-              <div className="rounded-2xl border border-slate/10 bg-white px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate">Checked in</p>
-                <p className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{summary.totalCheckedIn}</p>
-                <p className="mt-1.5 text-sm text-slate">{completionRate}% processed</p>
+            <div className="mt-2 grid grid-cols-3 gap-2 sm:mt-4 sm:gap-3 sm:grid-cols-2 md:grid-cols-3">
+              <div className="rounded-xl border border-slate/10 bg-white px-3 py-2 sm:rounded-2xl sm:px-4 sm:py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate sm:text-[11px] sm:tracking-[0.16em]">Checked in</p>
+                <p className="mt-1 text-lg font-semibold tracking-tight text-ink sm:mt-1.5 sm:text-2xl">{summary.totalCheckedIn}</p>
+                <p className="mt-0.5 hidden text-sm text-slate sm:block">{completionRate}% processed</p>
               </div>
-              <div className="rounded-2xl border border-slate/10 bg-white px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate">Remaining</p>
-                <p className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{summary.remaining}</p>
+              <div className="rounded-xl border border-slate/10 bg-white px-3 py-2 sm:rounded-2xl sm:px-4 sm:py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate sm:text-[11px] sm:tracking-[0.16em]">Remaining</p>
+                <p className="mt-1 text-lg font-semibold tracking-tight text-ink sm:mt-1.5 sm:text-2xl">{summary.remaining}</p>
               </div>
-              <div className="rounded-2xl border border-slate/10 bg-white px-4 py-3">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate">Needs attention</p>
-                <p className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{scanExceptions}</p>
+              <div className="rounded-xl border border-slate/10 bg-white px-3 py-2 sm:rounded-2xl sm:px-4 sm:py-3">
+                <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate sm:text-[11px] sm:tracking-[0.16em]">Attention</p>
+                <p className="mt-1 text-lg font-semibold tracking-tight text-ink sm:mt-1.5 sm:text-2xl">{scanExceptions}</p>
               </div>
             </div>
         </div>
@@ -81,17 +81,17 @@ export default async function CheckinPage({
       <ScanConsole eventId={event.id} initialRecentScans={recentScans} initialSummary={summary} />
 
       <section className="card-panel overflow-hidden">
-        <div className="mx-auto w-full max-w-2xl px-5 py-6 sm:px-8 sm:py-8">
+        <div className="mx-auto w-full max-w-2xl px-3.5 py-4 sm:px-8 sm:py-8">
           <div className="flex items-center gap-2 text-ink">
             <Users className="h-4 w-4 text-[#2f7b76]" />
             <p className="section-title">Manual fallback</p>
           </div>
-          <h2 className="mt-3 text-2xl font-semibold tracking-tight text-ink">Check in by email</h2>
-          <p className="mt-2 text-sm text-slate">
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-ink sm:mt-3 sm:text-2xl">Check in by email</h2>
+          <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-sm">
             Enter the attendee&apos;s registered email address to check them in directly.
           </p>
 
-          <div className="mt-6">
+          <div className="mt-4 sm:mt-6">
             <ManualCheckinByEmail eventId={event.id} />
           </div>
         </div>

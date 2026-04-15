@@ -60,18 +60,18 @@ button {
   }
 
   .page-shell {
-    @apply mx-auto w-full max-w-7xl px-4 py-4 sm:px-6 sm:py-6 lg:px-8;
-    padding-left: max(1rem, env(safe-area-inset-left));
-    padding-right: max(1rem, env(safe-area-inset-right));
-    padding-bottom: max(1rem, env(safe-area-inset-bottom));
+    @apply mx-auto w-full max-w-7xl px-3 py-3 sm:px-6 sm:py-6 lg:px-8;
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+    padding-bottom: max(0.75rem, env(safe-area-inset-bottom));
   }
 
   .page-stack {
-    @apply space-y-5 sm:space-y-8;
+    @apply space-y-3 sm:space-y-8;
   }
 
   .page-stack-compact {
-    @apply space-y-5 sm:space-y-6;
+    @apply space-y-3 sm:space-y-6;
   }
 
   .card-panel {
@@ -79,25 +79,25 @@ button {
   }
 
   .section-title {
-    @apply text-[11px] font-semibold uppercase tracking-[0.24em] text-slate sm:text-xs;
+    @apply text-[10px] font-semibold uppercase tracking-[0.2em] text-slate sm:text-xs sm:tracking-[0.24em];
   }
 
   .status-pill {
-    @apply inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em];
+    @apply inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-[0.14em] sm:px-3 sm:py-1 sm:text-[11px] sm:tracking-[0.18em];
   }
 
   .heading-xl {
-    @apply text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-3xl lg:text-4xl;
+    @apply text-xl font-black italic leading-tight tracking-tight text-ink sm:text-3xl lg:text-4xl;
     font-family: var(--font-title);
   }
 
   .heading-lg {
-    @apply text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-3xl;
+    @apply text-lg font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-3xl;
     font-family: var(--font-title);
   }
 
   .heading-hero {
-    @apply text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-3xl md:text-4xl lg:text-5xl;
+    @apply text-xl font-black italic leading-tight tracking-tight text-ink sm:text-3xl md:text-4xl lg:text-5xl;
     font-family: var(--font-title);
   }
 
@@ -106,7 +106,7 @@ button {
   }
 
   .admin-page {
-    @apply space-y-3;
+    @apply space-y-2.5 sm:space-y-3;
   }
 
   .admin-card {
@@ -121,7 +121,7 @@ button {
   }
 
   .admin-label {
-    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-slate;
+    @apply text-[10px] font-semibold uppercase tracking-[0.14em] text-slate sm:text-[11px] sm:tracking-[0.16em];
   }
 
   .admin-heading {
@@ -144,7 +144,7 @@ button {
   }
 
   .admin-action {
-    @apply inline-flex items-center justify-center rounded-2xl border bg-white px-4 py-2.5 text-sm font-semibold text-ink transition;
+    @apply inline-flex items-center justify-center rounded-xl border bg-white px-3 py-1.5 text-xs font-semibold text-ink transition sm:rounded-2xl sm:px-4 sm:py-2.5 sm:text-sm;
     border-color: rgba(88, 114, 140, 0.15);
   }
 
@@ -154,7 +154,7 @@ button {
   }
 
   .admin-action-primary {
-    @apply inline-flex items-center justify-center rounded-2xl border border-ink bg-ink px-4 py-2.5 text-sm font-semibold text-white transition;
+    @apply inline-flex items-center justify-center rounded-xl border border-ink bg-ink px-3 py-1.5 text-xs font-semibold text-white transition sm:rounded-2xl sm:px-4 sm:py-2.5 sm:text-sm;
   }
 
   .admin-action-primary:hover {
