@@ -1,5 +1,12 @@
 import type { Metadata, Viewport } from "next";
+import { Open_Sans } from "next/font/google";
 import "./globals.css";
+
+const openSans = Open_Sans({
+  subsets: ["latin"],
+  display: "swap",
+  variable: "--font-open-sans"
+});
 
 export const metadata: Metadata = {
   title: "Dubai Autodrome Events",
@@ -20,7 +27,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className="min-h-screen bg-mesh-gradient text-ink antialiased">
+      <body className={`${openSans.variable} min-h-screen bg-mesh-gradient text-ink antialiased`}>
         <div className="app-shell">{children}</div>
       </body>
     </html>

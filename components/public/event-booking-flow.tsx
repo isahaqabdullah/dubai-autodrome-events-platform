@@ -496,7 +496,7 @@ export function EventBookingFlow({
               <div className="mx-auto max-w-2xl">
                 <div className="flex flex-col items-center pt-2 pb-8 text-center">
                   <CheckCircle2 className="h-12 w-12 text-[#2c7a86]" />
-                  <h1 className="mt-4 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Registration complete!</h1>
+                  <h1 className="mt-4 font-title text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-3xl">Registration complete!</h1>
                   <p className="mt-2 text-sm text-slate">A confirmation email will be sent to {completedRegistration.email}</p>
                   {message ? <p className="mt-3 text-sm text-slate">{message}</p> : null}
                 </div>
@@ -511,7 +511,7 @@ export function EventBookingFlow({
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0c1723]/90 via-[#0c1723]/30 to-transparent" />
                     <div className="absolute inset-x-0 bottom-0 px-6 pb-5 sm:px-8 sm:pb-7">
                       <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-white/50 sm:text-xs">Your event ticket</p>
-                      <h2 className="mt-1.5 text-lg font-semibold tracking-tight text-white sm:text-xl lg:text-2xl">{event.title}</h2>
+                      <h2 className="mt-1.5 font-title text-lg font-black italic leading-tight tracking-tight text-white sm:text-xl lg:text-2xl">{event.title}</h2>
                     </div>
                   </div>
 
@@ -584,10 +584,10 @@ export function EventBookingFlow({
               </div>
             ) : step === "tickets" ? (
               <div className="max-w-3xl">
-                <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{event.title}</h1>
-                <p className="mt-1 text-sm text-slate sm:text-base">{TRAIN_WITH_DUBAI_POLICE_INTRO}</p>
+                <h1 className="font-title text-3xl font-black italic leading-tight tracking-tight text-ink sm:text-4xl">{event.title}</h1>
+                <p className="mt-1 text-sm leading-snug text-slate sm:text-base">{TRAIN_WITH_DUBAI_POLICE_INTRO}</p>
 
-                <div className="mt-2 space-y-0.5 text-[15px] leading-6 text-slate">
+                <div className="mt-2 space-y-0.5 text-[15px] leading-snug text-slate">
                   {visibleParagraphs.map((paragraph) => (
                     <p key={paragraph}>{paragraph}</p>
                   ))}
@@ -632,7 +632,7 @@ export function EventBookingFlow({
                       <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                         <div className="max-w-2xl">
                           <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl md:text-[28px]">{generalAdmission.title}</h2>
+                            <h2 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl md:text-[28px]">{generalAdmission.title}</h2>
                           </div>
                           {generalAdmission.note ? <p className="mt-2 text-[15px] text-slate">{generalAdmission.note}</p> : null}
                         </div>
@@ -667,7 +667,7 @@ export function EventBookingFlow({
                           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
                             <div className="max-w-2xl">
                               <div className="flex flex-wrap items-center gap-2">
-                                <h2 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl md:text-[28px]">{ticket.title}</h2>
+                                <h2 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl md:text-[28px]">{ticket.title}</h2>
                                 {ticket.badge ? (
                                   <span className="rounded-full border border-slate/15 px-3 py-1 text-xs font-medium text-slate">
                                     {ticket.badge}
@@ -712,8 +712,8 @@ export function EventBookingFlow({
               </div>
             ) : (
               <div className="max-w-3xl">
-                <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{event.title}</h1>
-                <p className="mt-3 text-sm text-slate sm:text-base">{formatEventDateTimeLine(event)}</p>
+                <h1 className="font-title text-3xl font-black italic leading-tight tracking-tight text-ink sm:text-4xl">{event.title}</h1>
+                <p className="mt-2 text-sm leading-snug text-slate sm:text-base">{formatEventDateTimeLine(event)}</p>
 
                 <div className="mt-8 border-t border-slate/10 pt-7">
                   <p className="text-[15px] font-semibold uppercase tracking-[0.03em] text-ink">Contact information</p>
@@ -891,10 +891,10 @@ export function EventBookingFlow({
                     )}
                   </div>
 
-                  <div className="mt-8 space-y-5 border-t border-slate/10 pt-7 text-[15px] leading-8 text-slate">
+                  <div className="mt-8 space-y-4 border-t border-slate/10 pt-7 text-[15px] leading-snug text-slate">
                     <p>{event.declaration_text}</p>
 
-                    <label className="flex items-start gap-3 text-[15px] leading-7 text-slate">
+                    <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
                       <Checkbox
                         checked={form.declarationAccepted}
                         onChange={(eventObject) =>
@@ -905,7 +905,7 @@ export function EventBookingFlow({
                       <span>I agree to the Terms & Conditions</span>
                     </label>
 
-                    <label className="flex items-start gap-3 text-[15px] leading-7 text-slate">
+                    <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
                       <Checkbox
                         checked={form.marketingOptIn}
                         onChange={(eventObject) =>
@@ -952,7 +952,7 @@ export function EventBookingFlow({
               </div>
 
               <div className="mt-6">
-                <h3 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl lg:text-[2rem]">Registration summary</h3>
+                <h3 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]">Registration summary</h3>
 
                 <div className="mt-6 space-y-4 text-[15px] text-slate">
                   <div className="flex items-start justify-between gap-4">

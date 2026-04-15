@@ -9,6 +9,10 @@ const config: Config = {
   ],
   theme: {
     extend: {
+      fontFamily: {
+        sans: ["var(--font-open-sans)", "Open Sans", "sans-serif"],
+        title: ["var(--font-title)", "Gotham Ultra", "Arial Black", "sans-serif"]
+      },
       colors: {
         ink: "#0C1723",
         mist: "#EEF4F8",

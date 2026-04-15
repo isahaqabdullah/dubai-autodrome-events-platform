@@ -7,10 +7,10 @@ export function EventCard({ event }: { event: EventRecord }) {
     <article className="card-panel flex h-full flex-col gap-3 p-4 sm:gap-5 sm:p-5 md:p-6">
       <div className="min-w-0 space-y-1.5 sm:space-y-2">
         <p className="section-title">Edition</p>
-        <h2 className="text-xl font-semibold tracking-tight text-ink sm:text-2xl">{event.title}</h2>
+        <h2 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl">{event.title}</h2>
       </div>
 
-      <div className="space-y-2 text-sm text-slate">
+      <div className="space-y-1.5 text-sm leading-snug text-slate">
         <p className="text-sm font-medium text-ink/70">{formatEventDateRange(event.start_at, event.end_at, event.timezone)}</p>
         {event.venue ? <p>{event.venue}</p> : null}
         <p className="line-clamp-3">{event.description ?? "Registration opens on this event page."}</p>

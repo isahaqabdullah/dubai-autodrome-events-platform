@@ -2,8 +2,17 @@
 @tailwind components;
 @tailwind utilities;
 
+@font-face {
+  font-family: "Gotham Ultra";
+  src: url("/fonts/Gotham-UltraItalic.woff2") format("woff2");
+  font-weight: 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 :root {
-  --font-sans: "Avenir Next", "Suisse Intl", "Segoe UI Variable", "Helvetica Neue", "Arial Nova", sans-serif;
+  --font-sans: var(--font-open-sans), "Open Sans", sans-serif;
+  --font-title: "Gotham Ultra", "Arial Black", sans-serif;
   --font-mono: "IBM Plex Mono", "SFMono-Regular", "Consolas", monospace;
   --background: #f4f7f4;
   --foreground: #13202a;
@@ -26,7 +35,8 @@ html {
 body {
   background: #f4f7f8;
   color: var(--foreground);
-  font-family: var(--font-sans), sans-serif;
+  font-family: var(--font-open-sans), "Open Sans", sans-serif;
+  line-height: 1.45;
 }
 
 a {
@@ -77,15 +87,18 @@ button {
   }
 
   .heading-xl {
-    @apply text-2xl font-semibold tracking-tight text-ink sm:text-3xl lg:text-4xl;
+    @apply text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-3xl lg:text-4xl;
+    font-family: var(--font-title);
   }
 
   .heading-lg {
-    @apply text-xl font-semibold tracking-tight text-ink sm:text-2xl lg:text-3xl;
+    @apply text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-3xl;
+    font-family: var(--font-title);
   }
 
   .heading-hero {
-    @apply text-2xl font-semibold tracking-tight text-ink sm:text-3xl md:text-4xl lg:text-5xl;
+    @apply text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-3xl md:text-4xl lg:text-5xl;
+    font-family: var(--font-title);
   }
 
   .section-divider {
