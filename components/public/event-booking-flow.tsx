@@ -114,6 +114,7 @@ export function EventBookingFlow({
   const config = useMemo(() => mergeFormConfig(event.form_config), [event.form_config]);
   const [step, setStep] = useState<Step>("tickets");
   const [expandedDescription, setExpandedDescription] = useState(false);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(true);
   const [timeRemaining, setTimeRemaining] = useState(HOLD_DURATION_SECONDS);
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
   const [message, setMessage] = useState<string | null>(null);
@@ -586,7 +587,7 @@ export function EventBookingFlow({
                 <h1 className="text-3xl font-semibold tracking-tight text-ink sm:text-4xl">{event.title}</h1>
                 <p className="mt-1 text-sm text-slate sm:text-base">{TRAIN_WITH_DUBAI_POLICE_INTRO}</p>
 
-                <div className="mt-2 space-y-1 text-[15px] leading-6 text-slate">
+                <div className="mt-2 space-y-0.5 text-[15px] leading-6 text-slate">
                   {visibleParagraphs.map((paragraph) => (
                     <p key={paragraph}>{paragraph}</p>
                   ))}
@@ -856,27 +857,38 @@ export function EventBookingFlow({
                   <div className="mt-8 border-t border-slate/10 pt-7">
                     <div className="flex items-center justify-between">
                       <p className="text-[15px] font-semibold uppercase tracking-[0.03em] text-ink">Disclaimer</p>
-                      <a
-                        href="/disclaimer-dubai-autodrome.pdf"
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="inline-flex items-center gap-1.5 text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
-                      >
-                        <FileText className="h-4 w-4" />
-                        Open full PDF
-                      </a>
+                      <div className="flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={() => setPdfPreviewOpen((v) => !v)}
+                          className="text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
+                        >
+                          {pdfPreviewOpen ? "Hide preview" : "Show preview"}
+                        </button>
+                        <a
+                          href="/disclaimer-dubai-autodrome.pdf"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
+                        >
+                          <FileText className="h-4 w-4" />
+                          Open full PDF
+                        </a>
+                      </div>
                     </div>
                     <p className="mt-2 text-sm text-slate">
                       Waiver of Liability and Declaration of Assumption of Risk — Dubai Autodrome
                     </p>
 
-                    <div className="mt-4 overflow-hidden rounded-2xl border border-slate/15">
-                      <iframe
-                        src="/disclaimer-dubai-autodrome.pdf"
-                        className="h-[400px] w-full"
-                        title="Disclaimer document"
-                      />
-                    </div>
+                    {pdfPreviewOpen && (
+                      <div className="mt-4 overflow-hidden rounded-2xl border border-slate/15">
+                        <iframe
+                          src="/disclaimer-dubai-autodrome.pdf"
+                          className="h-[60vh] min-h-[300px] max-h-[600px] w-full"
+                          title="Disclaimer document"
+                        />
+                      </div>
+                    )}
                   </div>
 
                   <div className="mt-8 space-y-5 border-t border-slate/10 pt-7 text-[15px] leading-8 text-slate">
@@ -984,7 +996,9 @@ export function EventBookingFlow({
 
                           setStep("details");
                           if (typeof window !== "undefined") {
-                            window.scrollTo({ top: 0, behavior: "auto" });
+                            requestAnimationFrame(() => {
+                              window.scrollTo({ top: 0, behavior: "auto" });
+                            });
                           }
                           return;
                         }
