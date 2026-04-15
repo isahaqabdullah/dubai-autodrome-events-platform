@@ -108,6 +108,87 @@ export async function manualCheckin(input: ManualCheckinInput) {
   return Array.isArray(data) ? data[0] : null;
 }
 
+export async function manualCheckinByEmail(input: {
+  eventId: string;
+  email: string;
+  gateName?: string | null;
+  deviceId?: string | null;
+  staffUserId?: string | null;
+}) {
+  const email = input.email.trim().toLowerCase();
+
+  if (isDemoMode()) {
+    const registration = demoRegistrations.find(
+      (row) => row.event_id === input.eventId && row.email_raw.toLowerCase() === email
+    );
+
+    if (!registration) {
+      return { ok: false as const, message: "No registration found for that email." };
+    }
+
+    return {
+      ok: true as const,
+      result: "success",
+      message: "Demo mode: manual check-in accepted.",
+      fullName: registration.full_name
+    };
+  }
+
+  const supabase = createAdminSupabaseClient();
+
+  const { data: registration, error: lookupError } = await supabase
+    .from("registrations")
+    .select("id, full_name, status")
+    .eq("event_id", input.eventId)
+    .ilike("email_raw", email)
+    .maybeSingle();
+
+  if (lookupError) {
+    throw lookupError;
+  }
+
+  if (!registration) {
+    return { ok: false as const, message: "No registration found for that email." };
+  }
+
+  if (registration.status === "checked_in") {
+    return {
+      ok: true as const,
+      result: "already_checked_in",
+      message: `${registration.full_name} is already checked in.`,
+      fullName: registration.full_name
+    };
+  }
+
+  if (registration.status === "revoked" || registration.status === "cancelled") {
+    return {
+      ok: false as const,
+      message: `Registration for ${registration.full_name} is ${registration.status}.`
+    };
+  }
+
+  const { data, error } = await supabase.rpc("manual_checkin_registration", {
+    p_event_id: input.eventId,
+    p_registration_id: registration.id,
+    p_gate_name: blankToNull(input.gateName),
+    p_device_id: blankToNull(input.deviceId),
+    p_staff_user_id: input.staffUserId ?? null
+  });
+
+  if (error) {
+    throw error;
+  }
+
+  const row = Array.isArray(data) ? data[0] : null;
+
+  return {
+    ok: true as const,
+    result: row?.result ?? "success",
+    message: row?.message ?? `${registration.full_name} checked in.`,
+    fullName: registration.full_name
+  };
+}
+
 export async function searchRegistrationsForEvent(eventId: string, query: string) {
   if (isDemoMode()) {
     const needle = query.trim().toLowerCase();
