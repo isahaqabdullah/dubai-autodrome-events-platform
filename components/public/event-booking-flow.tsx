@@ -134,6 +134,7 @@ export function EventBookingFlow({
   const [timeRemaining, setTimeRemaining] = useState(HOLD_DURATION_SECONDS);
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
   const [message, setMessage] = useState<string | null>(null);
+  const [submitAttempted, setSubmitAttempted] = useState(false);
   const [otp, setOtp] = useState("");
   const [otpState, setOtpState] = useState<OtpState>("idle");
   const [otpMessage, setOtpMessage] = useState<{ text: string; error: boolean } | null>(null);
@@ -214,6 +215,30 @@ export function EventBookingFlow({
   const canProceed = registrationState.state === "open" && !generalAdmission.soldOut;
   const fullName = `${form.firstName} ${form.lastName}`.trim();
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
+  const showFieldErrors = step === "details" && submitAttempted && submissionState !== "submitting" && !completedRegistration;
+  const requiredErrors = useMemo(() => {
+    if (!showFieldErrors) {
+      return {
+        firstName: false,
+        lastName: false,
+        email: false,
+        emailVerified: false,
+        phone: false,
+        age: false,
+        declarationAccepted: false
+      };
+    }
+
+    return {
+      firstName: !form.firstName.trim(),
+      lastName: !form.lastName.trim(),
+      email: !form.email.trim() || !isValidEmail,
+      emailVerified: !emailVerified,
+      phone: !form.phone.trim(),
+      age: !form.age.trim(),
+      declarationAccepted: !form.declarationAccepted
+    };
+  }, [emailVerified, form, isValidEmail, showFieldErrors]);
   const mapLink = config.mapLink ?? null;
   const descriptionParagraphs = TRAIN_WITH_DUBAI_POLICE_DESCRIPTION;
   const visibleParagraphs = expandedDescription ? descriptionParagraphs : descriptionParagraphs.slice(0, 2);
@@ -758,8 +783,12 @@ export function EventBookingFlow({
                         onChange={(eventObject) =>
                           setForm((current) => ({ ...current, firstName: eventObject.target.value }))
                         }
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.firstName}
+                        className={`rounded-2xl px-3.5 py-3 ${requiredErrors.firstName ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
+                      {requiredErrors.firstName ? (
+                        <p className="mt-2 text-sm text-rose-700">First name is required.</p>
+                      ) : null}
                     </Field>
                     <Field label="Last name" hint="Required">
                       <Input
@@ -767,8 +796,12 @@ export function EventBookingFlow({
                         onChange={(eventObject) =>
                           setForm((current) => ({ ...current, lastName: eventObject.target.value }))
                         }
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.lastName}
+                        className={`rounded-2xl px-3.5 py-3 ${requiredErrors.lastName ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
+                      {requiredErrors.lastName ? (
+                        <p className="mt-2 text-sm text-rose-700">Last name is required.</p>
+                      ) : null}
                     </Field>
                   </div>
 
@@ -787,10 +820,20 @@ export function EventBookingFlow({
                             setOtpMessage(null);
                           }
                         }}
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.email || requiredErrors.emailVerified}
+                        className={`rounded-2xl px-3.5 py-3 ${
+                          requiredErrors.email || requiredErrors.emailVerified
+                            ? "border-rose-400 focus-visible:ring-rose-400"
+                            : "border-slate/25"
+                        }`}
                       />
                     </Field>
                     <p className="mt-2 text-sm text-slate">This will be used for your confirmation email.</p>
+                    {requiredErrors.email ? (
+                      <p className="mt-2 text-sm text-rose-700">Enter a valid email address.</p>
+                    ) : requiredErrors.emailVerified ? (
+                      <p className="mt-2 text-sm text-rose-700">Please verify your email.</p>
+                    ) : null}
                     {emailVerified ? (
                       <div className="mt-4 flex items-center gap-2 text-sm font-medium text-emerald-600">
                         <CheckCircle2 className="h-4 w-4" />
@@ -855,8 +898,12 @@ export function EventBookingFlow({
                         onChange={(eventObject) =>
                           setForm((current) => ({ ...current, phone: eventObject.target.value }))
                         }
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.phone}
+                        className={`rounded-2xl px-3.5 py-3 ${requiredErrors.phone ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
+                      {requiredErrors.phone ? (
+                        <p className="mt-2 text-sm text-rose-700">Phone number is required.</p>
+                      ) : null}
                     </Field>
                     <Field label="Age" hint="Required">
                       <Input
@@ -867,8 +914,12 @@ export function EventBookingFlow({
                         onChange={(eventObject) =>
                           setForm((current) => ({ ...current, age: eventObject.target.value }))
                         }
-                        className="rounded-2xl border-slate/25 px-3.5 py-3"
+                        aria-invalid={requiredErrors.age}
+                        className={`rounded-2xl px-3.5 py-3 ${requiredErrors.age ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
+                      {requiredErrors.age ? (
+                        <p className="mt-2 text-sm text-rose-700">Age is required.</p>
+                      ) : null}
                     </Field>
                   </div>
 
@@ -902,7 +953,7 @@ export function EventBookingFlow({
                           href="/disclaimer-dubai-autodrome.pdf"
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1.5 text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
+                          className="hidden items-center gap-1.5 text-sm font-medium text-[#2e768b] transition hover:text-[#205260] sm:inline-flex"
                         >
                           <FileText className="h-4 w-4" />
                           Open full PDF
@@ -914,11 +965,11 @@ export function EventBookingFlow({
                     </p>
 
                     {pdfPreviewOpen && (
-                      <div
-                        className="relative mt-4 overflow-auto rounded-2xl border border-slate/15 [-webkit-overflow-scrolling:touch]"
-                        style={{ maxHeight: "60vh" }}
-                        onClick={() => setPdfMobileOverlayOpen(true)}
-                      >
+                      <div className="mt-4">
+                        <div
+                          className="relative overflow-auto rounded-2xl border border-slate/15 [-webkit-overflow-scrolling:touch]"
+                          style={{ maxHeight: "60vh" }}
+                        >
                         <PdfViewer src="/disclaimer-dubai-autodrome.pdf" className="w-full" />
                         {pdfMobileOverlayOpen ? (
                           <div
@@ -949,6 +1000,16 @@ export function EventBookingFlow({
                             </div>
                           </div>
                         ) : null}
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => setPdfMobileOverlayOpen(true)}
+                          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate/20 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm transition active:bg-mist sm:hidden"
+                        >
+                          <FileText className="h-4 w-4 text-[#2e768b]" />
+                          View full PDF
+                        </button>
                       </div>
                     )}
                   </div>
@@ -981,8 +1042,11 @@ export function EventBookingFlow({
                         }
                         className="mt-1 rounded border-slate/35"
                       />
-                      <span>I agree to the Terms & Conditions</span>
+                      <span className={requiredErrors.declarationAccepted ? "text-rose-700" : ""}>I agree to the Terms & Conditions</span>
                     </label>
+                    {requiredErrors.declarationAccepted ? (
+                      <p className="text-sm text-rose-700">You must accept the Terms & Conditions.</p>
+                    ) : null}
 
                     <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
                       <Checkbox
@@ -1007,7 +1071,7 @@ export function EventBookingFlow({
                     }
                   />
 
-                  {message ? (
+                  {message && (submissionState === "error" || submissionState === "success") ? (
                     <div
                       className={`mt-6 rounded-2xl px-4 py-3 text-sm ${
                         submissionState === "error" ? "bg-rose-100 text-rose-900" : "bg-emerald-100 text-emerald-900"
@@ -1083,6 +1147,7 @@ export function EventBookingFlow({
                         }
 
                         if (submissionState === "submitting") return;
+                        setSubmitAttempted(true);
 
                         if (timeRemaining === 0) {
                           setMessage("Your hold expired. Go back and continue again to restart the session.");
