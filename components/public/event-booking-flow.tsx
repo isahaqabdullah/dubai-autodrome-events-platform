@@ -143,30 +143,30 @@ function SelectionCard({
       onClick={onClick}
       disabled={disabled}
       aria-pressed={selected}
-      className={`w-full rounded-2xl border px-4 py-4 text-left transition sm:px-5 sm:py-5 ${
+      className={`w-full rounded-2xl border px-4 py-2.5 text-left transition sm:px-5 sm:py-3 ${
         selected
           ? "border-ink bg-ink text-white shadow-soft"
           : disabled
             ? "cursor-not-allowed border-slate/10 bg-slate-50 text-slate/60"
-            : "border-slate/15 bg-white text-ink hover:border-slate/30 hover:bg-mist/60"
+            : "border-ink/20 bg-white text-ink hover:border-ink/30 hover:bg-mist/60"
       }`}
     >
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between sm:gap-2">
         <div className="min-w-0 flex-1">
           <p className="font-display text-[15px] font-bold tracking-tight sm:text-lg">{title}</p>
           {description ? (
-            <p className={`mt-1 text-[13px] leading-relaxed sm:text-sm ${selected ? "text-white/80" : "text-slate"}`}>
+            <p className={`mt-0.5 text-[13px] leading-snug sm:text-sm ${selected ? "text-white/80" : "text-slate"}`}>
               {description}
             </p>
           ) : null}
           {note ? (
-            <p className={`mt-1 text-[11px] italic sm:text-xs ${selected ? "text-white/70" : "text-slate/70"}`}>
+            <p className={`mt-0.5 text-[11px] italic sm:text-xs ${selected ? "text-white/70" : "text-slate/70"}`}>
               {note}
             </p>
           ) : null}
         </div>
         <span
-          className={`inline-flex shrink-0 self-start rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
+          className={`inline-flex shrink-0 self-start rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] ${
             selected
               ? "bg-white/15 text-white"
               : disabled
@@ -876,15 +876,15 @@ export function EventBookingFlow({
                   <p className="font-display text-[11px] font-bold uppercase tracking-[0.2em] text-slate sm:text-xs">Booking</p>
 
                   <div className="mt-4 space-y-6 sm:mt-6 sm:space-y-8">
-                    <div className="space-y-3">
-                      <div className="space-y-1.5">
+                    <div className="rounded-[1.75rem] border border-slate/10 bg-white/70 px-4 py-4 sm:px-5 sm:py-5">
+                      <div className="space-y-2.5">
                         <p className={BOOKING_SECTION_HEADING_CLASS}>{categorySectionTitle}</p>
                         <p className="font-body text-[13px] leading-relaxed text-slate sm:text-sm">
                           Select a category.
                         </p>
                       </div>
 
-                      <div className="space-y-3">
+                      <div className="mt-3 space-y-2.5 sm:mt-4">
                         {categories.map((category) => (
                           <SelectionCard
                             key={category.id}
@@ -904,15 +904,15 @@ export function EventBookingFlow({
                     </div>
 
                     {additionalCategories.length > 0 ? (
-                      <div className="space-y-3">
-                        <div className="space-y-1.5">
+                      <div className="rounded-[1.75rem] border border-slate/10 bg-white/70 px-4 py-4 sm:px-5 sm:py-5">
+                        <div className="space-y-2.5">
                           <p className={BOOKING_SECTION_HEADING_CLASS}>{additionalSectionTitle}</p>
                           <p className="font-body text-[13px] leading-relaxed text-slate sm:text-sm">
                             Optional. Add one extra session if you want one.
                           </p>
                         </div>
 
-                        <div className="space-y-3">
+                        <div className="mt-3 space-y-2.5 sm:mt-4">
                           {additionalCategories.map((category) => (
                             <SelectionCard
                               key={category.id}
