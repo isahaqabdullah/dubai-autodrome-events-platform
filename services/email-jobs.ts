@@ -1,4 +1,5 @@
 import "server-only";
+import { formatErrorMessage, getErrorInfo } from "@/lib/errors";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { EmailJobKind } from "@/lib/types";
 
@@ -43,12 +44,12 @@ export async function executeEmailJob<TPayload extends Record<string, unknown>>(
       .update({ status: "sent", last_error: null, locked_at: null })
       .eq("id", job.id);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown email failure";
+    const message = formatErrorMessage(error);
     console.error("[email-job] failed", {
       jobId: job.id,
       kind,
       payload,
-      error: message
+      error: getErrorInfo(error)
     });
     await supabase
       .from("email_jobs")

@@ -11,7 +11,9 @@ const config: Config = {
     extend: {
       fontFamily: {
         sans: ["var(--font-open-sans)", "Open Sans", "sans-serif"],
-        title: ["var(--font-title)", "Gotham Ultra", "Arial Black", "sans-serif"]
+        title: ["var(--font-title)", "Gotham Ultra", "Arial Black", "sans-serif"],
+        display: ["Gotham Black", "Arial Black", "sans-serif"],
+        body: ["Gotham Book", "var(--font-open-sans)", "Open Sans", "sans-serif"]
       },
       colors: {
         ink: "#0C1723",

@@ -34,7 +34,7 @@ export async function POST(request: Request) {
         ? 200
         : result.outcome === "expired"
           ? 410
-          : result.outcome === "already_registered" || result.outcome === "already_verified"
+          : result.outcome === "already_verified"
             ? 409
             : 400
   });

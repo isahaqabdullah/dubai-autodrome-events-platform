@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { env } from "@/lib/env";
+import { formatErrorMessage, getErrorInfo } from "@/lib/errors";
 import { runEmailWorker } from "@/services/email-worker";
 
 export const maxDuration = 60;
@@ -23,8 +24,8 @@ export async function GET(request: Request) {
     const result = await runEmailWorker();
     return NextResponse.json({ ok: true, ...result });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("[cron/email-worker] unhandled failure", { error: message });
+    const message = formatErrorMessage(error);
+    console.error("[cron/email-worker] unhandled failure", { error: getErrorInfo(error) });
     return NextResponse.json({ ok: false, message }, { status: 500 });
   }
 }

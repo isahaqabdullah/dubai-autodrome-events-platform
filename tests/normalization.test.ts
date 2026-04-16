@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeEmail, normalizePhone, blankToNull, mergeFormConfig, buildAbsoluteUrl } from "../lib/utils";
+import { normalizeEmail, normalizePhone, isValidPhoneNumber, blankToNull, mergeFormConfig, buildAbsoluteUrl } from "../lib/utils";
 
 describe("normalizeEmail", () => {
   it("lowercases mixed-case emails", () => {
@@ -42,6 +42,22 @@ describe("normalizePhone", () => {
 
   it("returns null for whitespace-only string", () => {
     expect(normalizePhone("   ")).toBeNull();
+  });
+});
+
+describe("isValidPhoneNumber", () => {
+  it("accepts flexible international phone formats", () => {
+    expect(isValidPhoneNumber("050 123 4567")).toBe(true);
+    expect(isValidPhoneNumber("+971 50 123 4567")).toBe(true);
+    expect(isValidPhoneNumber("971501234567")).toBe(true);
+    expect(isValidPhoneNumber("+44 20 7946 0958")).toBe(true);
+  });
+
+  it("rejects invalid phone formats", () => {
+    expect(isValidPhoneNumber("123")).toBe(false);
+    expect(isValidPhoneNumber("abc123")).toBe(false);
+    expect(isValidPhoneNumber("++++971501234567")).toBe(false);
+    expect(isValidPhoneNumber("1234567890123456")).toBe(false);
   });
 });
 

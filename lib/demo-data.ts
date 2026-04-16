@@ -76,6 +76,7 @@ export const demoRegistrations: Array<
     | "event_id"
     | "full_name"
     | "email_raw"
+    | "manual_checkin_code"
     | "phone"
     | "age"
     | "uae_resident"
@@ -90,6 +91,7 @@ export const demoRegistrations: Array<
     event_id: demoEvents[0].id,
     full_name: "Amina Rahman",
     email_raw: "amina.rahman@example.com",
+    manual_checkin_code: "A7K3",
     phone: "+971-50-555-0198",
     age: 29,
     uae_resident: true,
@@ -103,6 +105,7 @@ export const demoRegistrations: Array<
     event_id: demoEvents[0].id,
     full_name: "Daniel Mensah",
     email_raw: "daniel.mensah@example.com",
+    manual_checkin_code: "B4N8",
     phone: "+971-50-555-0129",
     age: 34,
     uae_resident: false,
@@ -116,6 +119,7 @@ export const demoRegistrations: Array<
     event_id: demoEvents[0].id,
     full_name: "Leila Haddad",
     email_raw: "leila.haddad@example.com",
+    manual_checkin_code: "C9R5",
     phone: "+971-50-555-0176",
     age: 26,
     uae_resident: true,

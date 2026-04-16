@@ -22,7 +22,17 @@ export interface EventTicketOption {
 export interface EventFormConfig {
   submitLabel?: string;
   mapLink?: string;
+  categoriesLabel?: string;
+  ticketOptionsLabel?: string;
+  categories?: EventTicketOption[];
   ticketOptions?: EventTicketOption[];
+  posterImage?: string;
+  introLine?: string;
+  descriptionParagraphs?: string[];
+  emailIntroLine?: string;
+  emailDescriptionParagraphs?: string[];
+  disclaimerPdfUrl?: string | null;
+  disclaimerHeading?: string;
 }
 
 export interface EventRecord {
@@ -51,10 +61,13 @@ export interface RegistrationRecord {
   full_name: string;
   email_raw: string;
   email_normalized: string;
+  manual_checkin_code: string;
   phone: string | null;
   age: number | null;
   uae_resident: boolean;
 
+  category_id: string | null;
+  category_title: string | null;
   ticket_option_id: string | null;
   ticket_option_title: string | null;
   declaration_version: number;
@@ -65,6 +78,9 @@ export interface RegistrationRecord {
   qr_token_last_rotated_at: string;
   confirmation_email_sent_at: string | null;
   checked_in_at: string | null;
+  booking_id: string | null;
+  is_primary: boolean;
+  registered_by_email: string | null;
   created_at: string;
   updated_at: string;
 }

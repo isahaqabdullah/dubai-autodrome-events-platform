@@ -14,7 +14,11 @@ export const manualCheckinSchema = z.object({
   deviceId: z.string().trim().max(100).optional().or(z.literal(""))
 });
 
-export const manualCheckinByEmailSchema = z.object({
+export const manualCheckinByCodeSchema = z.object({
   eventId: z.string().uuid(),
-  email: z.string().trim().email().max(320)
+  manualCheckinCode: z
+    .string()
+    .trim()
+    .regex(/^[A-HJ-NP-Za-hj-np-z2-9]{4}$/, "Enter the 4-character manual code.")
+    .transform((value) => value.toUpperCase())
 });

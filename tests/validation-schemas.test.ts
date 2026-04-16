@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { registrationStartSchema, registrationCompleteSchema, verifyOtpSchema } from "../lib/validation/registration";
-import { checkinScanSchema, manualCheckinSchema } from "../lib/validation/checkin";
+import { checkinScanSchema, manualCheckinByCodeSchema, manualCheckinSchema } from "../lib/validation/checkin";
 import { adminEventSchema } from "../lib/validation/admin";
 
 describe("registrationStartSchema", () => {
@@ -8,6 +8,8 @@ describe("registrationStartSchema", () => {
     eventId: "6db7f8b7-4e20-410e-9a1d-78c7bfc2f101",
     selectedTicketId: "general-admission",
     selectedTicketTitle: "General Admission",
+    categoryId: "general-admission",
+    categoryTitle: "General Admission",
     fullName: "Jane Doe",
     email: "jane@example.com"
   };
@@ -30,6 +32,22 @@ describe("registrationStartSchema", () => {
   it("rejects invalid email format", () => {
     const result = registrationStartSchema.safeParse({ ...validBase, email: "not-an-email" });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts flexible phone formats during registration start", () => {
+    expect(registrationStartSchema.safeParse({ ...validBase, phone: "050 123 4567" }).success).toBe(true);
+    expect(registrationStartSchema.safeParse({ ...validBase, phone: "+44 20 7946 0958" }).success).toBe(true);
+  });
+
+  it("rejects invalid phone formats during registration start", () => {
+    expect(registrationStartSchema.safeParse({ ...validBase, phone: "123" }).success).toBe(false);
+    expect(registrationStartSchema.safeParse({ ...validBase, phone: "abc123" }).success).toBe(false);
+    expect(registrationStartSchema.safeParse({ ...validBase, phone: "++++971501234567" }).success).toBe(false);
+  });
+
+  it("accepts the no-add-on fallback for single-attendee booking", () => {
+    const result = registrationStartSchema.safeParse(validBase);
+    expect(result.success).toBe(true);
   });
 
   it("rejects missing fullName", () => {
@@ -58,6 +76,13 @@ describe("registrationStartSchema", () => {
     expect(registrationStartSchema.safeParse({ ...validBase, age: 0 }).success).toBe(false);
     expect(registrationStartSchema.safeParse({ ...validBase, age: 121 }).success).toBe(false);
   });
+
+  it("rejects missing category fields", () => {
+    const { categoryId, ...missingCategoryId } = validBase;
+    const { categoryTitle, ...missingCategoryTitle } = validBase;
+    expect(registrationStartSchema.safeParse(missingCategoryId).success).toBe(false);
+    expect(registrationStartSchema.safeParse(missingCategoryTitle).success).toBe(false);
+  });
 });
 
 describe("registrationCompleteSchema", () => {
@@ -65,6 +90,8 @@ describe("registrationCompleteSchema", () => {
     eventId: "6db7f8b7-4e20-410e-9a1d-78c7bfc2f101",
     selectedTicketId: "general-admission",
     selectedTicketTitle: "General Admission",
+    categoryId: "general-admission",
+    categoryTitle: "General Admission",
     fullName: "Jane Doe",
     email: "jane@example.com",
     phone: "+971-50-555-1234",
@@ -76,6 +103,12 @@ describe("registrationCompleteSchema", () => {
 
   it("accepts a fully valid completion payload", () => {
     const result = registrationCompleteSchema.safeParse(validComplete);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts completion without OTP when email was already verified earlier", () => {
+    const { otp, ...withoutOtp } = validComplete;
+    const result = registrationCompleteSchema.safeParse(withoutOtp);
     expect(result.success).toBe(true);
   });
 
@@ -94,9 +127,9 @@ describe("registrationCompleteSchema", () => {
     expect(result.success).toBe(false);
   });
 
-  it("rejects empty OTP", () => {
+  it("accepts empty OTP so the sticky verified-email flow can reuse prior verification", () => {
     const result = registrationCompleteSchema.safeParse({ ...validComplete, otp: "" });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it("rejects declarationAccepted as false", () => {
@@ -107,6 +140,17 @@ describe("registrationCompleteSchema", () => {
   it("requires phone to be non-empty", () => {
     const result = registrationCompleteSchema.safeParse({ ...validComplete, phone: "" });
     expect(result.success).toBe(false);
+  });
+
+  it("accepts flexible phone formats during completion", () => {
+    expect(registrationCompleteSchema.safeParse({ ...validComplete, phone: "050 123 4567" }).success).toBe(true);
+    expect(registrationCompleteSchema.safeParse({ ...validComplete, phone: "+44 20 7946 0958" }).success).toBe(true);
+  });
+
+  it("rejects invalid phone formats during completion", () => {
+    expect(registrationCompleteSchema.safeParse({ ...validComplete, phone: "123" }).success).toBe(false);
+    expect(registrationCompleteSchema.safeParse({ ...validComplete, phone: "abc123" }).success).toBe(false);
+    expect(registrationCompleteSchema.safeParse({ ...validComplete, phone: "++++971501234567" }).success).toBe(false);
   });
 
   it("requires age to be present", () => {
@@ -219,6 +263,33 @@ describe("manualCheckinSchema", () => {
       registrationId: "bad-id"
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("manualCheckinByCodeSchema", () => {
+  it("accepts a valid 4-character manual code", () => {
+    const result = manualCheckinByCodeSchema.safeParse({
+      eventId: "6db7f8b7-4e20-410e-9a1d-78c7bfc2f101",
+      manualCheckinCode: "ab23"
+    });
+    expect(result.success).toBe(true);
+    expect(result.success ? result.data.manualCheckinCode : null).toBe("AB23");
+  });
+
+  it("rejects values that are not 4 allowed characters", () => {
+    expect(
+      manualCheckinByCodeSchema.safeParse({
+        eventId: "6db7f8b7-4e20-410e-9a1d-78c7bfc2f101",
+        manualCheckinCode: "A1"
+      }).success
+    ).toBe(false);
+
+    expect(
+      manualCheckinByCodeSchema.safeParse({
+        eventId: "6db7f8b7-4e20-410e-9a1d-78c7bfc2f101",
+        manualCheckinCode: "O0I1"
+      }).success
+    ).toBe(false);
   });
 });
 

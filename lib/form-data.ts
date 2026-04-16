@@ -3,11 +3,18 @@ import { adminEventSchema } from "@/lib/validation/admin";
 export function parseAdminEventFormData(formData: FormData) {
   const rawTicketOptions = String(formData.get("ticketOptionsJson") ?? "[]");
   let ticketOptions: unknown = [];
-
   try {
     ticketOptions = rawTicketOptions ? JSON.parse(rawTicketOptions) : [];
   } catch {
     ticketOptions = [];
+  }
+
+  const rawCategories = String(formData.get("categoriesJson") ?? "[]");
+  let categories: unknown = [];
+  try {
+    categories = rawCategories ? JSON.parse(rawCategories) : [];
+  } catch {
+    categories = [];
   }
 
   return adminEventSchema.parse({
@@ -26,6 +33,16 @@ export function parseAdminEventFormData(formData: FormData) {
     declarationText: String(formData.get("declarationText") ?? ""),
     submitLabel: String(formData.get("submitLabel") ?? ""),
     mapLink: String(formData.get("mapLink") ?? ""),
-    ticketOptions
+    categoriesLabel: String(formData.get("categoriesLabel") ?? ""),
+    ticketOptionsLabel: String(formData.get("ticketOptionsLabel") ?? ""),
+    ticketOptions,
+    categories,
+    posterImage: String(formData.get("posterImage") ?? ""),
+    introLine: String(formData.get("introLine") ?? ""),
+    descriptionText: String(formData.get("descriptionText") ?? ""),
+    emailIntroLine: String(formData.get("emailIntroLine") ?? ""),
+    emailDescriptionText: String(formData.get("emailDescriptionText") ?? ""),
+    disclaimerPdfUrl: String(formData.get("disclaimerPdfUrl") ?? ""),
+    disclaimerHeading: String(formData.get("disclaimerHeading") ?? "")
   });
 }

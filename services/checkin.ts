@@ -108,22 +108,22 @@ export async function manualCheckin(input: ManualCheckinInput) {
   return Array.isArray(data) ? data[0] : null;
 }
 
-export async function manualCheckinByEmail(input: {
+export async function manualCheckinByCode(input: {
   eventId: string;
-  email: string;
+  manualCheckinCode: string;
   gateName?: string | null;
   deviceId?: string | null;
   staffUserId?: string | null;
 }) {
-  const email = input.email.trim().toLowerCase();
+  const manualCheckinCode = input.manualCheckinCode.trim().toUpperCase();
 
   if (isDemoMode()) {
     const registration = demoRegistrations.find(
-      (row) => row.event_id === input.eventId && row.email_raw.toLowerCase() === email
+      (row) => row.event_id === input.eventId && row.manual_checkin_code === manualCheckinCode
     );
 
     if (!registration) {
-      return { ok: false as const, message: "No registration found for that email." };
+      return { ok: false as const, message: "No registration found for that manual code." };
     }
 
     return {
@@ -140,7 +140,7 @@ export async function manualCheckinByEmail(input: {
     .from("registrations")
     .select("id, full_name, status")
     .eq("event_id", input.eventId)
-    .ilike("email_raw", email)
+    .eq("manual_checkin_code", manualCheckinCode)
     .maybeSingle();
 
   if (lookupError) {
@@ -148,7 +148,7 @@ export async function manualCheckinByEmail(input: {
   }
 
   if (!registration) {
-    return { ok: false as const, message: "No registration found for that email." };
+    return { ok: false as const, message: "No registration found for that manual code." };
   }
 
   if (registration.status === "checked_in") {
@@ -216,7 +216,7 @@ export async function searchRegistrationsForEvent(eventId: string, query: string
 
   const { data, error } = await supabase
     .from("registrations")
-    .select("id, full_name, email_raw, phone, company, status, checked_in_at, created_at")
+    .select("id, full_name, email_raw, phone, status, checked_in_at, created_at")
     .eq("event_id", eventId)
     .or(`full_name.ilike.%${needle}%,email_raw.ilike.%${needle}%,phone.ilike.%${needle}%`)
     .order("created_at", { ascending: false })

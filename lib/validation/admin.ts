@@ -4,8 +4,8 @@ const eventTicketOptionSchema = z.object({
   id: z.string().trim().min(1).max(80),
   title: z.string().trim().min(2).max(120),
   description: z.string().trim().max(1000).default(""),
-  note: z.string().trim().max(240).optional().or(z.literal("")),
-  badge: z.string().trim().max(40).optional().or(z.literal("")),
+  note: z.string().trim().max(240).optional().or(z.literal("")).or(z.null()),
+  badge: z.string().trim().max(40).optional().or(z.literal("")).or(z.null()),
   capacity: z.coerce.number().int().positive().nullable().optional(),
   soldOut: z.coerce.boolean().default(false)
 });
@@ -34,7 +34,17 @@ export const adminEventSchema = z
     declarationText: z.string().trim().min(10).max(10000),
     submitLabel: z.string().trim().max(80).optional().or(z.literal("")),
     mapLink: z.string().trim().url().max(2048).optional().or(z.literal("")),
-    ticketOptions: z.array(eventTicketOptionSchema).default([])
+    categoriesLabel: z.string().trim().max(80).optional().or(z.literal("")),
+    ticketOptionsLabel: z.string().trim().max(80).optional().or(z.literal("")),
+    categories: z.array(eventTicketOptionSchema).default([]),
+    ticketOptions: z.array(eventTicketOptionSchema).default([]),
+    posterImage: z.string().trim().max(2048).optional().or(z.literal("")),
+    introLine: z.string().trim().max(500).optional().or(z.literal("")),
+    descriptionText: z.string().trim().max(5000).optional().or(z.literal("")),
+    emailIntroLine: z.string().trim().max(500).optional().or(z.literal("")),
+    emailDescriptionText: z.string().trim().max(5000).optional().or(z.literal("")),
+    disclaimerPdfUrl: z.string().trim().max(2048).optional().or(z.literal("")),
+    disclaimerHeading: z.string().trim().max(200).optional().or(z.literal(""))
   })
   .refine((input) => new Date(input.endAt).getTime() > new Date(input.startAt).getTime(), {
     path: ["endAt"],

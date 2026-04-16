@@ -1,10 +1,12 @@
 import "server-only";
 import { env } from "@/lib/env";
+import { DEFAULT_TICKET_POSTER_IMAGE } from "@/lib/ticket-presentation";
 import { buildQrEmailAttachment, buildQrEmailCid } from "@/lib/qr";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { EmailJobKind } from "@/lib/types";
 import { buildAbsoluteUrl } from "@/lib/utils";
-import { buildConfirmationEmail } from "@/services/email-templates";
+import { formatErrorMessage, getErrorInfo } from "@/lib/errors";
+import { buildConfirmationEmail, buildGroupConfirmationEmail } from "@/services/email-templates";
 import { getEventById } from "@/services/events";
 import { sendMail } from "@/services/mailer";
 
@@ -19,13 +21,27 @@ interface ClaimedJob {
   attempts_max: number;
 }
 
+interface GroupAttendeePayload {
+  registrationId: string;
+  fullName: string;
+  qrToken: string;
+  manualCheckinCode?: string;
+  categoryTitle: string;
+  ticketTitle: string | null;
+  email?: string;
+}
+
 type RegistrationConfirmedPayload = Record<string, unknown> & {
   registrationId: string;
   eventId: string;
   email: string;
   fullName: string;
   qrToken: string;
+  manualCheckinCode?: string;
   ticketTitle: string;
+  bookingId?: string;
+  bookedBy?: string;
+  attendees?: GroupAttendeePayload[];
 };
 
 function isRegistrationConfirmedPayload(
@@ -41,40 +57,137 @@ function isRegistrationConfirmedPayload(
   );
 }
 
+async function hydrateManualCheckinCodes(payload: RegistrationConfirmedPayload) {
+  const registrationIds = new Set<string>();
+
+  if (!payload.manualCheckinCode) {
+    registrationIds.add(payload.registrationId);
+  }
+
+  for (const attendee of payload.attendees ?? []) {
+    if (!attendee.manualCheckinCode) {
+      registrationIds.add(attendee.registrationId);
+    }
+  }
+
+  if (registrationIds.size === 0) {
+    return payload;
+  }
+
+  const { data, error } = await createAdminSupabaseClient()
+    .from("registrations")
+    .select("id, manual_checkin_code")
+    .in("id", Array.from(registrationIds));
+
+  if (error) {
+    throw error;
+  }
+
+  const codeById = new Map(
+    (data ?? []).map((row) => [row.id as string, row.manual_checkin_code as string])
+  );
+
+  return {
+    ...payload,
+    manualCheckinCode: payload.manualCheckinCode ?? codeById.get(payload.registrationId),
+    attendees: payload.attendees?.map((attendee) => ({
+      ...attendee,
+      manualCheckinCode: attendee.manualCheckinCode ?? codeById.get(attendee.registrationId)
+    }))
+  };
+}
+
 async function handleRegistrationConfirmed(job: ClaimedJob) {
   if (!isRegistrationConfirmedPayload(job.payload)) {
     throw new Error("registration_confirmed payload is missing required fields");
   }
 
-  const payload = job.payload;
+  const payload = await hydrateManualCheckinCodes(job.payload);
   const event = await getEventById(payload.eventId);
 
   if (!event) {
     throw new Error(`Event ${payload.eventId} not found when sending confirmation email`);
   }
 
-  const qrAttachment = await buildQrEmailAttachment(payload.qrToken);
-  const mail = buildConfirmationEmail({
-    fullName: payload.fullName,
-    eventTitle: event.title,
-    eventStartAt: event.start_at,
-    eventEndAt: event.end_at,
-    eventTimezone: event.timezone,
-    venue: event.venue,
-    mapLink: event.form_config?.mapLink,
-    ticketTitle: payload.ticketTitle,
-    posterImageUrl: buildAbsoluteUrl(env.APP_URL, "/train-with-dubai-police-cover.png"),
-    qrImageSrc: buildQrEmailCid(qrAttachment.contentId)
-  });
+  const fc = event.form_config;
+  const posterImageUrl = buildAbsoluteUrl(env.APP_URL, fc?.posterImage ?? DEFAULT_TICKET_POSTER_IMAGE);
+  const emailIntroLine = fc?.emailIntroLine ?? fc?.introLine ?? undefined;
+  const emailDescriptionParagraphs = fc?.emailDescriptionParagraphs ?? fc?.descriptionParagraphs ?? undefined;
 
-  await sendMail({
-    to: payload.email,
-    subject: mail.subject,
-    html: mail.html,
-    text: mail.text,
-    attachments: [qrAttachment],
-    idempotencyKey: job.id
-  });
+  // Group booking — primary registrant gets all attendees' tickets
+  if (payload.attendees && payload.attendees.length > 1) {
+    const attendeeWithoutCode = payload.attendees.find((attendee) => !attendee.manualCheckinCode);
+    if (attendeeWithoutCode) {
+      throw new Error(`Missing manual check-in code for attendee ${attendeeWithoutCode.registrationId}`);
+    }
+
+    const attachments = await Promise.all(
+      payload.attendees.map((att, i) => buildQrEmailAttachment(att.qrToken, i))
+    );
+
+    const mail = buildGroupConfirmationEmail({
+      primaryFullName: payload.fullName,
+      eventTitle: event.title,
+      eventStartAt: event.start_at,
+      eventEndAt: event.end_at,
+      eventTimezone: event.timezone,
+      venue: event.venue,
+      mapLink: fc?.mapLink,
+      posterImageUrl,
+      introLine: emailIntroLine,
+      detailParagraphs: emailDescriptionParagraphs,
+      attendees: payload.attendees.map((att, i) => ({
+        fullName: att.fullName,
+        categoryTitle: att.categoryTitle,
+        ticketTitle: att.ticketTitle,
+        manualCheckinCode: att.manualCheckinCode!,
+        qrImageSrc: buildQrEmailCid(attachments[i].contentId),
+        qrLinkHref: buildAbsoluteUrl(env.APP_URL, `/api/qr?token=${encodeURIComponent(att.qrToken)}`)
+      }))
+    });
+
+    await sendMail({
+      to: payload.email,
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
+      attachments,
+      idempotencyKey: job.id
+    });
+  } else {
+    // Single attendee or individual attendee email
+    if (!payload.manualCheckinCode) {
+      throw new Error(`Missing manual check-in code for registration ${payload.registrationId}`);
+    }
+
+    const qrAttachment = await buildQrEmailAttachment(payload.qrToken);
+    const mail = buildConfirmationEmail({
+      fullName: payload.fullName,
+      eventTitle: event.title,
+      eventStartAt: event.start_at,
+      eventEndAt: event.end_at,
+      eventTimezone: event.timezone,
+      venue: event.venue,
+      mapLink: fc?.mapLink,
+      manualCheckinCode: payload.manualCheckinCode,
+      ticketTitle: payload.ticketTitle,
+      posterImageUrl,
+      qrImageSrc: buildQrEmailCid(qrAttachment.contentId),
+      qrLinkHref: buildAbsoluteUrl(env.APP_URL, `/api/qr?token=${encodeURIComponent(payload.qrToken)}`),
+      introLine: emailIntroLine,
+      detailParagraphs: emailDescriptionParagraphs,
+      bookedBy: payload.bookedBy as string | undefined
+    });
+
+    await sendMail({
+      to: payload.email,
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
+      attachments: [qrAttachment],
+      idempotencyKey: job.id
+    });
+  }
 
   const { error } = await createAdminSupabaseClient()
     .from("registrations")
@@ -82,8 +195,6 @@ async function handleRegistrationConfirmed(job: ClaimedJob) {
     .eq("id", payload.registrationId);
 
   if (error) {
-    // Email delivered but the audit column couldn't be stamped. Don't throw —
-    // retrying would re-send the email; the column can be repaired manually.
     console.error("[email-worker] confirmation email sent but audit update failed", {
       jobId: job.id,
       registrationId: payload.registrationId,
@@ -123,7 +234,8 @@ async function finalizeSuccess(jobId: string) {
 
 async function finalizeFailure(job: ClaimedJob, error: unknown) {
   const supabase = createAdminSupabaseClient();
-  const message = error instanceof Error ? error.message : String(error);
+  const message = formatErrorMessage(error);
+  const errorInfo = getErrorInfo(error);
   const exhausted = job.attempts >= job.attempts_max;
 
   console.error("[email-worker] job failed", {
@@ -132,7 +244,7 @@ async function finalizeFailure(job: ClaimedJob, error: unknown) {
     attempts: job.attempts,
     attempts_max: job.attempts_max,
     exhausted,
-    error: message
+    error: errorInfo
   });
 
   await supabase

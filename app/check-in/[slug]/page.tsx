@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ArrowLeft, CalendarDays, MapPin, Users } from "lucide-react";
 import { notFound } from "next/navigation";
-import { ManualCheckinByEmail } from "@/components/checkin/manual-checkin-button";
+import { ManualCheckinByCode } from "@/components/checkin/manual-checkin-button";
 import { ScanConsole } from "@/components/checkin/scan-console";
 import { StatusPill } from "@/components/ui/status-pill";
 import { requireAuthenticatedUser } from "@/lib/auth";
@@ -86,13 +86,13 @@ export default async function CheckinPage({
             <Users className="h-4 w-4 text-[#2f7b76]" />
             <p className="section-title">Manual fallback</p>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-ink sm:mt-3 sm:text-2xl">Check in by email</h2>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-ink sm:mt-3 sm:text-2xl">Check in by code</h2>
           <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-sm">
-            Enter the attendee&apos;s registered email address to check them in directly.
+            Enter the 4-character code printed below the attendee&apos;s QR code to check them in directly.
           </p>
 
           <div className="mt-4 sm:mt-6">
-            <ManualCheckinByEmail eventId={event.id} />
+            <ManualCheckinByCode eventId={event.id} />
           </div>
         </div>
       </section>

@@ -17,7 +17,7 @@ export default async function EventDetailPage({
     notFound();
   }
 
-  const { count: registrationCount, ticketCounts } = await getRegistrationSummaryForEvent(event.id);
+  const { count: registrationCount, ticketCounts, categoryCounts } = await getRegistrationSummaryForEvent(event.id);
   const registrationState = getRegistrationWindowState(event);
 
   return (
@@ -29,6 +29,7 @@ export default async function EventDetailPage({
         registrationCount={registrationCount}
         registrationState={registrationState}
         ticketCounts={ticketCounts}
+        categoryCounts={categoryCounts}
       />
     </main>
     </>

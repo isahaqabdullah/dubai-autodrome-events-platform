@@ -20,11 +20,11 @@ export async function POST(request: Request) {
 
   return NextResponse.json(result, {
     status:
-      result.outcome === "pending_verification"
+      result.outcome === "pending_verification" || result.outcome === "already_verified"
         ? 200
         : result.outcome === "rate_limited"
           ? 429
-          : result.outcome === "already_registered"
+          : result.outcome === "capacity_exceeded"
             ? 409
             : 400
   });

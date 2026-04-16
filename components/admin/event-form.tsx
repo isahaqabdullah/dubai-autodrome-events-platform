@@ -1,16 +1,30 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { CheckCircle2 } from "lucide-react";
+import { CheckCircle2, ImageIcon, FileText, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { CategoriesEditor } from "@/components/admin/categories-editor";
 import { TicketOptionsEditor } from "@/components/admin/ticket-options-editor";
 import type { EventFormConfig, EventRecord } from "@/lib/types";
 import { formatInputDateTimeInZone } from "@/lib/utils";
+
+const DEFAULT_POSTER_IMAGE = "/train-with-dubai-police-cover.png";
+const DEFAULT_DISCLAIMER_PDF = "/disclaimer-dubai-autodrome.pdf";
+
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
+const ALLOWED_PDF_TYPES = ["application/pdf"];
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 export interface EventFormResult {
   ok: boolean;
@@ -43,6 +57,142 @@ function FormSection({
   );
 }
 
+function FileUploadField({
+  label,
+  hint,
+  accept,
+  currentUrl,
+  onUploaded,
+  onRemove,
+  eventId,
+  kind,
+  preview
+}: {
+  label: string;
+  hint: string;
+  accept: string;
+  currentUrl: string;
+  onUploaded: (url: string) => void;
+  onRemove: () => void;
+  eventId: string;
+  kind: "poster" | "disclaimer";
+  preview?: "image" | "link";
+}) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadError(null);
+
+    // Client-side guardrails
+    if (file.size > MAX_FILE_SIZE) {
+      setUploadError(`File too large (${formatFileSize(file.size)}). Maximum size is 10 MB.`);
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
+    const allowedTypes = kind === "poster" ? ALLOWED_IMAGE_TYPES : ALLOWED_PDF_TYPES;
+    if (!allowedTypes.includes(file.type)) {
+      const expected = kind === "poster" ? "PNG, JPEG, or WebP" : "PDF";
+      setUploadError(`Invalid file type "${file.type || file.name.split(".").pop()}". Accepted: ${expected}.`);
+      if (inputRef.current) inputRef.current.value = "";
+      return;
+    }
+
+    setUploading(true);
+
+    const body = new FormData();
+    body.append("file", file);
+    body.append("eventId", eventId);
+    body.append("kind", kind);
+
+    try {
+      const response = await fetch("/api/admin/upload", { method: "POST", body });
+      const result = await response.json();
+
+      if (!response.ok) {
+        setUploadError(result.message ?? "Upload failed.");
+      } else {
+        onUploaded(result.publicUrl);
+      }
+    } catch {
+      setUploadError("Upload failed. Please try again.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  }
+
+  return (
+    <Field label={label} hint={hint}>
+      <div className="space-y-3">
+        {currentUrl ? (
+          <div className="flex items-start gap-3 rounded-2xl border border-slate/15 bg-white p-3">
+            {preview === "image" ? (
+              <img src={currentUrl} alt="" className="h-16 w-24 rounded-lg object-cover" />
+            ) : (
+              <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-slate-50">
+                <FileText className="h-6 w-6 text-slate" />
+              </div>
+            )}
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium text-ink">{currentUrl.split("/").pop()}</p>
+              <p className="mt-0.5 truncate text-xs text-slate">{currentUrl}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onRemove}
+              className="shrink-0 rounded-lg p-1.5 text-slate transition hover:bg-rose-50 hover:text-rose-600"
+              title="Remove"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-2xl border border-dashed border-slate/25 bg-slate-50 px-4 py-3 text-sm text-slate">
+            {kind === "poster" ? <ImageIcon className="h-4 w-4" /> : <FileText className="h-4 w-4" />}
+            <span>No file selected</span>
+          </div>
+        )}
+
+        <div className="flex items-center gap-3">
+          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-slate/20 bg-white px-3.5 py-2 text-sm font-medium text-ink shadow-sm transition hover:bg-mist">
+            <Upload className="h-4 w-4" />
+            {uploading ? "Uploading..." : "Upload file"}
+            <input
+              ref={inputRef}
+              type="file"
+              accept={accept}
+              onChange={handleFileChange}
+              disabled={uploading}
+              className="hidden"
+            />
+          </label>
+          <span className="text-xs text-slate">or paste a URL</span>
+          <Input
+            value={currentUrl}
+            onChange={(e) => onUploaded(e.target.value)}
+            placeholder={kind === "poster" ? "/path/to/image.png" : "/path/to/file.pdf"}
+            className="flex-1 rounded-xl border-slate/20 bg-white px-3 py-2 text-sm"
+          />
+        </div>
+
+        <p className="text-xs text-slate">
+          Max 10 MB. Accepted: {kind === "poster" ? "PNG, JPEG, WebP" : "PDF"}.
+        </p>
+
+        {uploadError ? (
+          <p className="text-sm text-rose-600">{uploadError}</p>
+        ) : null}
+      </div>
+    </Field>
+  );
+}
+
 export function EventForm({ event, action, hideRegistrationSections = false }: EventFormProps) {
   const config = (event?.form_config ?? {}) as EventFormConfig;
   const router = useRouter();
@@ -50,8 +200,16 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // File upload state
+  const [posterImage, setPosterImage] = useState(config.posterImage ?? DEFAULT_POSTER_IMAGE);
+  const [disclaimerPdfUrl, setDisclaimerPdfUrl] = useState(config.disclaimerPdfUrl ?? DEFAULT_DISCLAIMER_PDF);
+
+  const eventId = event?.id ?? "new";
+
   function handleSubmit(formData: FormData) {
     setError(null);
+    formData.set("posterImage", posterImage);
+    formData.set("disclaimerPdfUrl", disclaimerPdfUrl);
     startTransition(async () => {
       const result = await action(formData);
       if (result.ok) {
@@ -133,6 +291,95 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
         </FormSection>
 
         <FormSection
+          eyebrow="Content"
+          title="Event photo & description"
+        >
+          <FileUploadField
+            label="Event poster image"
+            hint="Shown on the booking page, ticket card, sidebar, and confirmation emails"
+            accept="image/png,image/jpeg,image/webp"
+            currentUrl={posterImage}
+            onUploaded={setPosterImage}
+            onRemove={() => setPosterImage("")}
+            eventId={eventId}
+            kind="poster"
+            preview="image"
+          />
+
+          <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
+            <Field label="Intro line" hint="Short tagline shown on the booking page">
+              <Input
+                name="introLine"
+                defaultValue={config.introLine ?? ""}
+                placeholder="Hit the track for free. Dubai Police has you covered!"
+                className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+              />
+            </Field>
+            <Field label="Email intro line" hint="Short tagline in confirmation emails — falls back to intro line if empty">
+              <Input
+                name="emailIntroLine"
+                defaultValue={config.emailIntroLine ?? ""}
+                placeholder="Same as booking page intro if left empty"
+                className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+              />
+            </Field>
+          </div>
+
+          <Field label="Event description" hint="Shown on the booking page. Separate paragraphs with blank lines.">
+            <Textarea
+              name="descriptionText"
+              defaultValue={config.descriptionParagraphs?.join("\n\n") ?? ""}
+              placeholder="Join us at Dubai Autodrome for the region's premier community fitness night!&#10;&#10;Registration is required, so secure your free spot today!"
+              className="min-h-[120px] rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+            />
+          </Field>
+
+          <Field label="Email description" hint="Shown in confirmation emails. Falls back to event description if empty.">
+            <Textarea
+              name="emailDescriptionText"
+              defaultValue={config.emailDescriptionParagraphs?.join("\n\n") ?? ""}
+              placeholder="Leave empty to use the event description above"
+              className="min-h-[120px] rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+            />
+          </Field>
+        </FormSection>
+
+        <FormSection
+          eyebrow="Terms & Conditions"
+          title="Disclaimer PDF and terms"
+        >
+          <FileUploadField
+            label="Disclaimer PDF"
+            hint="Upload a PDF. Clear to remove PDF and show terms as text only."
+            accept="application/pdf"
+            currentUrl={disclaimerPdfUrl}
+            onUploaded={setDisclaimerPdfUrl}
+            onRemove={() => setDisclaimerPdfUrl("")}
+            eventId={eventId}
+            kind="disclaimer"
+            preview="link"
+          />
+
+          <Field label="Disclaimer heading" hint="Heading shown above the terms/PDF on the registration page">
+            <Input
+              name="disclaimerHeading"
+              defaultValue={config.disclaimerHeading ?? ""}
+              placeholder="Waiver of Liability and Declaration of Assumption of Risk"
+              className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+            />
+          </Field>
+
+          <Field label="Terms & Conditions text" hint="Full terms shown on the registration page (expandable). Also stored as the declaration text.">
+            <Textarea
+              name="declarationText"
+              required
+              defaultValue={event?.declaration_text ?? "Terms & Conditions: By proceeding with this booking, you confirm that you have read and agree to the full Terms & Conditions. Entry is at your own risk and all participants must sign a waiver before taking part. Participants must follow all safety rules, use appropriate equipment, and comply with instructions from officials at all times. Unsafe behaviour or misuse of equipment may result in removal from the session. Specific rules apply for cyclists, runners, rollerbladers, and bootcamp users. Medical support is available onsite. Participants must meet fitness requirements and are responsible for any damage caused. Personal data may be collected for participation purposes. UAE law applies. - Full Terms & Conditions: dubaiautodrome.ae/open-track-days/traindxb"}
+              className="min-h-[160px] rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+            />
+          </Field>
+        </FormSection>
+
+        <FormSection
           eyebrow="Schedule"
           title="Define the event window"
         >
@@ -193,9 +440,32 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
         </FormSection>
 
         <FormSection
-          eyebrow="Tickets"
-          title="Configure bootcamp or secondary admissions"
+          eyebrow={config.categoriesLabel || "Categories"}
+          title="Define ticket categories"
         >
+          <Field label="Section label" hint="Optional — displayed to attendees as the heading for categories">
+            <Input
+              name="categoriesLabel"
+              defaultValue={config.categoriesLabel ?? ""}
+              placeholder="Categories"
+              className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+            />
+          </Field>
+          <CategoriesEditor initialCategories={config.categories ?? []} />
+        </FormSection>
+
+        <FormSection
+          eyebrow={config.ticketOptionsLabel || "Additional ticket categories"}
+          title="Define add-on options"
+        >
+          <Field label="Section label" hint="Optional — displayed to attendees as the heading for add-ons">
+            <Input
+              name="ticketOptionsLabel"
+              defaultValue={config.ticketOptionsLabel ?? ""}
+              placeholder="Additional ticket categories"
+              className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+            />
+          </Field>
           <TicketOptionsEditor initialTickets={config.ticketOptions ?? []} />
         </FormSection>
 
@@ -203,15 +473,14 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
           <>
             <input type="hidden" name="declarationVersion" value={event?.declaration_version ?? 1} />
             <input type="hidden" name="submitLabel" value={config.submitLabel ?? ""} />
-            <input type="hidden" name="declarationText" value={event?.declaration_text ?? ""} />
           </>
         ) : (
           <FormSection
             eyebrow="Registration"
-            title="Declaration and submit label"
+            title="Declaration version and submit label"
           >
             <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
-              <Field label="Declaration version">
+              <Field label="Declaration version" hint="Increment when T&C change to re-require acceptance">
                 <Input
                   name="declarationVersion"
                   type="number"
@@ -230,15 +499,6 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
                 />
               </Field>
             </div>
-
-            <Field label="Declaration text">
-              <Textarea
-                name="declarationText"
-                required
-                defaultValue={event?.declaration_text ?? "Terms & Conditions: By proceeding with this booking, you confirm that you have read and agree to the full Terms & Conditions. Entry is at your own risk and all participants must sign a waiver before taking part. Participants must follow all safety rules, use appropriate equipment, and comply with instructions from officials at all times. Unsafe behaviour or misuse of equipment may result in removal from the session. Specific rules apply for cyclists, runners, rollerbladers, and bootcamp users. Medical support is available onsite. Participants must meet fitness requirements and are responsible for any damage caused. Personal data may be collected for participation purposes. UAE law applies. - Full Terms & Conditions: dubaiautodrome.ae/open-track-days/traindxb"}
-                className="min-h-[130px] rounded-2xl border-slate/20 bg-white px-3.5 py-3"
-              />
-            </Field>
           </FormSection>
         )}
 

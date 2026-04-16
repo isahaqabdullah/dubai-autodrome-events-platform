@@ -9,7 +9,7 @@ export function DeleteEventButton({ eventId, eventTitle }: { eventId: string; ev
 
   async function handleDelete() {
     const confirmed = window.confirm(
-      `Delete "${eventTitle}"? This cannot be undone. Events with registrations cannot be deleted.`
+      `Delete "${eventTitle}"? This cannot be undone and will also remove related registrations, pending registrations, and check-in history.`
     );
 
     if (!confirmed) {

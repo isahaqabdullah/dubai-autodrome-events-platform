@@ -1,13 +1,17 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowLeft, CalendarDays, CheckCircle2, ChevronDown, ChevronUp, Clock3, Download, FileText, MapPin } from "lucide-react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Clock3, FileText, MapPin } from "lucide-react";
+import { EventTicketCard } from "@/components/public/event-ticket-card";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import type { EventRecord, RegistrationWindowState } from "@/lib/types";
-import { mergeFormConfig } from "@/lib/utils";
+import { Select } from "@/components/ui/select";
+import { buildTicketAdmissionLabel, formatTicketDateTimeLine, getTicketPosterImageSrc } from "@/lib/ticket-presentation";
+import type { EventRecord, EventTicketOption, RegistrationWindowState } from "@/lib/types";
+import { isValidPhoneNumber, mergeFormConfig, PHONE_NUMBER_VALIDATION_MESSAGE, resolveCategories } from "@/lib/utils";
 import { PdfViewer } from "@/components/public/pdf-viewer";
 
 interface EventBookingFlowProps {
@@ -15,44 +19,53 @@ interface EventBookingFlowProps {
   registrationCount: number;
   registrationState: RegistrationWindowState;
   ticketCounts: Record<string, number>;
+  categoryCounts: Record<string, number>;
 }
 
 type Step = "tickets" | "details";
 type SubmissionState = "idle" | "submitting" | "success" | "error";
 type OtpState = "idle" | "sending" | "sent";
 
+interface CompletedAttendee {
+  registrationId?: string;
+  fullName: string;
+  categoryTitle: string;
+  ticketTitle: string | null;
+  qrToken: string;
+  manualCheckinCode?: string | null;
+  email?: string;
+}
+
 interface CompletedRegistration {
   email: string;
-  qrToken: string;
-  ticketTitle: string;
+  attendees: CompletedAttendee[];
+}
+
+interface SelectableOption extends EventTicketOption {
+  isUnavailable: boolean;
+  remaining: number | null;
 }
 
 const HOLD_DURATION_SECONDS = 25 * 60;
-const TRAIN_WITH_DUBAI_POLICE_INTRO = "Hit the track for free. Dubai Police has you covered!";
-const TRAIN_WITH_DUBAI_POLICE_DESCRIPTION = [
+const DEFAULT_DISCLAIMER_PDF = "/disclaimer-dubai-autodrome.pdf";
+const DEFAULT_INTRO = "Hit the track for free. Dubai Police has you covered!";
+const DEFAULT_DESCRIPTION = [
   "Join us at Dubai Autodrome for the region's premier community fitness night! In a shared commitment to community health, wellness, and safety, we are thrilled to announce Train With Dubai Police.",
   "The best part? Dubai Police has your entry completely covered, making it 100% free for all participants. Join us on our Circuit under the lights for an unforgettable, high-energy evening of cycling, running, and specialized bootcamps.",
   "Registration is required, so secure your free spot today and let's hit the track!"
 ];
-
-function formatEventDateTimeLine(event: EventRecord) {
-  const start = new Date(event.start_at);
-  const end = new Date(event.end_at);
-  const datePart = new Intl.DateTimeFormat("en-US", {
-    timeZone: event.timezone,
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    year: "numeric"
-  }).format(start);
-  const timePart = new Intl.DateTimeFormat("en-US", {
-    timeZone: event.timezone,
-    hour: "numeric",
-    minute: "2-digit"
-  });
-
-  return `${datePart} ${timePart.format(start)} - ${timePart.format(end)}`;
-}
+const DEFAULT_DISCLAIMER_HEADING = "Waiver of Liability and Declaration of Assumption of Risk — Dubai Autodrome";
+const INITIAL_FORM_STATE = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  phone: "",
+  age: "",
+  uaeResident: false,
+  declarationAccepted: false,
+  marketingOptIn: false,
+  website: ""
+};
 
 function drawWrappedText(
   ctx: CanvasRenderingContext2D,
@@ -106,27 +119,118 @@ function formatTimer(totalSeconds: number) {
   return `${minutes}:${seconds}`;
 }
 
+function SelectionCard({
+  title,
+  description,
+  note,
+  meta,
+  selected,
+  disabled,
+  onClick
+}: {
+  title: string;
+  description?: string;
+  note?: string;
+  meta?: string;
+  selected: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-pressed={selected}
+      className={`w-full rounded-2xl border px-4 py-4 text-left transition sm:px-5 sm:py-5 ${
+        selected
+          ? "border-ink bg-ink text-white shadow-soft"
+          : disabled
+            ? "cursor-not-allowed border-slate/10 bg-slate-50 text-slate/60"
+            : "border-slate/15 bg-white text-ink hover:border-slate/30 hover:bg-mist/60"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-display text-[15px] font-bold tracking-tight sm:text-lg">{title}</p>
+          {description ? (
+            <p className={`mt-1 text-[13px] leading-relaxed sm:text-sm ${selected ? "text-white/80" : "text-slate"}`}>
+              {description}
+            </p>
+          ) : null}
+          {note ? (
+            <p className={`mt-1 text-[11px] italic sm:text-xs ${selected ? "text-white/70" : "text-slate/70"}`}>
+              {note}
+            </p>
+          ) : null}
+        </div>
+        <span
+          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
+            selected
+              ? "bg-white/15 text-white"
+              : disabled
+                ? "bg-white text-slate/70"
+                : "bg-slate-100 text-slate"
+          }`}
+        >
+          {selected ? "Selected" : meta ?? "Available"}
+        </span>
+      </div>
+    </button>
+  );
+}
+
+function getAvailabilityMeta(option: SelectableOption) {
+  if (option.isUnavailable) {
+    return option.badge || "Unavailable";
+  }
+  if (option.remaining !== null) {
+    return `${option.remaining} left`;
+  }
+  return option.badge || "Available";
+}
+
 export function EventBookingFlow({
   event,
   registrationCount,
   registrationState,
-  ticketCounts
+  ticketCounts,
+  categoryCounts
 }: EventBookingFlowProps) {
+  const router = useRouter();
   const config = useMemo(() => mergeFormConfig(event.form_config), [event.form_config]);
   const storageKey = `booking-draft-${event.id}`;
-  const hydrated = useRef(false);
+  const [hydrated, setHydrated] = useState(false);
 
-  function loadDraft() {
-    try {
-      const raw = sessionStorage.getItem(storageKey);
-      if (raw) return JSON.parse(raw);
-    } catch { /* ignore */ }
-    return null;
-  }
+  const categories = useMemo<SelectableOption[]>(() => {
+    return resolveCategories(config).map((category) => {
+      const count = categoryCounts[category.id] ?? 0;
+      const isFull = category.capacity ? count >= category.capacity : false;
+      return {
+        ...category,
+        isUnavailable: Boolean(category.soldOut || isFull),
+        remaining: category.capacity ? Math.max(category.capacity - count, 0) : null
+      };
+    });
+  }, [config, categoryCounts]);
 
-  const draft = hydrated.current ? null : loadDraft();
+  const additionalCategories = useMemo<SelectableOption[]>(() => {
+    return (config.ticketOptions ?? []).map((ticket) => {
+      const count = ticketCounts[ticket.id] ?? 0;
+      const isFull = ticket.capacity ? count >= ticket.capacity : false;
+      return {
+        ...ticket,
+        isUnavailable: Boolean(ticket.soldOut || isFull),
+        remaining: ticket.capacity ? Math.max(ticket.capacity - count, 0) : null
+      };
+    });
+  }, [config.ticketOptions, ticketCounts]);
 
-  const [step, setStep] = useState<Step>(draft?.step ?? "tickets");
+  const defaultCategoryId = categories.find((category) => !category.isUnavailable)?.id
+    ?? categories[0]?.id
+    ?? "general-admission";
+
+  const [step, setStep] = useState<Step>("tickets");
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(true);
   const [termsExpanded, setTermsExpanded] = useState(false);
@@ -137,84 +241,104 @@ export function EventBookingFlow({
   const [otp, setOtp] = useState("");
   const [otpState, setOtpState] = useState<OtpState>("idle");
   const [otpMessage, setOtpMessage] = useState<{ text: string; error: boolean } | null>(null);
-  const [emailVerified, setEmailVerified] = useState(draft?.emailVerified ?? false);
+  const [emailVerified, setEmailVerified] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [completedRegistration, setCompletedRegistration] = useState<CompletedRegistration | null>(null);
-  const [form, setForm] = useState({
-    firstName: draft?.form?.firstName ?? "",
-    lastName: draft?.form?.lastName ?? "",
-    email: draft?.form?.email ?? "",
-    phone: draft?.form?.phone ?? "",
-    age: draft?.form?.age ?? "",
-    uaeResident: draft?.form?.uaeResident ?? false,
-    declarationAccepted: draft?.form?.declarationAccepted ?? false,
-    marketingOptIn: draft?.form?.marketingOptIn ?? false,
-    website: ""
-  });
-  const [selectedBootcampId, setSelectedBootcampId] = useState<string | null>(draft?.selectedBootcampId ?? null);
+  const [selectedCategoryId, setSelectedCategoryId] = useState(defaultCategoryId);
+  const [selectedAdditionalCategoryId, setSelectedAdditionalCategoryId] = useState<string | null>(null);
+
+  const [form, setForm] = useState(INITIAL_FORM_STATE);
+
+  const emailInputId = useId();
+  const uaeResidentSelectId = useId();
+
+  useEffect(() => {
+    setSelectedCategoryId((current) => {
+      if (categories.some((category) => category.id === current && !category.isUnavailable)) {
+        return current;
+      }
+      return defaultCategoryId;
+    });
+  }, [categories, defaultCategoryId]);
+
+  useEffect(() => {
+    setSelectedAdditionalCategoryId((current) => {
+      if (!current) {
+        return null;
+      }
+      return additionalCategories.some((category) => category.id === current && !category.isUnavailable)
+        ? current
+        : null;
+    });
+  }, [additionalCategories]);
 
   const saveDraft = useCallback(() => {
     try {
       sessionStorage.setItem(storageKey, JSON.stringify({
-        form, step, emailVerified, selectedBootcampId
+        form,
+        step,
+        emailVerified,
+        selectedCategoryId,
+        selectedAdditionalCategoryId
       }));
-    } catch { /* quota exceeded — ignore */ }
-  }, [form, step, emailVerified, selectedBootcampId, storageKey]);
+    } catch {
+      // Ignore storage quota issues in the draft experience.
+    }
+  }, [form, step, emailVerified, selectedCategoryId, selectedAdditionalCategoryId, storageKey]);
 
   useEffect(() => {
-    hydrated.current = true;
-  }, []);
+    try {
+      const raw = sessionStorage.getItem(storageKey);
+      if (raw) {
+        const draft = JSON.parse(raw);
+        if (draft.step) setStep(draft.step);
+        if (draft.emailVerified) setEmailVerified(draft.emailVerified);
+        if (draft.selectedCategoryId) setSelectedCategoryId(draft.selectedCategoryId);
+        if (draft.selectedAdditionalCategoryId !== undefined) setSelectedAdditionalCategoryId(draft.selectedAdditionalCategoryId);
+        if (draft.form) {
+          setForm((current) => ({
+            ...current,
+            firstName: draft.form.firstName ?? "",
+            lastName: draft.form.lastName ?? "",
+            email: draft.form.email ?? "",
+            phone: draft.form.phone ?? "",
+            age: draft.form.age ?? "",
+            uaeResident: draft.form.uaeResident ?? false,
+            declarationAccepted: draft.form.declarationAccepted ?? false,
+            marketingOptIn: draft.form.marketingOptIn ?? false
+          }));
+        }
+      }
+    } catch {
+      // Ignore malformed draft payloads.
+    }
+    setHydrated(true);
+  }, [storageKey]);
 
   useEffect(() => {
-    if (hydrated.current) saveDraft();
-  }, [saveDraft]);
+    if (hydrated) saveDraft();
+  }, [hydrated, saveDraft]);
 
-
-
-  const ticketOptions = useMemo(
-    () => {
-      const bootcamps = (config.ticketOptions ?? []).map((ticket) => {
-        const count = ticketCounts[ticket.id] ?? 0;
-        const isMaxed = ticket.capacity ? count >= ticket.capacity : false;
-        const isSoldOut = ticket.soldOut || isMaxed;
-
-        return {
-          ...ticket,
-          badge: isSoldOut ? (ticket.badge || "Maxed out") : ticket.badge,
-          soldOut: isSoldOut
-        };
-      });
-
-      return [
-        {
-          id: "general-admission",
-          title: "General Admission",
-          description:
-            "Admission is free and valid for one attendee. Complete registration to secure your place for this event edition.",
-          note: `One attendee per submission. Remaining places: ${
-            event.capacity ? Math.max(event.capacity - registrationCount, 0) : "Open"
-          }`,
-          badge: undefined as string | undefined,
-          soldOut: registrationState.state !== "open"
-        },
-        ...bootcamps
-      ];
-    },
-    [config.ticketOptions, event.capacity, registrationCount, registrationState.state, ticketCounts]
-  );
-  const generalAdmission = ticketOptions[0];
-  const bootcampOptions = ticketOptions.slice(1);
-  const selectedBootcamp = selectedBootcampId
-    ? bootcampOptions.find((ticket) => ticket.id === selectedBootcampId) ?? null
-    : null;
-  const selectedTicketId = selectedBootcamp ? selectedBootcamp.id : "general-admission";
-  const selectedTicketTitle = selectedBootcamp
-    ? `General Admission with ${selectedBootcamp.title}`
-    : "General Admission";
-  const canProceed = registrationState.state === "open" && !generalAdmission.soldOut;
+  const canProceed = registrationState.state === "open";
   const fullName = `${form.firstName} ${form.lastName}`.trim();
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
   const showFieldErrors = step === "details" && submitAttempted && submissionState !== "submitting" && !completedRegistration;
+
+  const selectedCategory = categories.find((category) => category.id === selectedCategoryId)
+    ?? categories[0]
+    ?? null;
+  const selectedAdditionalCategory = selectedAdditionalCategoryId
+    ? additionalCategories.find((category) => category.id === selectedAdditionalCategoryId) ?? null
+    : null;
+
+  const selectionDisplayLabel = selectedCategory
+    ? selectedAdditionalCategory
+      ? `${selectedCategory.title} + ${selectedAdditionalCategory.title}`
+      : selectedCategory.title
+    : "Select a category";
+  const requestSelectedTicketId = selectedAdditionalCategory?.id ?? "general-admission";
+  const requestSelectedTicketTitle = selectedAdditionalCategory?.title ?? "General Admission";
+
   const requiredErrors = useMemo(() => {
     if (!showFieldErrors) {
       return {
@@ -238,37 +362,68 @@ export function EventBookingFlow({
       declarationAccepted: !form.declarationAccepted
     };
   }, [emailVerified, form, isValidEmail, showFieldErrors]);
+
+  const phoneErrorMessage = useMemo(() => {
+    if (!showFieldErrors) {
+      return null;
+    }
+
+    if (!form.phone.trim()) {
+      return "Phone number is required.";
+    }
+
+    if (!isValidPhoneNumber(form.phone)) {
+      return PHONE_NUMBER_VALIDATION_MESSAGE;
+    }
+
+    return null;
+  }, [form.phone, showFieldErrors]);
+
   const mapLink = config.mapLink ?? null;
-  const descriptionParagraphs = TRAIN_WITH_DUBAI_POLICE_DESCRIPTION;
+  const posterImage = getTicketPosterImageSrc(config);
+  const introLine = config.introLine || DEFAULT_INTRO;
+  const descriptionParagraphs = config.descriptionParagraphs?.length ? config.descriptionParagraphs : DEFAULT_DESCRIPTION;
+  const disclaimerPdfUrl = config.disclaimerPdfUrl === null ? null : (config.disclaimerPdfUrl || DEFAULT_DISCLAIMER_PDF);
+  const hasPdf = Boolean(disclaimerPdfUrl);
+  const disclaimerHeading = config.disclaimerHeading || DEFAULT_DISCLAIMER_HEADING;
   const visibleParagraphs = expandedDescription ? descriptionParagraphs : descriptionParagraphs.slice(0, 2);
   const contentLayoutClass = completedRegistration
     ? "block"
     : "grid gap-0 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px]";
 
   useEffect(() => {
-    if (step !== "details" || completedRegistration) {
-      return;
-    }
-
+    if (step !== "details" || completedRegistration) return;
     setTimeRemaining(HOLD_DURATION_SECONDS);
-
     const timer = window.setInterval(() => {
       setTimeRemaining((current) => {
         if (current <= 1) {
           window.clearInterval(timer);
           return 0;
         }
-
         return current - 1;
       });
     }, 1000);
-
     return () => window.clearInterval(timer);
   }, [step, completedRegistration]);
 
   async function sendOtp(endpoint: "/api/register/start" | "/api/register/resend-verification") {
-    if (!form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !isValidEmail || !canProceed) {
-      setOtpMessage({ text: "Enter first name, last name, and a valid email before requesting a code.", error: true });
+    if (!selectedCategory) {
+      setOtpMessage({ text: "Select a category before requesting a code.", error: true });
+      return;
+    }
+
+    if (!form.firstName.trim() || !form.lastName.trim()) {
+      setOtpMessage({ text: "Enter your first and last name before requesting a code.", error: true });
+      return;
+    }
+
+    if (!form.email.trim() || !isValidEmail || !canProceed) {
+      setOtpMessage({ text: "Enter a valid email before requesting a code.", error: true });
+      return;
+    }
+
+    if (form.phone.trim() && !isValidPhoneNumber(form.phone)) {
+      setOtpMessage({ text: `Phone number looks invalid. ${PHONE_NUMBER_VALIDATION_MESSAGE}`, error: true });
       return;
     }
 
@@ -277,13 +432,13 @@ export function EventBookingFlow({
 
     const response = await fetch(endpoint, {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         eventId: event.id,
-        selectedTicketId,
-        selectedTicketTitle,
+        selectedTicketId: requestSelectedTicketId,
+        selectedTicketTitle: requestSelectedTicketTitle,
+        categoryId: selectedCategory.id,
+        categoryTitle: selectedCategory.title,
         fullName,
         email: form.email,
         phone: form.phone || undefined,
@@ -293,7 +448,11 @@ export function EventBookingFlow({
       })
     });
 
-    const result = (await response.json()) as { message?: string };
+    const result = (await response.json()) as {
+      outcome?: "pending_verification" | "already_verified";
+      message?: string;
+      warning?: string;
+    };
 
     if (!response.ok) {
       setOtpState("idle");
@@ -301,29 +460,33 @@ export function EventBookingFlow({
       return;
     }
 
+    const otpText = result.warning
+      ? `${result.message ?? "Verification code sent."} Note: ${result.warning}`
+      : result.message ?? "Verification code sent.";
+
+    if (result.outcome === "already_verified") {
+      setEmailVerified(true);
+      setOtpState("idle");
+      setOtp("");
+      setOtpMessage({ text: otpText, error: false });
+      return;
+    }
+
     setOtpState("sent");
-    setOtpMessage({ text: result.message ?? "Verification code sent.", error: false });
+    setOtpMessage({ text: otpText, error: false });
   }
 
   async function verifyOtpCode() {
     if (!otp.trim()) return;
-
     setVerifyingOtp(true);
     setOtpMessage(null);
-
     try {
       const response = await fetch("/api/register/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          eventId: event.id,
-          email: form.email,
-          otp
-        })
+        body: JSON.stringify({ eventId: event.id, email: form.email, otp })
       });
-
       const result = (await response.json()) as { valid?: boolean; message?: string };
-
       if (response.ok && result.valid) {
         setEmailVerified(true);
         setOtpMessage(null);
@@ -335,14 +498,12 @@ export function EventBookingFlow({
     }
   }
 
-  async function downloadTicket() {
-    if (!completedRegistration) {
-      return;
-    }
-
-    const qrSrc = `/api/qr?token=${encodeURIComponent(completedRegistration.qrToken)}`;
-    const dateLine = formatEventDateTimeLine(event);
+  async function downloadTicketForAttendee(attendee: CompletedAttendee) {
+    const qrSrc = `/api/qr?token=${encodeURIComponent(attendee.qrToken)}`;
+    const dateLine = formatTicketDateTimeLine(event);
     const venue = event.venue ?? "Venue to be announced";
+    const ticketLabel = buildTicketAdmissionLabel(attendee);
+    const manualCheckinCode = attendee.manualCheckinCode?.trim().toUpperCase() || null;
 
     const qrImage = new window.Image();
     qrImage.crossOrigin = "anonymous";
@@ -402,8 +563,8 @@ export function EventBookingFlow({
     drawWrappedText(ctx, event.title, cardX + 40, cardY + 95, cardW - 80, 44, 2);
 
     const rows: Array<[string, string]> = [
-      ["ATTENDEE", fullName],
-      ["ADMISSION", completedRegistration.ticketTitle],
+      ["ATTENDEE", attendee.fullName],
+      ["ADMISSION", ticketLabel],
       ["DATE & TIME", dateLine],
       ["LOCATION", venue]
     ];
@@ -447,6 +608,14 @@ export function EventBookingFlow({
     ctx.font = `500 18px ${font}`;
     ctx.textAlign = "center";
     ctx.fillText("Present this QR code at check-in", cardX + cardW / 2, qrY + qrSize + 30);
+    if (manualCheckinCode) {
+      ctx.fillStyle = "rgba(15,23,42,0.55)";
+      ctx.font = `bold 14px ${font}`;
+      ctx.fillText("MANUAL CODE", cardX + cardW / 2, qrY + qrSize + 64);
+      ctx.fillStyle = "#0c1723";
+      ctx.font = `800 36px ${font}`;
+      ctx.fillText(manualCheckinCode, cardX + cardW / 2, qrY + qrSize + 88);
+    }
     ctx.textAlign = "start";
 
     const blob = await new Promise<Blob | null>((resolve) =>
@@ -458,7 +627,7 @@ export function EventBookingFlow({
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${safeName}-ticket.png`;
+    link.download = `${safeName}-${attendee.fullName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-ticket.png`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -466,7 +635,16 @@ export function EventBookingFlow({
   }
 
   async function submitRegistration() {
-    if (!fullName || !form.email || !form.phone || !form.age.trim() || !form.declarationAccepted || !canProceed || !otp.trim()) {
+    if (
+      !selectedCategory ||
+      !fullName ||
+      !form.email ||
+      !form.phone ||
+      !isValidPhoneNumber(form.phone) ||
+      !form.age.trim() ||
+      !form.declarationAccepted ||
+      !canProceed
+    ) {
       return;
     }
 
@@ -475,29 +653,39 @@ export function EventBookingFlow({
 
     const response = await fetch("/api/register/confirm", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         eventId: event.id,
-        selectedTicketId,
-        selectedTicketTitle,
+        selectedTicketId: requestSelectedTicketId,
+        selectedTicketTitle: requestSelectedTicketTitle,
         fullName,
         email: form.email,
         phone: form.phone,
         age: Number(form.age),
         uaeResident: form.uaeResident,
         declarationAccepted: true,
-        otp,
-        website: form.website
+        ...(otp.trim() ? { otp } : {}),
+        website: form.website,
+        categoryId: selectedCategory.id,
+        categoryTitle: selectedCategory.title
       })
     });
 
     const result = (await response.json()) as {
       message?: string;
+      registrationId?: string;
       email?: string;
       qrToken?: string;
-      ticketTitle?: string;
+      manualCheckinCode?: string;
+      attendees?: Array<{
+        registrationId: string;
+        fullName: string;
+        qrToken: string;
+        manualCheckinCode: string;
+        categoryTitle: string;
+        ticketTitle: string | null;
+        email?: string;
+      }>;
     };
 
     if (!response.ok) {
@@ -507,14 +695,75 @@ export function EventBookingFlow({
     }
 
     setSubmissionState("success");
-    try { sessionStorage.removeItem(storageKey); } catch { /* ignore */ }
-    setCompletedRegistration({
-      email: result.email ?? form.email,
-      qrToken: result.qrToken ?? "demo",
-      ticketTitle: result.ticketTitle ?? selectedTicketTitle
-    });
+    try {
+      sessionStorage.removeItem(storageKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+
+    if (result.attendees && result.attendees.length > 0) {
+      setCompletedRegistration({
+        email: result.email ?? form.email,
+        attendees: result.attendees.map((attendee) => ({
+          registrationId: attendee.registrationId,
+          fullName: attendee.fullName,
+          categoryTitle: attendee.categoryTitle,
+          ticketTitle: attendee.ticketTitle,
+          qrToken: attendee.qrToken,
+          manualCheckinCode: attendee.manualCheckinCode,
+          email: attendee.email
+        }))
+      });
+    } else {
+      setCompletedRegistration({
+        email: result.email ?? form.email,
+        attendees: [{
+          registrationId: result.registrationId,
+          fullName,
+          categoryTitle: selectedCategory.title,
+          ticketTitle: selectedAdditionalCategory?.title ?? null,
+          qrToken: result.qrToken ?? "demo",
+          manualCheckinCode: result.manualCheckinCode ?? null,
+          email: form.email
+        }]
+      });
+    }
+
     setMessage(result.message ?? "Your ticket QR code has been emailed.");
   }
+
+  function handleBookAgain() {
+    setStep("tickets");
+    setTimeRemaining(HOLD_DURATION_SECONDS);
+    setSubmissionState("idle");
+    setMessage(null);
+    setSubmitAttempted(false);
+    setOtp("");
+    setOtpState("idle");
+    setOtpMessage(null);
+    setEmailVerified(false);
+    setCompletedRegistration(null);
+    setForm(INITIAL_FORM_STATE);
+
+    try {
+      sessionStorage.removeItem(storageKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+
+    router.refresh();
+
+    if (typeof window !== "undefined") {
+      requestAnimationFrame(() => {
+        window.scrollTo({ top: 0, behavior: "auto" });
+      });
+    }
+  }
+
+  const confirmedAttendee = completedRegistration?.attendees[0] ?? null;
+  const canContinueFromTickets = canProceed && Boolean(selectedCategory) && !selectedCategory?.isUnavailable;
+  const categorySectionTitle = config.categoriesLabel || "Category";
+  const additionalSectionTitle = config.ticketOptionsLabel || "Additional category";
 
   return (
     <div className="w-full">
@@ -528,6 +777,10 @@ export function EventBookingFlow({
                   setStep("tickets");
                   setSubmissionState("idle");
                   setMessage(null);
+                  setOtpState("idle");
+                  setOtp("");
+                  setOtpMessage(null);
+                  setEmailVerified(false);
                 }}
                 className="inline-flex items-center gap-2 rounded-xl p-1.5 text-sm text-slate transition hover:bg-mist hover:text-ink sm:rounded-2xl sm:px-2 sm:py-2"
               >
@@ -549,102 +802,39 @@ export function EventBookingFlow({
 
         <div className={contentLayoutClass}>
           <div className="px-3.5 py-4 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
-            {completedRegistration ? (
-              <div className="mx-auto max-w-2xl">
+            {completedRegistration && confirmedAttendee ? (
+              <div className="mx-auto max-w-5xl">
                 <div className="flex flex-col items-center pb-6 pt-1 text-center sm:pb-8 sm:pt-2">
                   <CheckCircle2 className="h-10 w-10 text-[#2c7a86] sm:h-12 sm:w-12" />
-                  <h1 className="mt-3 font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:mt-4 sm:text-3xl">Registration complete!</h1>
-                  <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-sm">A confirmation email will be sent to {completedRegistration.email}</p>
+                  <h1 className="mt-3 font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:mt-4 sm:text-3xl">
+                    Registration complete!
+                  </h1>
+                  <Button
+                    type="button"
+                    onClick={handleBookAgain}
+                    className="mt-3 rounded-2xl px-5 sm:mt-4"
+                  >
+                    Book again
+                  </Button>
+                  <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-sm">
+                    A confirmation email will be sent to {completedRegistration.email}
+                  </p>
                   {message ? <p className="mt-2 text-[13px] text-slate sm:mt-3 sm:text-sm">{message}</p> : null}
                 </div>
-
-                <div className="overflow-hidden rounded-2xl border border-slate/10 bg-white shadow-soft">
-                  <div className="relative">
-                    <img
-                      src="/train-with-dubai-police-cover.png"
-                      alt={event.title}
-                      className="block w-full h-auto"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0c1723]/90 via-[#0c1723]/30 to-transparent" />
-                    <div className="absolute inset-x-0 bottom-0 px-4 pb-4 sm:px-8 sm:pb-7">
-                      <p className="text-[9px] font-bold uppercase tracking-[0.25em] text-white/50 sm:text-xs">Your event ticket</p>
-                      <h2 className="mt-1 font-title text-base font-black italic leading-tight tracking-tight text-white sm:mt-1.5 sm:text-xl lg:text-2xl">{event.title}</h2>
-                    </div>
-                  </div>
-
-                  <div className="px-4 py-4 sm:px-8 sm:py-8">
-                    <div className="grid gap-4 sm:gap-6 sm:grid-cols-2">
-                      <div className="space-y-0.5 sm:space-y-1">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate/60 sm:text-[10px]">Attendee</p>
-                        <p className="text-[13px] font-semibold text-ink sm:text-base">{fullName}</p>
-                      </div>
-                      <div className="space-y-0.5 sm:space-y-1">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate/60 sm:text-[10px]">Admission</p>
-                        <p className="text-[13px] font-semibold text-ink sm:text-base">{completedRegistration.ticketTitle}</p>
-                      </div>
-                      <div className="space-y-0.5 sm:space-y-1">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate/60 sm:text-[10px]">Date & time</p>
-                        <div className="flex items-start gap-2 text-[13px] text-ink sm:gap-2.5 sm:text-[15px]">
-                          <CalendarDays className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2c7a86] sm:h-4 sm:w-4" />
-                          <span>{formatEventDateTimeLine(event)}</span>
-                        </div>
-                      </div>
-                      <div className="space-y-0.5 sm:space-y-1">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate/60 sm:text-[10px]">Location</p>
-                        <div className="flex items-start gap-2 text-[13px] text-ink sm:gap-2.5 sm:text-[15px]">
-                          <MapPin className="mt-0.5 h-3.5 w-3.5 shrink-0 text-[#2c7a86] sm:h-4 sm:w-4" />
-                          <span>{event.venue ?? "Venue to be announced"}</span>
-                        </div>
-                        {mapLink ? (
-                          <a
-                            href={mapLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="mt-1.5 inline-flex items-center gap-1.5 text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
-                          >
-                            <MapPin className="h-3.5 w-3.5" />
-                            View on map
-                          </a>
-                        ) : null}
-                      </div>
-                    </div>
-
-                    <div className="relative mt-6 pt-6 sm:mt-8 sm:pt-8">
-                      <div className="absolute inset-x-0 top-0 flex items-center" aria-hidden="true">
-                        <div className="absolute -left-4 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-[#fbfbfc] sm:-left-8" />
-                        <div className="w-full border-t border-dashed border-slate/15" />
-                        <div className="absolute -right-4 top-1/2 h-5 w-5 -translate-y-1/2 rounded-full bg-[#fbfbfc] sm:-right-8" />
-                      </div>
-                      <div className="flex flex-col items-center">
-                        <div className="rounded-xl border border-slate/10 bg-white p-2.5 shadow-sm sm:rounded-2xl sm:p-3">
-                          <img
-                            src={`/api/qr?token=${encodeURIComponent(completedRegistration.qrToken)}`}
-                            alt="Ticket QR code"
-                            className="block h-auto w-[160px] sm:w-[200px]"
-                          />
-                        </div>
-                        <p className="mt-3 text-center text-[13px] font-medium text-slate sm:mt-4 sm:text-sm">
-                          Present this QR code at check-in
-                        </p>
-                        <button
-                          type="button"
-                          onClick={downloadTicket}
-                          className="mt-4 inline-flex items-center gap-2 rounded-xl border border-slate/20 bg-white px-4 py-2 text-[13px] font-semibold text-ink shadow-sm transition hover:bg-mist sm:mt-5 sm:rounded-2xl sm:px-5 sm:py-2.5 sm:text-sm"
-                        >
-                          <Download className="h-4 w-4" />
-                          Download ticket
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
+                <EventTicketCard
+                  event={event}
+                  attendee={confirmedAttendee}
+                  qrSrc={`/api/qr?token=${encodeURIComponent(confirmedAttendee.qrToken)}`}
+                  mapLink={mapLink}
+                  onDownload={() => downloadTicketForAttendee(confirmedAttendee)}
+                />
               </div>
             ) : step === "tickets" ? (
               <div className="max-w-3xl">
-                <h1 className="font-title text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-4xl">{event.title}</h1>
-                <p className="mt-1 text-[13px] leading-snug text-slate sm:text-base">{TRAIN_WITH_DUBAI_POLICE_INTRO}</p>
+                <h1 className="font-title text-3xl font-black italic leading-[1.1] tracking-tight text-ink sm:text-5xl">{event.title}</h1>
+                <p className="mt-2 font-body text-sm leading-relaxed text-slate sm:mt-3 sm:text-lg">{introLine}</p>
 
-                <div className="mt-2 space-y-0.5 text-[13px] leading-snug text-slate sm:text-[15px]">
+                <div className="mt-3 space-y-1.5 font-body text-[13px] leading-relaxed text-slate sm:text-[15px]">
                   {visibleParagraphs.map((paragraph) => (
                     <p key={paragraph}>{paragraph}</p>
                   ))}
@@ -653,14 +843,14 @@ export function EventBookingFlow({
                 <button
                   type="button"
                   onClick={() => setExpandedDescription((current) => !current)}
-                  className="mt-1 text-[13px] font-semibold text-[#2e768b] transition hover:text-[#205260] sm:text-sm"
+                  className="mt-1.5 font-display text-[13px] font-bold text-[#2e768b] transition hover:text-[#205260] sm:text-sm"
                 >
                   {expandedDescription ? "Show less ^" : "Show more v"}
                 </button>
 
-                <div className="mt-6 space-y-2 border-t border-slate/10 pt-5 text-[13px] text-slate sm:mt-10 sm:space-y-3 sm:pt-7 sm:text-[15px]">
+                <div className="mt-6 space-y-2.5 border-t border-slate/10 pt-5 font-body text-[13px] text-slate sm:mt-10 sm:space-y-3 sm:pt-7 sm:text-[15px]">
                   <p>
-                    <span className="font-semibold text-ink">Location:</span> {event.venue ?? "Venue to be announced"}
+                    <span className="font-display font-bold tracking-tight text-ink">Location:</span> {event.venue ?? "Venue to be announced"}
                     {mapLink ? (
                       <>
                         {" — "}
@@ -668,7 +858,7 @@ export function EventBookingFlow({
                           href={mapLink}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 font-medium text-[#2e768b] transition hover:text-[#205260]"
+                          className="inline-flex items-center gap-1 font-display font-bold text-[#2e768b] transition hover:text-[#205260]"
                         >
                           <MapPin className="inline h-3.5 w-3.5" />
                           View on map
@@ -677,98 +867,100 @@ export function EventBookingFlow({
                     ) : null}
                   </p>
                   <p>
-                    <span className="font-semibold text-ink">Date and time:</span> {formatEventDateTimeLine(event)}
+                    <span className="font-display font-bold tracking-tight text-ink">Date and time:</span> {formatTicketDateTimeLine(event)}
                   </p>
                 </div>
 
-                <div className="mt-6 border-t border-slate/10 pt-4 sm:mt-10 sm:pt-6">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate sm:text-xs">Tickets</p>
+                <div className="mt-6 border-t border-slate/10 pt-5 sm:mt-10 sm:pt-7">
+                  <p className="font-display text-[11px] font-bold uppercase tracking-[0.2em] text-slate sm:text-xs">Booking</p>
 
-                  <div className="mt-3 grid gap-0 sm:mt-4">
-                    <div className="border-b border-slate/10 py-4 sm:py-6">
-                      <div className="flex items-start justify-between gap-3 sm:flex-row">
-                        <div className="min-w-0">
-                          <h2 className="font-title text-lg font-black italic leading-tight tracking-tight text-ink sm:text-2xl md:text-[28px]">{generalAdmission.title}</h2>
-                          {generalAdmission.note ? <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-[15px]">{generalAdmission.note}</p> : null}
+                  <div className="mt-4 space-y-6 sm:mt-6 sm:space-y-8">
+                    <div className="space-y-3">
+                      <div className="flex items-end justify-between gap-4">
+                        <div>
+                          <p className="font-display text-[15px] font-bold tracking-tight text-ink sm:text-lg">{categorySectionTitle}</p>
+                          <p className="font-body text-[13px] text-slate sm:text-sm">
+                            Choose one base category for this registration.
+                          </p>
                         </div>
-                        <div className="shrink-0">
-                          {generalAdmission.soldOut ? (
-                            <span className="inline-flex rounded-xl border border-slate/15 bg-white px-3 py-2 text-xs font-medium text-slate sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
-                              Unavailable
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center justify-center rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-semibold text-emerald-700 sm:min-w-[108px] sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
-                              Included
-                            </span>
-                          )}
-                        </div>
+                        <p className="text-[12px] font-medium text-slate sm:text-sm">
+                          {event.capacity
+                            ? `${Math.max(event.capacity - registrationCount, 0)} places remaining`
+                            : "Open registration"}
+                        </p>
+                      </div>
+
+                      <div className="space-y-3">
+                        {categories.map((category) => (
+                          <SelectionCard
+                            key={category.id}
+                            title={category.title}
+                            description={category.description}
+                            note={category.note}
+                            meta={getAvailabilityMeta(category)}
+                            selected={selectedCategoryId === category.id}
+                            disabled={category.isUnavailable}
+                            onClick={() => {
+                              setSelectedCategoryId(category.id);
+                              setMessage(null);
+                            }}
+                          />
+                        ))}
                       </div>
                     </div>
 
-                    {bootcampOptions.length > 0 ? (
-                      <div className="border-b border-slate/10 py-3 sm:py-4">
-                        <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-slate sm:text-xs">Optional bootcamp add-on</p>
-                        {bootcampOptions.length > 1 ? (
-                          <p className="mt-0.5 text-[13px] text-slate sm:mt-1 sm:text-sm">Select one bootcamp session to add to your admission.</p>
-                        ) : null}
+                    {additionalCategories.length > 0 ? (
+                      <div className="space-y-3">
+                        <div>
+                          <p className="font-display text-[15px] font-bold tracking-tight text-ink sm:text-lg">{additionalSectionTitle}</p>
+                          <p className="font-body text-[13px] text-slate sm:text-sm">
+                            Optional. Select one additional category if you want one. Click it again to remove it.
+                          </p>
+                        </div>
+
+                        <div className="space-y-3">
+                          {additionalCategories.map((category) => (
+                            <SelectionCard
+                              key={category.id}
+                              title={category.title}
+                              description={category.description}
+                              note={category.note}
+                              meta={getAvailabilityMeta(category)}
+                              selected={selectedAdditionalCategoryId === category.id}
+                              disabled={category.isUnavailable}
+                              onClick={() => {
+                                setSelectedAdditionalCategoryId((current) => current === category.id ? null : category.id);
+                                setMessage(null);
+                              }}
+                            />
+                          ))}
+                        </div>
                       </div>
                     ) : null}
-
-                    {bootcampOptions.map((ticket) => {
-                      const isSelected = selectedBootcampId === ticket.id;
-
-                      return (
-                        <div key={ticket.id} className="border-b border-slate/10 py-4 sm:py-6">
-                          <div className="flex items-start justify-between gap-3 sm:flex-row">
-                            <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-                                <h2 className="font-title text-lg font-black italic leading-tight tracking-tight text-ink sm:text-2xl md:text-[28px]">{ticket.title}</h2>
-                                {ticket.badge ? (
-                                  <span className="rounded-full border border-slate/15 px-2 py-0.5 text-[11px] font-medium text-slate sm:px-3 sm:py-1 sm:text-xs">
-                                    {ticket.badge}
-                                  </span>
-                                ) : null}
-                              </div>
-                              {ticket.note ? <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-[15px]">{ticket.note}</p> : null}
-                            </div>
-
-                            <div className="shrink-0">
-                              {ticket.soldOut ? (
-                                <span className="inline-flex rounded-xl border border-slate/15 bg-white px-3 py-2 text-xs font-medium text-slate sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
-                                  Unavailable
-                                </span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setSelectedBootcampId(isSelected ? null : ticket.id);
-                                    setMessage(null);
-                                  }}
-                                  className={`inline-flex items-center justify-center rounded-xl border px-3 py-2 text-xs font-semibold transition sm:min-w-[108px] sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm ${
-                                    isSelected
-                                      ? "border-ink bg-ink text-white"
-                                      : "border-slate/20 bg-white text-ink hover:bg-mist"
-                                  }`}
-                                >
-                                  {isSelected ? "Added" : "Add"}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
                   </div>
 
                   {registrationState.state !== "open" ? (
-                    <p className="mt-3 rounded-xl px-3.5 py-2.5 text-[13px] text-rose-700 bg-rose-50 sm:mt-4 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">{registrationState.label}</p>
+                    <p className="mt-3 rounded-xl bg-rose-50 px-3.5 py-2.5 text-[13px] text-rose-700 sm:mt-4 sm:rounded-2xl sm:px-4 sm:py-3 sm:text-sm">
+                      {registrationState.label}
+                    </p>
                   ) : null}
                 </div>
               </div>
             ) : (
               <div className="max-w-3xl">
                 <h1 className="font-title text-2xl font-black italic leading-tight tracking-tight text-ink sm:text-4xl">{event.title}</h1>
-                <p className="mt-1 text-[13px] leading-snug text-slate sm:mt-2 sm:text-base">{formatEventDateTimeLine(event)}</p>
+                <p className="mt-1 text-[13px] leading-snug text-slate sm:mt-2 sm:text-base">{formatTicketDateTimeLine(event)}</p>
+
+                {selectedCategory ? (
+                  <div className="mt-5 rounded-2xl border border-slate/10 bg-[#fbfbfc] px-4 py-3 sm:mt-7 sm:px-5 sm:py-4">
+                    <p className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate">Selected admission</p>
+                    <div className="mt-2 rounded-2xl border border-slate/10 bg-white px-4 py-3">
+                      <p className="font-display text-[15px] font-bold tracking-tight text-ink sm:text-base">
+                        {selectionDisplayLabel}
+                      </p>
+                    </div>
+                  </div>
+                ) : null}
 
                 <div className="mt-5 border-t border-slate/10 pt-5 sm:mt-8 sm:pt-7">
                   <p className="text-[13px] font-semibold uppercase tracking-[0.03em] text-ink sm:text-[15px]">Contact information</p>
@@ -777,54 +969,60 @@ export function EventBookingFlow({
                     <Field label="First name" hint="Required">
                       <Input
                         value={form.firstName}
-                        onChange={(eventObject) =>
-                          setForm((current) => ({ ...current, firstName: eventObject.target.value }))
-                        }
+                        onChange={(e) => setForm((current) => ({ ...current, firstName: e.target.value }))}
                         aria-invalid={requiredErrors.firstName}
                         className={`rounded-2xl px-3.5 py-3 ${requiredErrors.firstName ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
-                      {requiredErrors.firstName ? (
-                        <p className="mt-2 text-sm text-rose-700">First name is required.</p>
-                      ) : null}
+                      {requiredErrors.firstName ? <p className="mt-2 text-sm text-rose-700">First name is required.</p> : null}
                     </Field>
                     <Field label="Last name" hint="Required">
                       <Input
                         value={form.lastName}
-                        onChange={(eventObject) =>
-                          setForm((current) => ({ ...current, lastName: eventObject.target.value }))
-                        }
+                        onChange={(e) => setForm((current) => ({ ...current, lastName: e.target.value }))}
                         aria-invalid={requiredErrors.lastName}
                         className={`rounded-2xl px-3.5 py-3 ${requiredErrors.lastName ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
-                      {requiredErrors.lastName ? (
-                        <p className="mt-2 text-sm text-rose-700">Last name is required.</p>
-                      ) : null}
+                      {requiredErrors.lastName ? <p className="mt-2 text-sm text-rose-700">Last name is required.</p> : null}
                     </Field>
                   </div>
 
                   <div className="mt-3 sm:mt-5">
-                    <Field label="Email address" hint="Required">
-                      <Input
-                        type="email"
-                        value={form.email}
-                        onChange={(eventObject) => {
-                          const newEmail = eventObject.target.value;
-                          setForm((current) => ({ ...current, email: newEmail }));
-                          if (emailVerified) {
-                            setEmailVerified(false);
-                            setOtpState("idle");
-                            setOtp("");
-                            setOtpMessage(null);
-                          }
-                        }}
-                        aria-invalid={requiredErrors.email || requiredErrors.emailVerified}
-                        className={`rounded-2xl px-3.5 py-3 ${
-                          requiredErrors.email || requiredErrors.emailVerified
-                            ? "border-rose-400 focus-visible:ring-rose-400"
-                            : "border-slate/25"
-                        }`}
-                      />
-                    </Field>
+                    <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+                      <Field label="Email address" hint="Required" htmlFor={emailInputId}>
+                        <Input
+                          id={emailInputId}
+                          type="email"
+                          value={form.email}
+                          onChange={(e) => {
+                            const newEmail = e.target.value;
+                            setForm((current) => ({ ...current, email: newEmail }));
+                            if (emailVerified) {
+                              setEmailVerified(false);
+                              setOtpState("idle");
+                              setOtp("");
+                              setOtpMessage(null);
+                            }
+                          }}
+                          aria-invalid={requiredErrors.email || requiredErrors.emailVerified}
+                          className={`rounded-2xl px-3.5 py-3 ${
+                            requiredErrors.email || requiredErrors.emailVerified
+                              ? "border-rose-400 focus-visible:ring-rose-400"
+                              : "border-slate/25"
+                          }`}
+                        />
+                      </Field>
+
+                      {!emailVerified && otpState !== "sent" ? (
+                        <Button
+                          type="button"
+                          onClick={async () => { await sendOtp("/api/register/start"); }}
+                          disabled={otpState === "sending" || !form.firstName.trim() || !form.lastName.trim() || !form.email.trim() || !isValidEmail}
+                          className="h-[46px] rounded-2xl px-5"
+                        >
+                          {otpState === "sending" ? "Sending..." : "Verify email"}
+                        </Button>
+                      ) : null}
+                    </div>
                     <p className="mt-2 text-sm text-slate">This will be used for your confirmation email.</p>
                     {requiredErrors.email ? (
                       <p className="mt-2 text-sm text-rose-700">Enter a valid email address.</p>
@@ -836,33 +1034,18 @@ export function EventBookingFlow({
                         <CheckCircle2 className="h-4 w-4" />
                         <span>Email verified</span>
                       </div>
-                    ) : otpState !== "sent" ? (
-                      <div className="mt-4">
-                        <Button
-                          type="button"
-                          onClick={async () => {
-                            await sendOtp("/api/register/start");
-                          }}
-                          disabled={otpState === "sending" || !form.email.trim() || !isValidEmail || !form.firstName.trim() || !form.lastName.trim()}
-                          className="rounded-2xl px-5 py-3"
-                        >
-                          {otpState === "sending" ? "Sending..." : "Send OTP"}
-                        </Button>
-                      </div>
-                    ) : (
+                    ) : otpState === "sent" ? (
                       <div className="mt-4 space-y-3">
                         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
                           <Input
                             value={otp}
-                            onChange={(eventObject) => setOtp(eventObject.target.value)}
+                            onChange={(e) => setOtp(e.target.value)}
                             placeholder="Enter 6-digit code"
                             className="rounded-2xl border-slate/25 px-3.5 py-3"
                           />
                           <Button
                             type="button"
-                            onClick={() => {
-                              void verifyOtpCode();
-                            }}
+                            onClick={() => { void verifyOtpCode(); }}
                             disabled={verifyingOtp || !otp.trim()}
                             className="rounded-2xl px-5 py-3"
                           >
@@ -871,16 +1054,14 @@ export function EventBookingFlow({
                         </div>
                         <button
                           type="button"
-                          onClick={async () => {
-                            await sendOtp("/api/register/resend-verification");
-                          }}
+                          onClick={async () => { await sendOtp("/api/register/resend-verification"); }}
                           disabled={verifyingOtp}
                           className="text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
                         >
                           Didn&apos;t receive a code? Resend OTP
                         </button>
                       </div>
-                    )}
+                    ) : null}
                     {otpMessage ? (
                       <p className={`mt-2 text-sm ${otpMessage.error ? "text-rose-600" : "text-slate"}`}>
                         {otpMessage.text}
@@ -892,15 +1073,11 @@ export function EventBookingFlow({
                     <Field label="Phone number" hint="Required">
                       <Input
                         value={form.phone}
-                        onChange={(eventObject) =>
-                          setForm((current) => ({ ...current, phone: eventObject.target.value }))
-                        }
-                        aria-invalid={requiredErrors.phone}
-                        className={`rounded-2xl px-3.5 py-3 ${requiredErrors.phone ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
+                        onChange={(e) => setForm((current) => ({ ...current, phone: e.target.value }))}
+                        aria-invalid={Boolean(phoneErrorMessage)}
+                        className={`rounded-2xl px-3.5 py-3 ${phoneErrorMessage ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
-                      {requiredErrors.phone ? (
-                        <p className="mt-2 text-sm text-rose-700">Phone number is required.</p>
-                      ) : null}
+                      {phoneErrorMessage ? <p className="mt-2 text-sm text-rose-700">{phoneErrorMessage}</p> : null}
                     </Field>
                     <Field label="Age" hint="Required">
                       <Input
@@ -908,46 +1085,47 @@ export function EventBookingFlow({
                         min={1}
                         max={120}
                         value={form.age}
-                        onChange={(eventObject) =>
-                          setForm((current) => ({ ...current, age: eventObject.target.value }))
-                        }
+                        onChange={(e) => setForm((current) => ({ ...current, age: e.target.value }))}
                         aria-invalid={requiredErrors.age}
                         className={`rounded-2xl px-3.5 py-3 ${requiredErrors.age ? "border-rose-400 focus-visible:ring-rose-400" : "border-slate/25"}`}
                       />
-                      {requiredErrors.age ? (
-                        <p className="mt-2 text-sm text-rose-700">Age is required.</p>
-                      ) : null}
+                      {requiredErrors.age ? <p className="mt-2 text-sm text-rose-700">Age is required.</p> : null}
                     </Field>
                   </div>
 
-                  <div className="mt-3 sm:mt-5">
-                    <Field label="UAE resident" hint="Required">
-                      <select
+                  <div className="mt-3 grid gap-3 sm:mt-5 sm:gap-4 sm:grid-cols-2">
+                    <Field
+                      label={`UAE resident — ${form.uaeResident ? "Yes" : "No"}`}
+                      hint="Required"
+                      htmlFor={uaeResidentSelectId}
+                    >
+                      <Select
+                        id={uaeResidentSelectId}
                         value={form.uaeResident ? "yes" : "no"}
-                        onChange={(eventObject) =>
-                          setForm((current) => ({ ...current, uaeResident: eventObject.target.value === "yes" }))
-                        }
-                        className="w-full rounded-2xl border border-slate/25 bg-white px-3.5 py-3 text-sm text-ink outline-none transition focus:border-ink focus:ring-1 focus:ring-ink"
+                        onChange={(e) => setForm((current) => ({ ...current, uaeResident: e.target.value === "yes" }))}
+                        className="rounded-md border-slate/25 bg-white px-3 py-2 text-sm focus:border-ink focus:ring-1 focus:ring-ink"
                       >
                         <option value="no">No</option>
                         <option value="yes">Yes</option>
-                      </select>
+                      </Select>
                     </Field>
                   </div>
+                </div>
 
-                  <div className="mt-5 border-t border-slate/10 pt-5 sm:mt-8 sm:pt-7">
-                    <div className="flex items-center justify-between gap-2">
-                      <p className="text-[13px] font-semibold uppercase tracking-[0.03em] text-ink sm:text-[15px]">Disclaimer</p>
+                <div className="mt-5 border-t border-slate/10 pt-5 sm:mt-8 sm:pt-7">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-[13px] font-semibold uppercase tracking-[0.03em] text-ink sm:text-[15px]">Disclaimer</p>
+                    {hasPdf ? (
                       <div className="flex items-center gap-3">
                         <button
                           type="button"
-                          onClick={() => setPdfPreviewOpen((v) => !v)}
+                          onClick={() => setPdfPreviewOpen((value) => !value)}
                           className="text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
                         >
                           {pdfPreviewOpen ? "Hide preview" : "Show preview"}
                         </button>
                         <a
-                          href="/disclaimer-dubai-autodrome.pdf"
+                          href={disclaimerPdfUrl!}
                           target="_blank"
                           rel="noopener noreferrer"
                           className="hidden items-center gap-1.5 text-sm font-medium text-[#2e768b] transition hover:text-[#205260] sm:inline-flex"
@@ -956,220 +1134,209 @@ export function EventBookingFlow({
                           Open full PDF
                         </a>
                       </div>
-                    </div>
-                    <p className="mt-2 text-sm text-slate">
-                      Waiver of Liability and Declaration of Assumption of Risk — Dubai Autodrome
-                    </p>
-
-                    {pdfPreviewOpen && (
-                      <div className="mt-4">
-                        <div
-                          className="relative overflow-auto rounded-2xl border border-slate/15 [-webkit-overflow-scrolling:touch]"
-                          style={{ maxHeight: "60vh" }}
-                        >
-                        <PdfViewer src="/disclaimer-dubai-autodrome.pdf" className="w-full" />
-                        </div>
-
-                        <a
-                          href="/disclaimer-dubai-autodrome.pdf"
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate/20 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm transition active:bg-mist sm:hidden"
-                        >
-                          <FileText className="h-4 w-4 text-[#2e768b]" />
-                          View full PDF
-                        </a>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-5 space-y-3 border-t border-slate/10 pt-5 text-[13px] leading-relaxed text-slate text-justify sm:mt-8 sm:space-y-4 sm:pt-7 sm:text-[15px]">
-                    <div>
-                      <p className={termsExpanded ? "" : "line-clamp-5"}>
-                        {event.declaration_text}
-                      </p>
-                      {event.declaration_text && event.declaration_text.length > 120 && (
-                        <button
-                          type="button"
-                          onClick={() => setTermsExpanded((v) => !v)}
-                          className="mt-1 text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
-                        >
-                          {termsExpanded ? (
-                            <>View less <ChevronUp className="inline h-4 w-4" /></>
-                          ) : (
-                            <>View more <ChevronDown className="inline h-4 w-4" /></>
-                          )}
-                        </button>
-                      )}
-                    </div>
-
-                    <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
-                      <Checkbox
-                        checked={form.declarationAccepted}
-                        onChange={(eventObject) =>
-                          setForm((current) => ({ ...current, declarationAccepted: eventObject.target.checked }))
-                        }
-                        className="mt-1 rounded border-slate/35"
-                      />
-                      <span className={requiredErrors.declarationAccepted ? "text-rose-700" : ""}>I agree to the Terms & Conditions</span>
-                    </label>
-                    {requiredErrors.declarationAccepted ? (
-                      <p className="text-sm text-rose-700">You must accept the Terms & Conditions.</p>
                     ) : null}
-
-                    <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
-                      <Checkbox
-                        checked={form.marketingOptIn}
-                        onChange={(eventObject) =>
-                          setForm((current) => ({ ...current, marketingOptIn: eventObject.target.checked }))
-                        }
-                        className="mt-1 rounded border-slate/35"
-                      />
-                      <span>I would like to receive your marketing emails.</span>
-                    </label>
                   </div>
+                  {disclaimerHeading ? (
+                    <p className="mt-2 text-sm text-slate">{disclaimerHeading}</p>
+                  ) : null}
 
-                  <input
-                    tabIndex={-1}
-                    autoComplete="off"
-                    className="hidden"
-                    name="website"
-                    value={form.website}
-                    onChange={(eventObject) =>
-                      setForm((current) => ({ ...current, website: eventObject.target.value }))
-                    }
-                  />
+                  {hasPdf && pdfPreviewOpen ? (
+                    <div className="mt-4">
+                      <div
+                        className="relative overflow-auto rounded-2xl border border-slate/15 [-webkit-overflow-scrolling:touch]"
+                        style={{ maxHeight: "60vh" }}
+                      >
+                        <PdfViewer src={disclaimerPdfUrl!} className="w-full" />
+                      </div>
 
-                  {message && (submissionState === "error" || submissionState === "success") ? (
-                    <div
-                      className={`mt-6 rounded-2xl px-4 py-3 text-sm ${
-                        submissionState === "error" ? "bg-rose-100 text-rose-900" : "bg-emerald-100 text-emerald-900"
-                      }`}
-                    >
-                      {message}
+                      <a
+                        href={disclaimerPdfUrl!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-slate/20 bg-white px-4 py-3 text-sm font-semibold text-ink shadow-sm transition active:bg-mist sm:hidden"
+                      >
+                        <FileText className="h-4 w-4 text-[#2e768b]" />
+                        View full PDF
+                      </a>
                     </div>
                   ) : null}
                 </div>
+
+                <div className="mt-5 space-y-3 border-t border-slate/10 pt-5 text-[13px] leading-relaxed text-slate text-justify sm:mt-8 sm:space-y-4 sm:pt-7 sm:text-[15px]">
+                  <div>
+                    <p className={termsExpanded ? "" : "line-clamp-5"}>
+                      {event.declaration_text}
+                    </p>
+                    {event.declaration_text && event.declaration_text.length > 120 ? (
+                      <button
+                        type="button"
+                        onClick={() => setTermsExpanded((value) => !value)}
+                        className="mt-1 text-sm font-medium text-[#2e768b] transition hover:text-[#205260]"
+                      >
+                        {termsExpanded ? (
+                          <>View less <ChevronUp className="inline h-4 w-4" /></>
+                        ) : (
+                          <>View more <ChevronDown className="inline h-4 w-4" /></>
+                        )}
+                      </button>
+                    ) : null}
+                  </div>
+
+                  <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
+                    <Checkbox
+                      checked={form.declarationAccepted}
+                      onChange={(e) => setForm((current) => ({ ...current, declarationAccepted: e.target.checked }))}
+                      className="mt-1 rounded border-slate/35"
+                    />
+                    <span className={requiredErrors.declarationAccepted ? "text-rose-700" : ""}>
+                      I agree to the Terms & Conditions
+                    </span>
+                  </label>
+                  {requiredErrors.declarationAccepted ? (
+                    <p className="text-sm text-rose-700">You must accept the Terms & Conditions.</p>
+                  ) : null}
+
+                  <label className="flex items-start gap-3 text-[15px] leading-snug text-slate">
+                    <Checkbox
+                      checked={form.marketingOptIn}
+                      onChange={(e) => setForm((current) => ({ ...current, marketingOptIn: e.target.checked }))}
+                      className="mt-1 rounded border-slate/35"
+                    />
+                    <span>I would like to receive your marketing emails.</span>
+                  </label>
+                </div>
+
+                <input
+                  tabIndex={-1}
+                  autoComplete="off"
+                  className="hidden"
+                  name="website"
+                  value={form.website}
+                  onChange={(e) => setForm((current) => ({ ...current, website: e.target.value }))}
+                />
+
+                {message && (submissionState === "error" || submissionState === "success") ? (
+                  <div
+                    className={`mt-6 rounded-2xl px-4 py-3 text-sm ${
+                      submissionState === "error" ? "bg-rose-100 text-rose-900" : "bg-emerald-100 text-emerald-900"
+                    }`}
+                  >
+                    {message}
+                  </div>
+                ) : null}
               </div>
             )}
           </div>
 
           {!completedRegistration ? (
             <aside className="border-t border-slate/10 bg-[#fbfbfc] px-3.5 py-4 sm:px-6 sm:py-8 md:border-l md:border-t-0 lg:px-8">
-            <div className="lg:sticky lg:top-6">
-              <div className="mx-auto hidden max-w-[276px] overflow-hidden rounded-2xl border border-slate/10 bg-white sm:block">
-                <div className="relative bg-white">
-                  <img src="/train-with-dubai-police-cover.png" alt={event.title} className="block h-auto w-full" />
-                </div>
-              </div>
-
-              <div className="sm:mt-6">
-                <h3 className="font-title text-lg font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]">Registration summary</h3>
-
-                <div className="mt-3 space-y-3 text-[13px] text-slate sm:mt-6 sm:space-y-4 sm:text-[15px]">
-                  <div className="flex items-start justify-between gap-3 sm:gap-4">
-                    <div>
-                      <p className="text-ink">{selectedTicketTitle}</p>
-                      <div className="mt-2 space-y-1.5 text-[12px] sm:mt-3 sm:space-y-2 sm:text-sm">
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          <span className="line-clamp-1">{event.venue ?? "Venue to be announced"}</span>
-                        </div>
-                        {mapLink ? (
-                          <a
-                            href={mapLink}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 font-medium text-[#2e768b] transition hover:text-[#205260]"
-                          >
-                            <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                            <span>View on map</span>
-                          </a>
-                        ) : null}
-                        <div className="flex items-center gap-2">
-                          <Clock3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-                          <span>{formatEventDateTimeLine(event)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <span className="text-ink">x1</span>
+              <div className="lg:sticky lg:top-6">
+                <div className="mx-auto hidden max-w-[276px] overflow-hidden rounded-2xl border border-slate/10 bg-white sm:block">
+                  <div className="relative bg-white">
+                    <img src={posterImage} alt={event.title} className="block h-auto w-full" />
                   </div>
                 </div>
 
-                {!completedRegistration ? (
-                  <>
-                    <Button
-                      type="button"
-                      onClick={() => {
-                        if (step === "tickets") {
-                          if (!canProceed) {
-                            return;
-                          }
+                <div className="sm:mt-6">
+                  <h3 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]">Registration summary</h3>
 
-                          setStep("details");
-                          if (typeof window !== "undefined") {
-                            requestAnimationFrame(() => {
-                              window.scrollTo({ top: 0, behavior: "auto" });
-                            });
-                          }
-                          return;
-                        }
+                  <div className="mt-3 space-y-3 font-body text-[13px] text-slate sm:mt-6 sm:space-y-4 sm:text-[15px]">
+                    <div className="border-b border-slate/10 pb-3">
+                      <p className="font-display font-bold tracking-tight text-ink">Selected admission</p>
+                      <p className="mt-1 text-sm text-slate">{selectionDisplayLabel}</p>
+                    </div>
 
-                        if (submissionState === "submitting") return;
-                        setSubmitAttempted(true);
+                    <div className="space-y-1.5 font-body text-[12px] sm:space-y-2 sm:text-sm">
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        <span className="line-clamp-1">{event.venue ?? "Venue to be announced"}</span>
+                      </div>
+                      {mapLink ? (
+                        <a
+                          href={mapLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="flex items-center gap-2 font-medium text-[#2e768b] transition hover:text-[#205260]"
+                        >
+                          <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                          <span>View on map</span>
+                        </a>
+                      ) : null}
+                      <div className="flex items-center gap-2">
+                        <Clock3 className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+                        <span>{formatTicketDateTimeLine(event)}</span>
+                      </div>
+                    </div>
+                  </div>
 
-                        if (timeRemaining === 0) {
-                          setMessage("Your hold expired. Go back and continue again to restart the session.");
-                          return;
+                  <Button
+                    type="button"
+                    onClick={() => {
+                      if (step === "tickets") {
+                        if (!canContinueFromTickets) return;
+                        setStep("details");
+                        setMessage(null);
+                        if (typeof window !== "undefined") {
+                          requestAnimationFrame(() => {
+                            window.scrollTo({ top: 0, behavior: "auto" });
+                          });
                         }
-                        if (!form.firstName.trim() || !form.lastName.trim()) {
-                          setMessage("Please enter your first and last name.");
-                          return;
-                        }
-                        if (!form.email.trim()) {
-                          setMessage("Please enter your email address.");
-                          return;
-                        }
-                        if (!emailVerified) {
-                          setMessage("Please verify your email above to complete registration.");
-                          return;
-                        }
-                        if (!form.phone.trim()) {
-                          setMessage("Please enter your phone number.");
-                          return;
-                        }
-                        if (!form.age.trim()) {
-                          setMessage("Please enter your age.");
-                          return;
-                        }
-                        if (!form.declarationAccepted) {
-                          setMessage("Please accept the Terms & Conditions.");
-                          return;
-                        }
-
-                        void submitRegistration();
-                      }}
-                      disabled={
-                        step === "tickets"
-                          ? !canProceed
-                          : submissionState === "submitting"
+                        return;
                       }
-                      className="mt-4 w-full rounded-xl py-2.5 text-[13px] text-white bg-black hover:bg-black/90 sm:mt-6 sm:rounded-2xl sm:py-3 sm:text-base"
-                    >
-                      {step === "tickets"
-                        ? "Continue"
-                        : submissionState === "submitting"
-                          ? "Completing registration..."
-                          : "Complete registration"}
-                    </Button>
 
-                    {step === "details" && message && submissionState !== "submitting" ? (
-                      <p className="mt-3 text-sm text-rose-700">{message}</p>
-                    ) : null}
-                  </>
-                ) : null}
+                      if (submissionState === "submitting") return;
+                      setSubmitAttempted(true);
+
+                      if (timeRemaining === 0) {
+                        setMessage("Your hold expired. Go back and continue again to restart the session.");
+                        return;
+                      }
+                      if (!selectedCategory) {
+                        setMessage("Please select a category.");
+                        return;
+                      }
+                      if (!form.firstName.trim() || !form.lastName.trim()) {
+                        setMessage("Please enter your first and last name.");
+                        return;
+                      }
+                      if (!form.email.trim()) {
+                        setMessage("Please enter your email address.");
+                        return;
+                      }
+                      if (!emailVerified) {
+                        setMessage("Please verify your email above to complete registration.");
+                        return;
+                      }
+                      if (!form.phone.trim()) {
+                        setMessage("Please enter your phone number.");
+                        return;
+                      }
+                      if (!form.age.trim()) {
+                        setMessage("Please enter your age.");
+                        return;
+                      }
+                      if (!form.declarationAccepted) {
+                        setMessage("Please accept the Terms & Conditions.");
+                        return;
+                      }
+
+                      void submitRegistration();
+                    }}
+                    disabled={step === "tickets" ? !canContinueFromTickets : submissionState === "submitting"}
+                    className="mt-4 w-full rounded-xl bg-black py-2.5 font-display text-[14px] font-bold tracking-tight text-white hover:bg-black/90 sm:mt-6 sm:rounded-2xl sm:py-3.5 sm:text-base"
+                  >
+                    {step === "tickets"
+                      ? "Continue"
+                      : submissionState === "submitting"
+                        ? "Completing registration..."
+                        : "Complete registration"}
+                  </Button>
+
+                  {step === "details" && message && submissionState !== "submitting" ? (
+                    <p className="mt-3 text-sm text-rose-700">{message}</p>
+                  ) : null}
+                </div>
               </div>
-            </div>
             </aside>
           ) : null}
         </div>

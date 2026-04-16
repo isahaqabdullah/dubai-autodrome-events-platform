@@ -1,7 +1,8 @@
 import { clsx } from "clsx";
 import { fromZonedTime, toZonedTime } from "date-fns-tz";
 import type { EventFormConfig, EventRecord, RegistrationWindowState } from "@/lib/types";
-import { DEFAULT_FORM_CONFIG } from "@/lib/constants";
+import { DEFAULT_CATEGORY, DEFAULT_FORM_CONFIG, SYNTHETIC_EMAIL_DOMAIN } from "@/lib/constants";
+import type { EventTicketOption } from "@/lib/types";
 
 export function cn(...values: Array<string | undefined | false | null>) {
   return clsx(values);
@@ -27,6 +28,20 @@ export function normalizePhone(phone?: string | null) {
 
   const trimmed = phone.trim();
   return trimmed.length > 0 ? trimmed : null;
+}
+
+export const PHONE_NUMBER_VALIDATION_MESSAGE =
+  "Use 8-15 digits. Spaces, dashes, parentheses, and an optional leading + are allowed.";
+
+export function isValidPhoneNumber(phone: string) {
+  const trimmed = phone.trim();
+
+  if (!trimmed || !/^\+?[\d\s\-()]+$/.test(trimmed)) {
+    return false;
+  }
+
+  const digitsOnly = trimmed.replace(/\D/g, "");
+  return digitsOnly.length >= 8 && digitsOnly.length <= 15;
 }
 
 export function blankToNull(value: string | null | undefined) {
@@ -115,4 +130,16 @@ export function zonedInputToUtcIso(value: string, timeZone: string) {
 
 export function buildAbsoluteUrl(baseUrl: string, path: string) {
   return new URL(path, baseUrl).toString();
+}
+
+export function isSyntheticEmail(email: string) {
+  return email.endsWith(`@${SYNTHETIC_EMAIL_DOMAIN}`);
+}
+
+export function resolveCategories(config: EventFormConfig | null | undefined): EventTicketOption[] {
+  const categories = config?.categories;
+  if (categories && categories.length > 0) {
+    return categories;
+  }
+  return [{ id: DEFAULT_CATEGORY.id, title: DEFAULT_CATEGORY.title, description: DEFAULT_CATEGORY.description }];
 }

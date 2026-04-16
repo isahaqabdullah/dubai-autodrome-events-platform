@@ -7,7 +7,7 @@ import { buildQrEmailAttachment, buildQrEmailCid } from "@/lib/qr";
 import { generateOpaqueToken, hashOpaqueToken } from "@/lib/tokens";
 import type { AuthenticatedAppUser } from "@/lib/auth";
 import type { EventRecord } from "@/lib/types";
-import { blankToNull, buildAbsoluteUrl, slugify, zonedInputToUtcIso } from "@/lib/utils";
+import { blankToNull, buildAbsoluteUrl, isSyntheticEmail, slugify, zonedInputToUtcIso } from "@/lib/utils";
 import { adminEventSchema } from "@/lib/validation/admin";
 import { buildConfirmationEmail } from "@/services/email-templates";
 import { executeEmailJob } from "@/services/email-jobs";
@@ -15,6 +15,11 @@ import { sendMail } from "@/services/mailer";
 import type { z } from "zod";
 
 type AdminEventInput = z.infer<typeof adminEventSchema>;
+
+function splitParagraphs(text: string | undefined | null): string[] | undefined {
+  if (!text?.trim()) return undefined;
+  return text.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+}
 
 function buildEventPayload(input: AdminEventInput) {
   const timeZone = input.timezone.trim();
@@ -39,6 +44,17 @@ function buildEventPayload(input: AdminEventInput) {
     form_config: {
       submitLabel: blankToNull(input.submitLabel),
       mapLink: blankToNull(input.mapLink),
+      categoriesLabel: blankToNull(input.categoriesLabel),
+      ticketOptionsLabel: blankToNull(input.ticketOptionsLabel),
+      categories: (input.categories ?? []).map((cat) => ({
+        id: cat.id.trim(),
+        title: cat.title.trim(),
+        description: cat.description?.trim() ?? "",
+        note: blankToNull(cat.note),
+        badge: blankToNull(cat.badge),
+        capacity: cat.capacity ?? null,
+        soldOut: cat.soldOut
+      })),
       ticketOptions: input.ticketOptions.map((ticket) => ({
         id: ticket.id.trim(),
         title: ticket.title.trim(),
@@ -47,7 +63,14 @@ function buildEventPayload(input: AdminEventInput) {
         badge: blankToNull(ticket.badge),
         capacity: ticket.capacity ?? null,
         soldOut: ticket.soldOut
-      }))
+      })),
+      posterImage: blankToNull(input.posterImage),
+      introLine: blankToNull(input.introLine),
+      descriptionParagraphs: splitParagraphs(input.descriptionText),
+      emailIntroLine: blankToNull(input.emailIntroLine),
+      emailDescriptionParagraphs: splitParagraphs(input.emailDescriptionText),
+      disclaimerPdfUrl: blankToNull(input.disclaimerPdfUrl),
+      disclaimerHeading: blankToNull(input.disclaimerHeading)
     }
   };
 }
@@ -182,19 +205,6 @@ export async function deleteEvent(eventId: string, actor: AuthenticatedAppUser) 
     throw fetchError;
   }
 
-  const { count, error: countError } = await supabase
-    .from("registrations")
-    .select("*", { count: "exact", head: true })
-    .eq("event_id", eventId);
-
-  if (countError) {
-    throw countError;
-  }
-
-  if ((count ?? 0) > 0) {
-    throw new Error("Cannot delete an event that has registrations. Revoke or remove all registrations first.");
-  }
-
   const { error: deletePendingError } = await supabase
     .from("pending_registrations")
     .delete()
@@ -258,7 +268,7 @@ export async function listRegistrations(filters: {
   let query = supabase
     .from("registrations")
     .select(
-      "id, event_id, full_name, email_raw, phone, age, uae_resident, ticket_option_title, status, checked_in_at, created_at, events(title, slug)"
+      "id, event_id, full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, checked_in_at, created_at, booking_id, is_primary, registered_by_email, events(title, slug)"
     )
     .order("created_at", { ascending: false });
 
@@ -348,7 +358,7 @@ export async function rotateQrAndResend(registrationId: string, actor: Authentic
 
   const { data: registration, error } = await supabase
     .from("registrations")
-    .select("id, event_id, full_name, email_raw, status, ticket_option_title, events(*)")
+    .select("id, event_id, full_name, email_raw, manual_checkin_code, status, ticket_option_title, events(*)")
     .eq("id", registrationId)
     .single();
 
@@ -358,6 +368,10 @@ export async function rotateQrAndResend(registrationId: string, actor: Authentic
 
   if (registration.status === "revoked" || registration.status === "cancelled") {
     throw new Error("Cannot resend QR for a revoked or cancelled registration.");
+  }
+
+  if (isSyntheticEmail(registration.email_raw)) {
+    throw new Error("No email on file for this attendee. Contact the primary registrant to share their ticket.");
   }
 
   const nextQrToken = generateOpaqueToken();
@@ -374,6 +388,7 @@ export async function rotateQrAndResend(registrationId: string, actor: Authentic
 
   const event = (registration.events as EventRecord | EventRecord[] | null) as EventRecord;
   const qrAttachment = await buildQrEmailAttachment(nextQrToken);
+  const fc = event.form_config;
 
   await executeEmailJob(
     "resend_qr",
@@ -390,10 +405,14 @@ export async function rotateQrAndResend(registrationId: string, actor: Authentic
         eventEndAt: event.end_at,
         eventTimezone: event.timezone,
         venue: event.venue,
-        mapLink: event.form_config?.mapLink,
+        mapLink: fc?.mapLink,
+        manualCheckinCode: registration.manual_checkin_code,
         ticketTitle: registration.ticket_option_title ?? "General Admission",
-        posterImageUrl: buildAbsoluteUrl(env.APP_URL, "/train-with-dubai-police-cover.png"),
-        qrImageSrc: buildQrEmailCid(qrAttachment.contentId)
+        posterImageUrl: buildAbsoluteUrl(env.APP_URL, fc?.posterImage ?? "/train-with-dubai-police-cover.png"),
+        qrImageSrc: buildQrEmailCid(qrAttachment.contentId),
+        qrLinkHref: buildAbsoluteUrl(env.APP_URL, `/api/qr?token=${encodeURIComponent(nextQrToken)}`),
+        introLine: fc?.emailIntroLine ?? fc?.introLine ?? undefined,
+        detailParagraphs: fc?.emailDescriptionParagraphs ?? fc?.descriptionParagraphs ?? undefined
       });
 
       await sendMail({
@@ -477,7 +496,7 @@ export async function exportAttendeesXlsx(eventId: string) {
 
     const { data, error } = await supabase
       .from("registrations")
-      .select("full_name, email_raw, status, ticket_option_title, created_at, checked_in_at")
+      .select("full_name, email_raw, status, category_title, ticket_option_title, created_at, checked_in_at, registered_by_email")
       .eq("event_id", eventId)
       .order("created_at", { ascending: true });
 
@@ -488,9 +507,11 @@ export async function exportAttendeesXlsx(eventId: string) {
     dataRows = (data ?? []).map((row, i) => ({
       "#": i + 1,
       "Full Name": row.full_name,
-      "Email": row.email_raw,
+      "Email": isSyntheticEmail(row.email_raw) ? "N/A" : row.email_raw,
       "Status": row.status,
-      "Admission": row.ticket_option_title ?? "General Admission",
+      "Category": row.category_title ?? "General Admission",
+      "Add-on": row.ticket_option_title ?? "",
+      "Booked By": row.registered_by_email ?? "",
       "Registered At (UAE)": formatUaeDateTime(row.created_at),
       "Checked In At (UAE)": formatUaeDateTime(row.checked_in_at),
     }));
@@ -525,7 +546,7 @@ export async function exportRegistrationsXlsx(eventId: string) {
 
     const { data, error } = await supabase
       .from("registrations")
-      .select("full_name, email_raw, phone, age, uae_resident, ticket_option_title, created_at")
+      .select("full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, created_at, registered_by_email")
       .eq("event_id", eventId)
       .order("created_at", { ascending: true });
 
@@ -536,11 +557,13 @@ export async function exportRegistrationsXlsx(eventId: string) {
     dataRows = (data ?? []).map((row, i) => ({
       "#": i + 1,
       "Full Name": row.full_name,
-      "Email": row.email_raw,
+      "Email": isSyntheticEmail(row.email_raw) ? "N/A" : row.email_raw,
       "Phone Number": row.phone,
       "Age": row.age,
       "UAE Resident": row.uae_resident ? "Yes" : "No",
-      "Admission": row.ticket_option_title ?? "General Admission",
+      "Category": row.category_title ?? "General Admission",
+      "Add-on": row.ticket_option_title ?? "",
+      "Booked By": row.registered_by_email ?? "",
       "Registered At (UAE)": formatUaeDateTime(row.created_at),
     }));
   }

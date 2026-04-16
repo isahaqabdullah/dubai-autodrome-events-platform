@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { RegistrationActions } from "@/components/admin/registration-actions";
 import { StatusPill } from "@/components/ui/status-pill";
-import { formatShortDateTime } from "@/lib/utils";
+import { formatShortDateTime, isSyntheticEmail } from "@/lib/utils";
 
 function registrationTone(status: string) {
   if (status === "checked_in") {
@@ -15,19 +15,36 @@ function registrationTone(status: string) {
   return "danger" as const;
 }
 
+function displayEmail(row: Record<string, unknown>) {
+  const email = String(row.email_raw ?? "");
+  if (isSyntheticEmail(email)) {
+    const bookedBy = row.registered_by_email ? String(row.registered_by_email) : null;
+    return bookedBy ? `No email (booked by ${bookedBy})` : "No email (group booking)";
+  }
+  return email;
+}
+
 function RegistrationCard({ row }: { row: Record<string, unknown> }) {
   const event = (row.events as { title?: string; slug?: string } | null) ?? null;
   const status = String(row.status ?? "registered");
+  const categoryTitle = row.category_title ? String(row.category_title) : null;
+  const ticketTitle = row.ticket_option_title ? String(row.ticket_option_title) : null;
 
   return (
     <div className="admin-card p-2">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="text-[13px] font-semibold text-ink">{String(row.full_name ?? "")}</p>
-          <p className="truncate text-[11px] text-slate">{String(row.email_raw ?? "")}</p>
+          <p className="truncate text-[11px] text-slate">{displayEmail(row)}</p>
         </div>
         <StatusPill tone={registrationTone(status)}>{status.replaceAll("_", " ")}</StatusPill>
       </div>
+      {categoryTitle ? (
+        <div className="mt-1 flex flex-wrap gap-1 text-[11px]">
+          <span className="rounded-full bg-slate-100 px-2 py-0.5 font-medium text-ink">{categoryTitle}</span>
+          {ticketTitle ? <span className="rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">{ticketTitle}</span> : null}
+        </div>
+      ) : null}
       <div className="mt-1 flex items-center justify-between gap-2 border-t border-slate/10 pt-1 text-[11px] text-slate">
         <span className="truncate font-medium text-ink">{event?.title ?? "Unknown event"}</span>
         <span className="shrink-0">{formatShortDateTime(String(row.created_at ?? ""), "Asia/Dubai")}</span>
@@ -68,6 +85,7 @@ export function RegistrationsTable({
             <thead className="border-b border-slate/10 bg-slate-50 text-xs text-slate">
               <tr>
                 <th className="px-3 py-2 font-semibold">Attendee</th>
+                <th className="px-3 py-2 font-semibold">Category</th>
                 <th className="px-3 py-2 font-semibold">Event</th>
                 <th className="px-3 py-2 font-semibold">Status</th>
                 <th className="px-3 py-2 font-semibold">Created</th>
@@ -77,7 +95,7 @@ export function RegistrationsTable({
             <tbody className="divide-y divide-slate/10 bg-white">
               {rows.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-6 text-center text-xs text-slate">
+                  <td colSpan={6} className="px-3 py-6 text-center text-xs text-slate">
                     No registrations found for the current filters.
                   </td>
                 </tr>
@@ -85,12 +103,24 @@ export function RegistrationsTable({
               {rows.map((row) => {
                 const event = (row.events as { title?: string; slug?: string } | null) ?? null;
                 const status = String(row.status ?? "registered");
+                const categoryTitle = row.category_title ? String(row.category_title) : null;
+                const ticketTitle = row.ticket_option_title ? String(row.ticket_option_title) : null;
 
                 return (
                   <tr key={String(row.id)} className="align-top">
                     <td className="px-3 py-2">
                       <p className="text-sm font-medium text-ink">{String(row.full_name ?? "")}</p>
-                      <p className="text-xs text-slate">{String(row.email_raw ?? "")}</p>
+                      <p className="text-xs text-slate">{displayEmail(row)}</p>
+                    </td>
+                    <td className="px-3 py-2 text-xs">
+                      {categoryTitle ? (
+                        <div className="flex flex-col gap-1">
+                          <span className="font-medium text-ink">{categoryTitle}</span>
+                          {ticketTitle ? <span className="text-blue-600">{ticketTitle}</span> : null}
+                        </div>
+                      ) : (
+                        <span className="text-slate">—</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-xs text-slate">
                       <p className="font-medium text-ink">{event?.title ?? "Unknown event"}</p>

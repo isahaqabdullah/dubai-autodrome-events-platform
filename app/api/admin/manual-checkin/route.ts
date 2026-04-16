@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getAuthenticatedAppUser } from "@/lib/auth";
-import { manualCheckinSchema, manualCheckinByEmailSchema } from "@/lib/validation/checkin";
-import { manualCheckin, manualCheckinByEmail } from "@/services/checkin";
+import { manualCheckinSchema, manualCheckinByCodeSchema } from "@/lib/validation/checkin";
+import { manualCheckin, manualCheckinByCode } from "@/services/checkin";
 
 export async function POST(request: Request) {
   const user = await getAuthenticatedAppUser();
@@ -12,11 +12,11 @@ export async function POST(request: Request) {
 
   const payload = await request.json().catch(() => null);
 
-  const emailParsed = manualCheckinByEmailSchema.safeParse(payload);
+  const codeParsed = manualCheckinByCodeSchema.safeParse(payload);
 
-  if (emailParsed.success) {
-    const result = await manualCheckinByEmail({
-      ...emailParsed.data,
+  if (codeParsed.success) {
+    const result = await manualCheckinByCode({
+      ...codeParsed.data,
       staffUserId: user.id
     });
 
