@@ -501,10 +501,19 @@ export function EventBookingFlow({
 
   async function downloadTicketForAttendee(attendee: CompletedAttendee) {
     const qrSrc = `/api/qr?token=${encodeURIComponent(attendee.qrToken)}`;
+    const logoSrc = "/autodrome-header-logo.svg";
     const dateLine = formatTicketDateTimeLine(event);
     const venue = event.venue ?? "Venue to be announced";
     const ticketLabel = buildTicketAdmissionLabel(attendee);
     const manualCheckinCode = attendee.manualCheckinCode?.trim().toUpperCase() || null;
+
+    const logoImage = new window.Image();
+    logoImage.crossOrigin = "anonymous";
+    await new Promise<void>((resolve, reject) => {
+      logoImage.onload = () => resolve();
+      logoImage.onerror = () => reject(new Error("logo load failed"));
+      logoImage.src = logoSrc;
+    }).catch(() => null);
 
     const qrImage = new window.Image();
     qrImage.crossOrigin = "anonymous";
@@ -554,10 +563,22 @@ export function EventBookingFlow({
     ctx.fill();
 
     const font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+    let ticketLabelX = cardX + 40;
+    if (logoImage.complete && logoImage.naturalWidth > 0) {
+      const logoMaxW = 156;
+      const logoScale = logoMaxW / logoImage.naturalWidth;
+      const logoW = logoMaxW;
+      const logoH = Math.max(28, logoImage.naturalHeight * logoScale);
+      const logoX = cardX + 40;
+      const logoY = cardY + 34;
+      ctx.drawImage(logoImage, logoX, logoY, logoW, logoH);
+      ticketLabelX = logoX + logoW + 24;
+    }
+
     ctx.fillStyle = "rgba(255,255,255,0.6)";
     ctx.font = `bold 16px ${font}`;
     ctx.textBaseline = "top";
-    ctx.fillText("YOUR EVENT TICKET", cardX + 40, cardY + 55);
+    ctx.fillText("YOUR EVENT TICKET", ticketLabelX, cardY + 55);
 
     ctx.fillStyle = "#ffffff";
     ctx.font = `bold 36px ${font}`;

@@ -59,15 +59,23 @@ export function EventTicketCard({
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(36,140,119,0.26),transparent_34%),radial-gradient(circle_at_bottom_left,rgba(244,184,96,0.14),transparent_34%)]" />
 
           <div className="relative flex h-full flex-col justify-between gap-3 p-4 sm:p-5 lg:p-[22px] xl:p-6">
-            <div className="flex flex-wrap gap-2">
-              <span className="inline-flex items-center rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white backdrop-blur-sm">
-                {presentation.categoryLabel}
-              </span>
-              {presentation.addOnLabel ? (
-                <span className="inline-flex items-center rounded-full border border-white/12 bg-black/20 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white backdrop-blur-sm">
-                  {presentation.addOnLabel}
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <img
+                src="/autodrome-header-logo.svg"
+                alt="Dubai Autodrome"
+                className="h-9 w-auto shrink-0 sm:h-10 lg:h-11"
+              />
+
+              <div className="flex flex-wrap gap-2 sm:justify-end">
+                <span className="inline-flex items-center rounded-full border border-white/12 bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white backdrop-blur-sm">
+                  {presentation.categoryLabel}
                 </span>
-              ) : null}
+                {presentation.addOnLabel ? (
+                  <span className="inline-flex items-center rounded-full border border-white/12 bg-black/20 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.22em] text-white backdrop-blur-sm">
+                    {presentation.addOnLabel}
+                  </span>
+                ) : null}
+              </div>
             </div>
 
             <div className="max-w-2xl">
