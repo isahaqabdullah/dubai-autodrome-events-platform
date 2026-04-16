@@ -66,6 +66,7 @@ const INITIAL_FORM_STATE = {
   marketingOptIn: false,
   website: ""
 };
+const BOOKING_SECTION_HEADING_CLASS = "font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]";
 
 function drawWrappedText(
   ctx: CanvasRenderingContext2D,
@@ -150,8 +151,8 @@ function SelectionCard({
             : "border-slate/15 bg-white text-ink hover:border-slate/30 hover:bg-mist/60"
       }`}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0 flex-1">
           <p className="font-display text-[15px] font-bold tracking-tight sm:text-lg">{title}</p>
           {description ? (
             <p className={`mt-1 text-[13px] leading-relaxed sm:text-sm ${selected ? "text-white/80" : "text-slate"}`}>
@@ -165,7 +166,7 @@ function SelectionCard({
           ) : null}
         </div>
         <span
-          className={`rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
+          className={`inline-flex shrink-0 self-start rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${
             selected
               ? "bg-white/15 text-white"
               : disabled
@@ -876,17 +877,10 @@ export function EventBookingFlow({
 
                   <div className="mt-4 space-y-6 sm:mt-6 sm:space-y-8">
                     <div className="space-y-3">
-                      <div className="flex items-end justify-between gap-4">
-                        <div>
-                          <p className="font-display text-[15px] font-bold tracking-tight text-ink sm:text-lg">{categorySectionTitle}</p>
-                          <p className="font-body text-[13px] text-slate sm:text-sm">
-                            Choose one base category for this registration.
-                          </p>
-                        </div>
-                        <p className="text-[12px] font-medium text-slate sm:text-sm">
-                          {event.capacity
-                            ? `${Math.max(event.capacity - registrationCount, 0)} places remaining`
-                            : "Open registration"}
+                      <div className="space-y-1.5">
+                        <p className={BOOKING_SECTION_HEADING_CLASS}>{categorySectionTitle}</p>
+                        <p className="font-body text-[13px] leading-relaxed text-slate sm:text-sm">
+                          Select a category.
                         </p>
                       </div>
 
@@ -911,10 +905,10 @@ export function EventBookingFlow({
 
                     {additionalCategories.length > 0 ? (
                       <div className="space-y-3">
-                        <div>
-                          <p className="font-display text-[15px] font-bold tracking-tight text-ink sm:text-lg">{additionalSectionTitle}</p>
-                          <p className="font-body text-[13px] text-slate sm:text-sm">
-                            Optional. Select one additional category if you want one. Click it again to remove it.
+                        <div className="space-y-1.5">
+                          <p className={BOOKING_SECTION_HEADING_CLASS}>{additionalSectionTitle}</p>
+                          <p className="font-body text-[13px] leading-relaxed text-slate sm:text-sm">
+                            Optional. Add one extra session if you want one.
                           </p>
                         </div>
 
@@ -1229,7 +1223,7 @@ export function EventBookingFlow({
           </div>
 
           {!completedRegistration ? (
-            <aside className="border-t border-slate/10 bg-[#fbfbfc] px-3.5 py-4 sm:px-6 sm:py-8 md:border-l md:border-t-0 lg:px-8">
+            <aside className="border-t border-slate/10 bg-[linear-gradient(180deg,#fbfbfc_0%,#f3f9fc_100%)] px-3.5 py-4 sm:px-6 sm:py-8 md:border-l md:border-t-0 lg:px-8">
               <div className="lg:sticky lg:top-6">
                 <div className="mx-auto hidden max-w-[276px] overflow-hidden rounded-2xl border border-slate/10 bg-white sm:block">
                   <div className="relative bg-white">
@@ -1237,16 +1231,16 @@ export function EventBookingFlow({
                   </div>
                 </div>
 
-                <div className="sm:mt-6">
+                <div className="mt-2 rounded-[1.75rem] border border-white/70 bg-white/80 p-4 shadow-soft backdrop-blur-sm sm:mt-6 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
                   <h3 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]">Registration summary</h3>
 
-                  <div className="mt-3 space-y-3 font-body text-[13px] text-slate sm:mt-6 sm:space-y-4 sm:text-[15px]">
-                    <div className="border-b border-slate/10 pb-3">
+                  <div className="mt-3 rounded-[1.5rem] border border-slate/10 bg-white px-4 py-4 shadow-sm sm:mt-6 sm:space-y-4 sm:px-5 sm:py-5">
+                    <div className="border-b border-slate/10 pb-3 font-body text-[13px] text-slate sm:text-[15px]">
                       <p className="font-display font-bold tracking-tight text-ink">Selected admission</p>
                       <p className="mt-1 text-sm text-slate">{selectionDisplayLabel}</p>
                     </div>
 
-                    <div className="space-y-1.5 font-body text-[12px] sm:space-y-2 sm:text-sm">
+                    <div className="mt-3 space-y-1.5 font-body text-[12px] sm:space-y-2 sm:text-sm">
                       <div className="flex items-center gap-2">
                         <MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
                         <span className="line-clamp-1">{event.venue ?? "Venue to be announced"}</span>
@@ -1323,7 +1317,7 @@ export function EventBookingFlow({
                       void submitRegistration();
                     }}
                     disabled={step === "tickets" ? !canContinueFromTickets : submissionState === "submitting"}
-                    className="mt-4 w-full rounded-xl bg-black py-2.5 font-display text-[14px] font-bold tracking-tight text-white hover:bg-black/90 sm:mt-6 sm:rounded-2xl sm:py-3.5 sm:text-base"
+                    className="mt-4 w-full rounded-xl bg-black py-2.5 font-display text-[14px] font-bold tracking-tight text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.45)] hover:bg-black/90 sm:mt-6 sm:rounded-2xl sm:py-3.5 sm:text-base"
                   >
                     {step === "tickets"
                       ? "Continue"
