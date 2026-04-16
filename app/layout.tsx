@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { Open_Sans } from "next/font/google";
+import { Analytics } from "@vercel/analytics/next";
 import "./globals.css";
 
 const openSans = Open_Sans({
@@ -29,6 +30,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={`${openSans.variable} min-h-screen bg-mesh-gradient text-ink antialiased`}>
         <div className="app-shell">{children}</div>
+        <Analytics />
       </body>
     </html>
   );
