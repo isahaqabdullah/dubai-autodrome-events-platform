@@ -21,7 +21,9 @@ export default async function EditEventPage({
     notFound();
   }
 
-  const registrationState = getRegistrationWindowState(event);
+  const currentEvent = event;
+
+  const registrationState = getRegistrationWindowState(currentEvent);
 
   async function updateEventAction(formData: FormData): Promise<EventFormResult> {
     "use server";
@@ -30,8 +32,15 @@ export default async function EditEventPage({
 
     try {
       const input = parseAdminEventFormData(formData);
-      await updateEvent(input, actor);
+      const updatedEvent = await updateEvent(input, actor);
       revalidatePath("/admin");
+      revalidatePath("/admin/registrations");
+      revalidatePath(`/admin/events/${params.id}/edit`);
+      revalidatePath("/events");
+      revalidatePath(`/events/${currentEvent.slug}`);
+      revalidatePath(`/events/${updatedEvent.slug}`);
+      revalidatePath(`/check-in/${currentEvent.slug}`);
+      revalidatePath(`/check-in/${updatedEvent.slug}`);
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to update the event.";
@@ -49,7 +58,7 @@ export default async function EditEventPage({
             </Link>
             <span className="text-slate/50">/</span>
             <Link
-              href={`/admin/registrations?eventId=${event.id}`}
+              href={`/admin/registrations?eventId=${currentEvent.id}`}
               className="font-medium text-slate transition hover:text-ink"
             >
               Registrations
@@ -78,20 +87,20 @@ export default async function EditEventPage({
                       ? "success"
                       : registrationState.state === "not_open_yet"
                         ? "warning"
-                        : "danger"
+                      : "danger"
                   }
                 >
                   {registrationState.label}
                 </StatusPill>
               </div>
-              <h1 className="mt-2 text-xl font-semibold tracking-tight text-ink sm:mt-3 sm:text-4xl">{event.title}</h1>
+              <h1 className="mt-2 text-xl font-semibold tracking-tight text-ink sm:mt-3 sm:text-4xl">{currentEvent.title}</h1>
               <p className="mt-1.5 text-xs text-slate sm:mt-3 sm:text-base">
-                {formatEventDateRange(event.start_at, event.end_at, event.timezone)}
+                {formatEventDateRange(currentEvent.start_at, currentEvent.end_at, currentEvent.timezone)}
               </p>
             </div>
 
             <Link
-              href={`/admin/registrations?eventId=${event.id}`}
+              href={`/admin/registrations?eventId=${currentEvent.id}`}
               className="admin-action"
             >
               Back to registrations
@@ -101,7 +110,7 @@ export default async function EditEventPage({
       </section>
 
       <section className="admin-card p-3 sm:p-6">
-        <EventForm event={event} action={updateEventAction} hideRegistrationSections />
+        <EventForm event={currentEvent} action={updateEventAction} hideRegistrationSections />
       </section>
     </main>
   );

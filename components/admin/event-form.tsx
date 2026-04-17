@@ -214,6 +214,9 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
       const result = await action(formData);
       if (result.ok) {
         setShowSuccess(true);
+        if (event) {
+          router.refresh();
+        }
       } else {
         setError(result.error ?? "Something went wrong.");
       }

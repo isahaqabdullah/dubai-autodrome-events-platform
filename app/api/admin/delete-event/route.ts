@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { revalidatePath } from "next/cache";
 import { getAuthenticatedAppUser } from "@/lib/auth";
 import { deleteEventSchema } from "@/lib/validation/admin";
 import { deleteEvent } from "@/services/admin";
@@ -18,7 +19,12 @@ export async function POST(request: Request) {
   }
 
   try {
-    await deleteEvent(parsed.data.eventId, user);
+    const result = await deleteEvent(parsed.data.eventId, user);
+    revalidatePath("/admin");
+    revalidatePath("/admin/registrations");
+    revalidatePath("/events");
+    revalidatePath(`/events/${result.slug}`);
+    revalidatePath(`/check-in/${result.slug}`);
     return NextResponse.json({ ok: true, message: "Event deleted." });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to delete event.";

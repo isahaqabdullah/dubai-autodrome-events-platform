@@ -190,7 +190,7 @@ export async function updateEvent(input: AdminEventInput, actor: AuthenticatedAp
 
 export async function deleteEvent(eventId: string, actor: AuthenticatedAppUser) {
   if (isDemoMode()) {
-    return { ok: true };
+    return { ok: true, slug: "demo-event" };
   }
 
   const supabase = createAdminSupabaseClient();
@@ -231,7 +231,7 @@ export async function deleteEvent(eventId: string, actor: AuthenticatedAppUser) 
     beforeJson: event
   });
 
-  return { ok: true };
+  return { ok: true, slug: event.slug as string };
 }
 
 export async function listRegistrations(filters: {

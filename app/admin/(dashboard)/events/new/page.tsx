@@ -14,8 +14,12 @@ export default function NewEventPage() {
 
     try {
       const input = parseAdminEventFormData(formData);
-      await createEvent(input, actor);
+      const createdEvent = await createEvent(input, actor);
       revalidatePath("/admin");
+      revalidatePath("/admin/registrations");
+      revalidatePath("/events");
+      revalidatePath(`/events/${createdEvent.slug}`);
+      revalidatePath(`/check-in/${createdEvent.slug}`);
       return { ok: true };
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to create the event.";
