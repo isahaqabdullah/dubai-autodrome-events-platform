@@ -104,5 +104,5 @@ export interface RecentScanActivity {
   result: CheckinResult;
   gate_name: string | null;
   scanned_at: string;
-  registration: Pick<RegistrationRecord, "id" | "full_name" | "email_raw" | "phone" | "status"> | null;
+  registration: Pick<RegistrationRecord, "id" | "full_name" | "email_raw" | "phone" | "status" | "category_title"> | null;
 }

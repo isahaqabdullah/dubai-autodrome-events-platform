@@ -239,7 +239,7 @@ export async function getRecentCheckins(eventId: string, limit = 10) {
   const { data, error } = await supabase
     .from("checkins")
     .select(
-      "id, result, gate_name, scanned_at, registration:registrations(id, full_name, email_raw, phone, status)"
+      "id, result, gate_name, scanned_at, registration:registrations(id, full_name, email_raw, phone, status, category_title)"
     )
     .eq("event_id", eventId)
     .order("scanned_at", { ascending: false })

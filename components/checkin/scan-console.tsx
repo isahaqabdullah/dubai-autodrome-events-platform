@@ -13,19 +13,14 @@ import {
   Smartphone,
   TimerReset
 } from "lucide-react";
-import type { EventAnalyticsSummary } from "@/lib/types";
+import type { EventAnalyticsSummary, RecentScanActivity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 
-interface RecentScanRow {
-  id: string;
-  result: string;
-  gate_name: string | null;
-  scanned_at: string;
-  registration: {
-    full_name?: string;
-    email_raw?: string;
-  } | null;
-}
+type RecentScanRow = RecentScanActivity;
+type CameraOverlayState = {
+  result: string | "checking";
+  name: string;
+};
 
 function applySummaryUpdate(summary: EventAnalyticsSummary, result: string): EventAnalyticsSummary {
   const next = {
@@ -135,7 +130,7 @@ export function ScanConsole({
     message: string;
     full_name?: string | null;
   } | null>(null);
-  const [cameraOverlay, setCameraOverlay] = useState<{ result: string; name: string } | null>(null);
+  const [cameraOverlay, setCameraOverlay] = useState<CameraOverlayState | null>(null);
   const cameraOverlayTimer = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
@@ -209,7 +204,7 @@ export function ScanConsole({
 
         if (now - last.at > 2000) {
           lastCameraTokenRef.current = { value: rawValue, at: now };
-          void submitToken(rawValue);
+          void submitToken(rawValue, { showPendingOverlay: true });
         }
       }
     } catch {
@@ -276,11 +271,16 @@ export function ScanConsole({
     };
   }, [stopCamera]);
 
-  async function submitToken(nextToken: string) {
+  async function submitToken(nextToken: string, options?: { showPendingOverlay?: boolean }) {
     const normalized = nextToken.replace(/[\r\n]+/g, "").trim();
 
     if (!normalized || busy) {
       return;
+    }
+
+    if (options?.showPendingOverlay) {
+      if (cameraOverlayTimer.current) clearTimeout(cameraOverlayTimer.current);
+      setCameraOverlay({ result: "checking", name: "" });
     }
 
     setBusy(true);
@@ -343,6 +343,9 @@ export function ScanConsole({
         message: error instanceof Error ? error.message : "Unable to reach the check-in service.",
         full_name: null
       });
+      if (cameraOverlayTimer.current) clearTimeout(cameraOverlayTimer.current);
+      setCameraOverlay({ result: "invalid_token", name: "" });
+      cameraOverlayTimer.current = setTimeout(() => setCameraOverlay(null), 2000);
     } finally {
       if (cameraState === "active") {
         await new Promise((resolve) => setTimeout(resolve, 1500));
@@ -503,15 +506,20 @@ export function ScanConsole({
                   />
 
                   {cameraOverlay && (() => {
+                    const isPending = cameraOverlay.result === "checking";
                     const isSuccess = cameraOverlay.result === "success";
                     const isDuplicate = cameraOverlay.result === "already_checked_in";
-                    const bg = isSuccess
+                    const bg = isPending
+                      ? "bg-sky-700/90"
+                      : isSuccess
                       ? "bg-emerald-600/90"
                       : isDuplicate
                         ? "bg-amber-600/90"
                         : "bg-rose-600/90";
-                    const Icon = isSuccess ? CheckCircle2 : isDuplicate ? TimerReset : AlertTriangle;
-                    const label = isSuccess
+                    const Icon = isPending ? ScanLine : isSuccess ? CheckCircle2 : isDuplicate ? TimerReset : AlertTriangle;
+                    const label = isPending
+                      ? "Checking"
+                      : isSuccess
                       ? "Checked in"
                       : isDuplicate
                         ? "Already checked in"
@@ -519,7 +527,7 @@ export function ScanConsole({
 
                     return (
                       <div className={cn("absolute inset-0 flex flex-col items-center justify-center gap-2 text-white", bg)}>
-                        <Icon className="h-10 w-10" />
+                        <Icon className={cn("h-10 w-10", isPending ? "animate-pulse" : null)} />
                         <span className="text-sm font-bold uppercase tracking-widest">{label}</span>
                         {cameraOverlay.name && (
                           <span className="mt-1 max-w-[80%] truncate text-center text-base font-semibold">{cameraOverlay.name}</span>
@@ -613,6 +621,7 @@ export function ScanConsole({
               const presentation = getResultPresentation(scan.result);
               const attendeeName = scan.registration?.full_name ?? "Unknown attendee";
               const attendeeEmail = scan.registration?.email_raw ?? null;
+              const attendeeCategory = scan.registration?.category_title ?? null;
               const gateLabel = scan.gate_name ?? null;
 
               return (
@@ -620,7 +629,16 @@ export function ScanConsole({
                   <div className="flex items-start justify-between gap-3">
                     <div className="min-w-0">
                       <p className="font-semibold text-ink">{attendeeName}</p>
-                      {attendeeEmail ? <p className="mt-1 truncate text-sm text-slate">{attendeeEmail}</p> : null}
+                      {attendeeCategory || attendeeEmail ? (
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          {attendeeCategory ? (
+                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-ink">
+                              {attendeeCategory}
+                            </span>
+                          ) : null}
+                          {attendeeEmail ? <p className="truncate text-sm text-slate">{attendeeEmail}</p> : null}
+                        </div>
+                      ) : null}
                     </div>
                     <span
                       className={cn(

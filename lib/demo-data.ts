@@ -141,7 +141,8 @@ export const demoRecentScans: RecentScanActivity[] = [
       full_name: demoRegistrations[0].full_name,
       email_raw: demoRegistrations[0].email_raw,
       phone: demoRegistrations[0].phone,
-      status: "checked_in"
+      status: "checked_in",
+      category_title: "General Admission"
     }
   },
   {
@@ -154,7 +155,8 @@ export const demoRecentScans: RecentScanActivity[] = [
       full_name: demoRegistrations[0].full_name,
       email_raw: demoRegistrations[0].email_raw,
       phone: demoRegistrations[0].phone,
-      status: "checked_in"
+      status: "checked_in",
+      category_title: "General Admission"
     }
   },
   {
