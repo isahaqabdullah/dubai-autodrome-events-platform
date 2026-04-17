@@ -67,6 +67,7 @@ Required:
 Email delivery:
 
 - `RESEND_API_KEY`
+- `MAIL_FROM_NAME=Dubai Autodrome Events`
 - `MAIL_FROM_EMAIL=info@example.com`
 - `MAIL_REPLY_TO_EMAIL=info@example.com`
 
@@ -114,7 +115,7 @@ npm run dev
 
 - The app uses the official Resend Node SDK.
 - Create a Resend API key and set `RESEND_API_KEY`.
-- Visible sender and reply-to are driven by `MAIL_FROM_EMAIL` and `MAIL_REPLY_TO_EMAIL`.
+- Visible sender name is driven by `MAIL_FROM_NAME`; the underlying sender address and reply-to are driven by `MAIL_FROM_EMAIL` and `MAIL_REPLY_TO_EMAIL`.
 - Verify the sending domain in Resend before using a production sender address.
 - The current MVP sends HTML and text emails through `resend.emails.send`.
 - QR images are rendered from the app’s own `/api/qr` route so email clients fetch a real server-generated image.

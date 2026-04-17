@@ -13,6 +13,10 @@ const serverEnvSchema = z.object({
     }),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
   RESEND_API_KEY: z.string().optional(),
+  MAIL_FROM_NAME: z.preprocess(
+    (value) => (typeof value === "string" ? value.trim() || undefined : value),
+    z.string().max(120).optional()
+  ),
   MAIL_FROM_EMAIL: z.string().email().default("info@example.com"),
   MAIL_REPLY_TO_EMAIL: z.string().email().default("info@example.com"),
   APP_URL: z.string().url(),
@@ -24,6 +28,7 @@ const rawServerEnv = {
   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
   SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY,
   RESEND_API_KEY: process.env.RESEND_API_KEY,
+  MAIL_FROM_NAME: process.env.MAIL_FROM_NAME,
   MAIL_FROM_EMAIL: process.env.MAIL_FROM_EMAIL ?? "info@example.com",
   MAIL_REPLY_TO_EMAIL: process.env.MAIL_REPLY_TO_EMAIL ?? "info@example.com",
   APP_URL: process.env.APP_URL,

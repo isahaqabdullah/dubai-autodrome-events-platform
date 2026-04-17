@@ -233,7 +233,7 @@ export function EventBookingFlow({
 
   const [step, setStep] = useState<Step>("tickets");
   const [expandedDescription, setExpandedDescription] = useState(false);
-  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(true);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
   const [termsExpanded, setTermsExpanded] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(HOLD_DURATION_SECONDS);
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
@@ -1248,7 +1248,7 @@ export function EventBookingFlow({
               <div className="lg:sticky lg:top-6">
                 <div className="mx-auto hidden max-w-[276px] overflow-hidden rounded-2xl border border-slate/10 bg-white sm:block">
                   <div className="relative bg-white">
-                    <img src={posterImage} alt={event.title} className="block h-auto w-full" />
+                    <img src={posterImage} alt={event.title} className="block h-auto w-full" loading="lazy" decoding="async" />
                   </div>
                 </div>
 

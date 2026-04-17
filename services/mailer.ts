@@ -1,6 +1,7 @@
 import "server-only";
 import { Resend } from "resend";
 import { env, resendConfigured } from "@/lib/env";
+import { formatMailFromAddress } from "@/lib/mail-address";
 
 export interface MailPayload {
   to: string | string[];
@@ -74,6 +75,7 @@ async function sendOnce(
 
 export async function sendMail(payload: MailPayload) {
   const toAddresses = Array.isArray(payload.to) ? payload.to : [payload.to];
+  const fromAddress = formatMailFromAddress(env.MAIL_FROM_EMAIL, env.MAIL_FROM_NAME);
 
   if (!resendConfigured) {
     console.warn("[mock-mailer] RESEND_API_KEY missing; email not sent", {
@@ -84,7 +86,7 @@ export async function sendMail(payload: MailPayload) {
       },
       to: toAddresses,
       subject: payload.subject,
-      from: env.MAIL_FROM_EMAIL,
+      from: fromAddress,
       replyTo: env.MAIL_REPLY_TO_EMAIL,
       attachments: payload.attachments?.map((attachment) => ({
         filename: attachment.filename,
@@ -101,7 +103,7 @@ export async function sendMail(payload: MailPayload) {
 
   const client = getResendClient();
   const body = {
-    from: env.MAIL_FROM_EMAIL,
+    from: fromAddress,
     to: toAddresses,
     subject: payload.subject,
     html: payload.html,
@@ -147,7 +149,7 @@ export async function sendMail(payload: MailPayload) {
       console.error("[resend] emails.send failed", {
         attempt,
         to: toAddresses,
-        from: env.MAIL_FROM_EMAIL,
+        from: fromAddress,
         subject: payload.subject,
         statusCode: error.statusCode,
         name: error.name,
