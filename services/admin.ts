@@ -458,20 +458,59 @@ function escapeCsvValue(value: unknown) {
   return `"${stringified}"`;
 }
 
-function formatUaeDateTime(value: string | null) {
+type ExportRegistrationRowInput = {
+  full_name: string;
+  email_raw: string | null;
+  phone?: string | null;
+  age?: number | null;
+  uae_resident?: boolean | null;
+  category_title?: string | null;
+  ticket_option_title?: string | null;
+  status?: string | null;
+  registered_by_email?: string | null;
+  is_primary?: boolean;
+  created_at: string;
+  checked_in_at?: string | null;
+};
+
+const REGISTRATION_EXPORT_SELECT =
+  "full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, registered_by_email, is_primary, created_at, checked_in_at";
+
+function formatExportEmail(value: string | null | undefined) {
   if (!value) {
     return "";
   }
 
-  return new Intl.DateTimeFormat("en-AE", {
-    timeZone: "Asia/Dubai",
-    year: "numeric",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true
-  }).format(new Date(value));
+  return isSyntheticEmail(value) ? "N/A" : value;
+}
+
+function formatExportUaeResident(value: boolean | null | undefined, isPrimary?: boolean) {
+  if (typeof value !== "boolean") {
+    return "";
+  }
+
+  if (isPrimary === false) {
+    return "";
+  }
+
+  return value ? "Yes" : "No";
+}
+
+function buildRegistrationExportRow(row: ExportRegistrationRowInput, index: number) {
+  return {
+    "#": index + 1,
+    "Full Name": row.full_name,
+    "Email": formatExportEmail(row.email_raw),
+    "Phone Number": row.phone ?? "",
+    "Age": row.age ?? "",
+    "UAE Resident": formatExportUaeResident(row.uae_resident, row.is_primary),
+    "Category": row.category_title ?? "General Admission",
+    "Add-on": row.ticket_option_title ?? "",
+    "Status": row.status ?? "",
+    "Booked By": row.registered_by_email ?? "",
+    "Registered At": row.created_at,
+    "Checked In At": row.checked_in_at ?? ""
+  };
 }
 
 export async function exportAttendeesXlsx(eventId: string) {
@@ -481,40 +520,23 @@ export async function exportAttendeesXlsx(eventId: string) {
 
   if (isDemoMode()) {
     dataRows = demoRegistrations
-      .filter((row) => row.event_id === eventId)
-      .map((row, i) => ({
-        "#": i + 1,
-        "Full Name": row.full_name,
-        "Email": row.email_raw,
-        "Status": row.status,
-        "Admission": row.ticket_option_title ?? "General Admission",
-        "Registered At (UAE)": formatUaeDateTime(row.created_at),
-        "Checked In At (UAE)": formatUaeDateTime(row.checked_in_at ?? null),
-      }));
+      .filter((row) => row.event_id === eventId && row.checked_in_at)
+      .map((row, i) => buildRegistrationExportRow(row, i));
   } else {
     const supabase = createAdminSupabaseClient();
 
     const { data, error } = await supabase
       .from("registrations")
-      .select("full_name, email_raw, status, category_title, ticket_option_title, created_at, checked_in_at, registered_by_email")
+      .select(REGISTRATION_EXPORT_SELECT)
       .eq("event_id", eventId)
-      .order("created_at", { ascending: true });
+      .not("checked_in_at", "is", null)
+      .order("checked_in_at", { ascending: true });
 
     if (error) {
       throw error;
     }
 
-    dataRows = (data ?? []).map((row, i) => ({
-      "#": i + 1,
-      "Full Name": row.full_name,
-      "Email": isSyntheticEmail(row.email_raw) ? "N/A" : row.email_raw,
-      "Status": row.status,
-      "Category": row.category_title ?? "General Admission",
-      "Add-on": row.ticket_option_title ?? "",
-      "Booked By": row.registered_by_email ?? "",
-      "Registered At (UAE)": formatUaeDateTime(row.created_at),
-      "Checked In At (UAE)": formatUaeDateTime(row.checked_in_at),
-    }));
+    dataRows = (data ?? []).map((row, i) => buildRegistrationExportRow(row, i));
   }
 
   const ws = XLSX.utils.json_to_sheet(dataRows);
@@ -531,22 +553,13 @@ export async function exportRegistrationsXlsx(eventId: string) {
   if (isDemoMode()) {
     dataRows = demoRegistrations
       .filter((row) => row.event_id === eventId)
-      .map((row, i) => ({
-        "#": i + 1,
-        "Full Name": row.full_name,
-        "Email": row.email_raw,
-        "Phone Number": row.phone,
-        "Age": row.age,
-        "UAE Resident": row.uae_resident ? "Yes" : "No",
-        "Admission": row.ticket_option_title ?? "General Admission",
-        "Registered At (UAE)": formatUaeDateTime(row.created_at),
-      }));
+      .map((row, i) => buildRegistrationExportRow(row, i));
   } else {
     const supabase = createAdminSupabaseClient();
 
     const { data, error } = await supabase
       .from("registrations")
-      .select("full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, created_at, registered_by_email")
+      .select(REGISTRATION_EXPORT_SELECT)
       .eq("event_id", eventId)
       .order("created_at", { ascending: true });
 
@@ -554,18 +567,7 @@ export async function exportRegistrationsXlsx(eventId: string) {
       throw error;
     }
 
-    dataRows = (data ?? []).map((row, i) => ({
-      "#": i + 1,
-      "Full Name": row.full_name,
-      "Email": isSyntheticEmail(row.email_raw) ? "N/A" : row.email_raw,
-      "Phone Number": row.phone,
-      "Age": row.age,
-      "UAE Resident": row.uae_resident ? "Yes" : "No",
-      "Category": row.category_title ?? "General Admission",
-      "Add-on": row.ticket_option_title ?? "",
-      "Booked By": row.registered_by_email ?? "",
-      "Registered At (UAE)": formatUaeDateTime(row.created_at),
-    }));
+    dataRows = (data ?? []).map((row, i) => buildRegistrationExportRow(row, i));
   }
 
   const ws = XLSX.utils.json_to_sheet(dataRows);
