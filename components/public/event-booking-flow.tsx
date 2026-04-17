@@ -1178,6 +1178,9 @@ export function EventBookingFlow({
                 </div>
 
                 <div className="mt-5 space-y-3 border-t border-slate/10 pt-5 text-[13px] leading-relaxed text-slate text-justify sm:mt-8 sm:space-y-4 sm:pt-7 sm:text-[15px]">
+                  <p className="text-[13px] font-semibold uppercase tracking-[0.03em] text-ink sm:text-[15px]">
+                    Terms & Conditions
+                  </p>
                   <div>
                     <p className={termsExpanded ? "" : "line-clamp-5"}>
                       {event.declaration_text}
