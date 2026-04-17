@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { CheckCircle2, ImageIcon, FileText, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -199,12 +199,20 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
   const [isPending, startTransition] = useTransition();
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const formVersion = event ? `${event.id}:${event.updated_at}` : "new";
 
   // File upload state
-  const [posterImage, setPosterImage] = useState(config.posterImage ?? DEFAULT_POSTER_IMAGE);
-  const [disclaimerPdfUrl, setDisclaimerPdfUrl] = useState(config.disclaimerPdfUrl ?? DEFAULT_DISCLAIMER_PDF);
+  const initialPosterImage = config.posterImage ?? DEFAULT_POSTER_IMAGE;
+  const initialDisclaimerPdfUrl = config.disclaimerPdfUrl ?? DEFAULT_DISCLAIMER_PDF;
+  const [posterImage, setPosterImage] = useState(initialPosterImage);
+  const [disclaimerPdfUrl, setDisclaimerPdfUrl] = useState(initialDisclaimerPdfUrl);
 
   const eventId = event?.id ?? "new";
+
+  useEffect(() => {
+    setPosterImage(initialPosterImage);
+    setDisclaimerPdfUrl(initialDisclaimerPdfUrl);
+  }, [formVersion, initialPosterImage, initialDisclaimerPdfUrl]);
 
   function handleSubmit(formData: FormData) {
     setError(null);
@@ -225,7 +233,7 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
 
   return (
     <>
-      <form action={handleSubmit} className="grid gap-4 sm:gap-5">
+      <form key={formVersion} action={handleSubmit} className="grid gap-4 sm:gap-5">
         {event ? <input type="hidden" name="id" value={event.id} /> : null}
 
         <FormSection

@@ -121,15 +121,31 @@ async function seedEvents() {
     }
   ];
 
-  const { error } = await supabase.from("events").upsert(editions, {
-    onConflict: "slug"
-  });
+  const slugs = editions.map((edition) => edition.slug);
+  const { data: existingEvents, error: existingError } = await supabase
+    .from("events")
+    .select("slug")
+    .in("slug", slugs);
+
+  if (existingError) {
+    throw existingError;
+  }
+
+  const existingSlugs = new Set((existingEvents ?? []).map((row) => row.slug));
+  const missingEditions = editions.filter((edition) => !existingSlugs.has(edition.slug));
+
+  if (missingEditions.length === 0) {
+    console.log("Seed skipped existing event editions");
+    return;
+  }
+
+  const { error } = await supabase.from("events").insert(missingEditions);
 
   if (error) {
     throw error;
   }
 
-  console.log(`Seeded ${editions.length} event editions`);
+  console.log(`Seeded ${missingEditions.length} event editions`);
 }
 
 async function main() {

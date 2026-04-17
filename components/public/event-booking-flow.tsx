@@ -54,7 +54,6 @@ const DEFAULT_DESCRIPTION = [
   "The best part? Dubai Police has your entry completely covered, making it 100% free for all participants. Join us on our Circuit under the lights for an unforgettable, high-energy evening of cycling, running, and specialized bootcamps.",
   "Registration is required, so secure your free spot today and let's hit the track!"
 ];
-const DEFAULT_DISCLAIMER_HEADING = "Waiver of Liability and Declaration of Assumption of Risk — Dubai Autodrome";
 const INITIAL_FORM_STATE = {
   firstName: "",
   lastName: "",
@@ -233,7 +232,7 @@ export function EventBookingFlow({
 
   const [step, setStep] = useState<Step>("tickets");
   const [expandedDescription, setExpandedDescription] = useState(false);
-  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(false);
+  const [pdfPreviewOpen, setPdfPreviewOpen] = useState(true);
   const [termsExpanded, setTermsExpanded] = useState(false);
   const [timeRemaining, setTimeRemaining] = useState(HOLD_DURATION_SECONDS);
   const [submissionState, setSubmissionState] = useState<SubmissionState>("idle");
@@ -386,7 +385,6 @@ export function EventBookingFlow({
   const descriptionParagraphs = config.descriptionParagraphs?.length ? config.descriptionParagraphs : DEFAULT_DESCRIPTION;
   const disclaimerPdfUrl = config.disclaimerPdfUrl === null ? null : (config.disclaimerPdfUrl || DEFAULT_DISCLAIMER_PDF);
   const hasPdf = Boolean(disclaimerPdfUrl);
-  const disclaimerHeading = config.disclaimerHeading || DEFAULT_DISCLAIMER_HEADING;
   const visibleParagraphs = expandedDescription ? descriptionParagraphs : descriptionParagraphs.slice(0, 2);
   const contentLayoutClass = completedRegistration
     ? "block"
@@ -1127,9 +1125,11 @@ export function EventBookingFlow({
                   </div>
                 </div>
 
-                <div className="mt-5 border-t border-slate/10 pt-5 sm:mt-8 sm:pt-7">
+                <div className="mt-5 space-y-3 border-t border-slate/10 pt-5 text-[13px] leading-relaxed text-slate text-justify sm:mt-8 sm:space-y-4 sm:pt-7 sm:text-[15px]">
                   <div className="flex items-center justify-between gap-2">
-                    <p className="text-[13px] font-semibold uppercase tracking-[0.03em] text-ink sm:text-[15px]">Disclaimer</p>
+                    <p className="text-[13px] font-semibold uppercase tracking-[0.03em] text-ink sm:text-[15px]">
+                      Terms & Conditions
+                    </p>
                     {hasPdf ? (
                       <div className="flex items-center gap-3">
                         <button
@@ -1151,12 +1151,8 @@ export function EventBookingFlow({
                       </div>
                     ) : null}
                   </div>
-                  {disclaimerHeading ? (
-                    <p className="mt-2 text-sm text-slate">{disclaimerHeading}</p>
-                  ) : null}
-
                   {hasPdf && pdfPreviewOpen ? (
-                    <div className="mt-4">
+                    <div className="mt-1">
                       <div
                         className="relative overflow-auto rounded-2xl border border-slate/15 [-webkit-overflow-scrolling:touch]"
                         style={{ maxHeight: "60vh" }}
@@ -1175,12 +1171,6 @@ export function EventBookingFlow({
                       </a>
                     </div>
                   ) : null}
-                </div>
-
-                <div className="mt-5 space-y-3 border-t border-slate/10 pt-5 text-[13px] leading-relaxed text-slate text-justify sm:mt-8 sm:space-y-4 sm:pt-7 sm:text-[15px]">
-                  <p className="text-[13px] font-semibold uppercase tracking-[0.03em] text-ink sm:text-[15px]">
-                    Terms & Conditions
-                  </p>
                   <div>
                     <p className={termsExpanded ? "" : "line-clamp-5"}>
                       {event.declaration_text}
