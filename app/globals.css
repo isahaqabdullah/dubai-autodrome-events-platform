@@ -176,4 +176,16 @@ button {
   .admin-action-primary:hover {
     background: rgba(12, 23, 35, 0.92);
   }
+
+  .admin-back-link {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl border bg-white px-3 py-2 text-sm font-semibold text-ink transition sm:rounded-2xl sm:px-4;
+    border-color: rgba(88, 114, 140, 0.18);
+    box-shadow: 0 10px 24px -22px rgba(12, 23, 35, 0.8);
+  }
+
+  .admin-back-link:hover {
+    border-color: rgba(88, 114, 140, 0.3);
+    background: #f8fafb;
+    box-shadow: 0 14px 28px -22px rgba(12, 23, 35, 0.85);
+  }
 }

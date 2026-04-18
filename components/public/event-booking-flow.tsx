@@ -226,10 +226,6 @@ export function EventBookingFlow({
     });
   }, [config.ticketOptions, ticketCounts]);
 
-  const defaultCategoryId = categories.find((category) => !category.isUnavailable)?.id
-    ?? categories[0]?.id
-    ?? "general-admission";
-
   const [step, setStep] = useState<Step>("tickets");
   const [expandedDescription, setExpandedDescription] = useState(false);
   const [pdfPreviewOpen, setPdfPreviewOpen] = useState(true);
@@ -244,7 +240,7 @@ export function EventBookingFlow({
   const [emailVerified, setEmailVerified] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [completedRegistration, setCompletedRegistration] = useState<CompletedRegistration | null>(null);
-  const [selectedCategoryId, setSelectedCategoryId] = useState(defaultCategoryId);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedAdditionalCategoryId, setSelectedAdditionalCategoryId] = useState<string | null>(null);
 
   const [form, setForm] = useState(INITIAL_FORM_STATE);
@@ -257,9 +253,9 @@ export function EventBookingFlow({
       if (categories.some((category) => category.id === current && !category.isUnavailable)) {
         return current;
       }
-      return defaultCategoryId;
+      return null;
     });
-  }, [categories, defaultCategoryId]);
+  }, [categories]);
 
   useEffect(() => {
     setSelectedAdditionalCategoryId((current) => {
@@ -324,9 +320,7 @@ export function EventBookingFlow({
   const isValidEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email.trim());
   const showFieldErrors = step === "details" && submitAttempted && submissionState !== "submitting" && !completedRegistration;
 
-  const selectedCategory = categories.find((category) => category.id === selectedCategoryId)
-    ?? categories[0]
-    ?? null;
+  const selectedCategory = categories.find((category) => category.id === selectedCategoryId) ?? null;
   const selectedAdditionalCategory = selectedAdditionalCategoryId
     ? additionalCategories.find((category) => category.id === selectedAdditionalCategoryId) ?? null
     : null;
@@ -763,6 +757,8 @@ export function EventBookingFlow({
     setOtpMessage(null);
     setEmailVerified(false);
     setCompletedRegistration(null);
+    setSelectedCategoryId(null);
+    setSelectedAdditionalCategoryId(null);
     setForm(INITIAL_FORM_STATE);
 
     try {
@@ -781,7 +777,7 @@ export function EventBookingFlow({
   }
 
   const confirmedAttendee = completedRegistration?.attendees[0] ?? null;
-  const canContinueFromTickets = canProceed && Boolean(selectedCategory) && !selectedCategory?.isUnavailable;
+  const canContinueFromTickets = canProceed;
   const categorySectionTitle = config.categoriesLabel || "Category";
   const additionalSectionTitle = config.ticketOptionsLabel || "Additional category";
 
@@ -1277,16 +1273,24 @@ export function EventBookingFlow({
                     </div>
                   </div>
 
-                  <Button
-                    type="button"
-                    onClick={() => {
-                      if (step === "tickets") {
-                        if (!canContinueFromTickets) return;
-                        setStep("details");
-                        setMessage(null);
-                        if (typeof window !== "undefined") {
-                          requestAnimationFrame(() => {
-                            window.scrollTo({ top: 0, behavior: "auto" });
+                    <Button
+                      type="button"
+                      onClick={() => {
+                        if (step === "tickets") {
+                          if (!canProceed) return;
+                          if (!selectedCategory) {
+                            setMessage("Please select a category to continue.");
+                            return;
+                          }
+                          if (selectedCategory.isUnavailable) {
+                            setMessage("That category is no longer available. Please choose another one.");
+                            return;
+                          }
+                          setStep("details");
+                          setMessage(null);
+                          if (typeof window !== "undefined") {
+                            requestAnimationFrame(() => {
+                              window.scrollTo({ top: 0, behavior: "auto" });
                           });
                         }
                         return;
@@ -1340,7 +1344,7 @@ export function EventBookingFlow({
                         : "Complete registration"}
                   </Button>
 
-                  {step === "details" && message && submissionState !== "submitting" ? (
+                  {message && submissionState !== "submitting" ? (
                     <p className="mt-3 text-sm text-rose-700">{message}</p>
                   ) : null}
                 </div>

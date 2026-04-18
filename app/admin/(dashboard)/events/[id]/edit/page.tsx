@@ -1,8 +1,10 @@
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { EventForm } from "@/components/admin/event-form";
 import type { EventFormResult } from "@/components/admin/event-form";
+import { getAdminBackLabel, normalizeAdminReturnTo } from "@/lib/admin-navigation";
 import { StatusPill } from "@/components/ui/status-pill";
 import { requireAuthenticatedUser } from "@/lib/auth";
 import { parseAdminEventFormData } from "@/lib/form-data";
@@ -11,9 +13,11 @@ import { updateEvent } from "@/services/admin";
 import { getEventById } from "@/services/events";
 
 export default async function EditEventPage({
-  params
+  params,
+  searchParams
 }: {
   params: { id: string };
+  searchParams: { returnTo?: string };
 }) {
   const event = await getEventById(params.id);
 
@@ -22,6 +26,16 @@ export default async function EditEventPage({
   }
 
   const currentEvent = event;
+  const backHref = normalizeAdminReturnTo(searchParams.returnTo, "/admin");
+  const backLabel = getAdminBackLabel(backHref);
+  const backCrumbLabel =
+    backLabel === "Back to registrations"
+      ? "Registrations"
+      : backLabel === "Back to events"
+        ? "Events"
+        : backLabel === "Back to check-in"
+          ? "Check-in"
+          : "Admin";
 
   const registrationState = getRegistrationWindowState(currentEvent);
 
@@ -56,18 +70,24 @@ export default async function EditEventPage({
             <Link href="/admin" className="font-medium text-slate transition hover:text-ink">
               Admin
             </Link>
-            <span className="text-slate/50">/</span>
-            <Link
-              href={`/admin/registrations?eventId=${currentEvent.id}`}
-              className="font-medium text-slate transition hover:text-ink"
-            >
-              Registrations
-            </Link>
+            {backHref !== "/admin" ? (
+              <>
+                <span className="text-slate/50">/</span>
+                <a href={backHref} className="font-medium text-slate transition hover:text-ink">
+                  {backCrumbLabel}
+                </a>
+              </>
+            ) : null}
             <span className="text-slate/50">/</span>
             <span className="font-medium text-slate">Edit</span>
           </div>
 
-          <div className="flex flex-col gap-3 sm:gap-4 xl:flex-row xl:items-start xl:justify-between">
+          <div className="flex flex-col gap-3 sm:gap-4">
+            <a href={backHref} className="admin-back-link self-start">
+              <ArrowLeft className="h-4 w-4" />
+              {backLabel}
+            </a>
+
             <div className="max-w-3xl">
               <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
                 <StatusPill
@@ -98,19 +118,18 @@ export default async function EditEventPage({
                 {formatEventDateRange(currentEvent.start_at, currentEvent.end_at, currentEvent.timezone)}
               </p>
             </div>
-
-            <Link
-              href={`/admin/registrations?eventId=${currentEvent.id}`}
-              className="admin-action"
-            >
-              Back to registrations
-            </Link>
           </div>
         </div>
       </section>
 
       <section className="admin-card p-3 sm:p-6">
-        <EventForm event={currentEvent} action={updateEventAction} hideRegistrationSections />
+        <EventForm
+          event={currentEvent}
+          action={updateEventAction}
+          hideRegistrationSections
+          cancelHref={backHref}
+          successHref={backHref}
+        />
       </section>
     </main>
   );

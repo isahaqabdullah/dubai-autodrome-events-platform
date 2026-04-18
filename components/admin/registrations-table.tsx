@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { RegistrationActions } from "@/components/admin/registration-actions";
+import { appendReturnTo } from "@/lib/admin-navigation";
 import { StatusPill } from "@/components/ui/status-pill";
 import { formatShortDateTime, isSyntheticEmail } from "@/lib/utils";
 
@@ -24,7 +24,13 @@ function displayEmail(row: Record<string, unknown>) {
   return email;
 }
 
-function RegistrationCard({ row }: { row: Record<string, unknown> }) {
+function RegistrationCard({
+  row,
+  returnTo
+}: {
+  row: Record<string, unknown>;
+  returnTo?: string;
+}) {
   const event = (row.events as { title?: string; slug?: string } | null) ?? null;
   const status = String(row.status ?? "registered");
   const categoryTitle = row.category_title ? String(row.category_title) : null;
@@ -51,9 +57,9 @@ function RegistrationCard({ row }: { row: Record<string, unknown> }) {
       </div>
       <div className="mt-1.5 flex items-center gap-1">
         {event?.slug ? (
-          <Link href={`/check-in/${event.slug}`} className="admin-action !px-2 !py-1">
+          <a href={appendReturnTo(`/check-in/${event.slug}`, returnTo)} className="admin-action !px-2 !py-1">
             Check-in
-          </Link>
+          </a>
         ) : null}
         <RegistrationActions registrationId={String(row.id)} status={status} />
       </div>
@@ -62,9 +68,11 @@ function RegistrationCard({ row }: { row: Record<string, unknown> }) {
 }
 
 export function RegistrationsTable({
-  rows
+  rows,
+  returnTo
 }: {
   rows: Array<Record<string, unknown>>;
+  returnTo?: string;
 }) {
   return (
     <>
@@ -75,7 +83,7 @@ export function RegistrationsTable({
           </div>
         ) : null}
         {rows.map((row) => (
-          <RegistrationCard key={String(row.id)} row={row} />
+          <RegistrationCard key={String(row.id)} row={row} returnTo={returnTo} />
         ))}
       </div>
 
@@ -125,9 +133,12 @@ export function RegistrationsTable({
                     <td className="px-3 py-2 text-xs text-slate">
                       <p className="font-medium text-ink">{event?.title ?? "Unknown event"}</p>
                       {event?.slug ? (
-                        <Link href={`/check-in/${event.slug}`} className="text-[11px] font-semibold text-slate hover:text-ink">
+                        <a
+                          href={appendReturnTo(`/check-in/${event.slug}`, returnTo)}
+                          className="text-[11px] font-semibold text-slate hover:text-ink"
+                        >
                           Check-in desk
-                        </Link>
+                        </a>
                       ) : null}
                     </td>
                     <td className="px-3 py-2">

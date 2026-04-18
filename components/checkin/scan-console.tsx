@@ -611,7 +611,7 @@ export function ScanConsole({
         <aside className="card-panel overflow-hidden">
           <div className="border-b border-slate/10 bg-[#fffaf2] px-5 py-4">
             <p className="section-title">Recent activity</p>
-            <h3 className="mt-1.5 text-lg font-semibold tracking-tight text-ink">Latest scan log</h3>
+            <h3 className="mt-1.5 text-xl font-bold tracking-tight text-ink">Latest scan log</h3>
           </div>
 
           <div className="max-h-[520px] overflow-y-auto">
@@ -625,34 +625,26 @@ export function ScanConsole({
               const gateLabel = scan.gate_name ?? null;
 
               return (
-                <div key={scan.id} className="border-b border-slate/10 px-5 py-3 last:border-b-0">
-                  <div className="flex items-start justify-between gap-3">
+                <div key={scan.id} className="border-b border-slate/10 px-5 py-3.5 last:border-b-0">
+                  <div className="flex items-center justify-between gap-3">
                     <div className="min-w-0">
-                      <p className="font-semibold text-ink">{attendeeName}</p>
-                      {attendeeCategory || attendeeEmail ? (
-                        <div className="mt-1 flex flex-wrap items-center gap-2">
-                          {attendeeCategory ? (
-                            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-ink">
-                              {attendeeCategory}
-                            </span>
-                          ) : null}
-                          {attendeeEmail ? <p className="truncate text-sm text-slate">{attendeeEmail}</p> : null}
-                        </div>
-                      ) : null}
+                      <p className="truncate text-sm font-semibold text-ink">{attendeeName}</p>
+                      <p className="mt-0.5 text-xs text-slate">
+                        {[attendeeCategory, gateLabel, formatScanTime(scan.scanned_at)].filter(Boolean).join(" \u00b7 ")}
+                      </p>
                     </div>
                     <span
                       className={cn(
-                        "shrink-0 rounded-full border px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.18em]",
-                        presentation.badgeClassName
+                        "shrink-0 text-xs font-semibold",
+                        scan.result === "success"
+                          ? "text-emerald-600"
+                          : scan.result === "already_checked_in"
+                            ? "text-amber-600"
+                            : "text-rose-500"
                       )}
                     >
                       {formatResultLabel(scan.result)}
                     </span>
-                  </div>
-
-                  <div className="mt-2 flex items-center justify-end gap-3 text-xs text-slate">
-                    {gateLabel ? <span>{gateLabel}</span> : null}
-                    <span>{formatScanTime(scan.scanned_at)}</span>
                   </div>
                 </div>
               );

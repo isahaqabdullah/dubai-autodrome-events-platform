@@ -3,6 +3,7 @@ import Link from "next/link";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { DeleteEventButton } from "@/components/admin/delete-event-button";
 import { StatusPill } from "@/components/ui/status-pill";
+import { appendReturnTo } from "@/lib/admin-navigation";
 import type { EventRecord } from "@/lib/types";
 import { formatEventDateRange, getRegistrationWindowState } from "@/lib/utils";
 import { listAdminEvents } from "@/services/events";
@@ -11,26 +12,30 @@ function ActionLink({
   href,
   children,
   variant = "secondary",
-  compact = false
+  compact = false,
+  fresh = false
 }: {
   href: string;
   children: React.ReactNode;
   variant?: "primary" | "secondary";
   compact?: boolean;
+  fresh?: boolean;
 }) {
-  return (
-    <Link
-      href={href as Route}
-      className={
-        variant === "primary"
-          ? `inline-flex items-center justify-center font-semibold text-white transition hover:bg-ink/92 ${
-              compact ? "rounded-lg border border-ink bg-ink px-2.5 py-1.5 text-[11px] sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs" : "rounded-2xl border border-ink bg-ink px-4 py-3 text-sm"
-            }`
-          : `inline-flex items-center justify-center font-semibold text-ink transition hover:border-slate/30 hover:bg-slate-50 ${
-              compact ? "rounded-lg border border-slate/15 bg-white px-2.5 py-1.5 text-[11px] sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs" : "rounded-2xl border border-slate/15 bg-white px-4 py-3 text-sm"
-            }`
-      }
-    >
+  const className =
+    variant === "primary"
+      ? `inline-flex items-center justify-center font-semibold text-white transition hover:bg-ink/92 ${
+          compact ? "rounded-lg border border-ink bg-ink px-2.5 py-1.5 text-[11px] sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs" : "rounded-2xl border border-ink bg-ink px-4 py-3 text-sm"
+        }`
+      : `inline-flex items-center justify-center font-semibold text-ink transition hover:border-slate/30 hover:bg-slate-50 ${
+          compact ? "rounded-lg border border-slate/15 bg-white px-2.5 py-1.5 text-[11px] sm:rounded-2xl sm:px-3 sm:py-2 sm:text-xs" : "rounded-2xl border border-slate/15 bg-white px-4 py-3 text-sm"
+        }`;
+
+  return fresh ? (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ) : (
+    <Link href={href as Route} className={className}>
       {children}
     </Link>
   );
@@ -106,13 +111,13 @@ function EventSection({
                 </div>
 
                 <div className="flex flex-wrap gap-1 sm:gap-2 xl:justify-end">
-                  <ActionLink href={`/check-in/${event.slug}`} variant="primary" compact>
+                  <ActionLink href={appendReturnTo(`/check-in/${event.slug}`, "/admin")} variant="primary" compact fresh>
                     Check in
                   </ActionLink>
-                  <ActionLink href={`/admin/events/${event.id}/edit`} compact>
+                  <ActionLink href={appendReturnTo(`/admin/events/${event.id}/edit`, "/admin")} compact>
                     Edit
                   </ActionLink>
-                  <ActionLink href={`/admin/registrations?eventId=${event.id}`} compact>
+                  <ActionLink href={`/admin/registrations?eventId=${event.id}`} compact fresh>
                     Registrations
                   </ActionLink>
                   <ActionLink href={`/events/${event.slug}`} compact>
@@ -197,7 +202,7 @@ export default async function AdminDashboardPage() {
           <p className="admin-label">No events</p>
           <h2 className="mt-3 text-2xl font-semibold tracking-tight text-ink">Create the first event</h2>
           <div className="mt-4">
-            <ActionLink href="/admin/events/new" variant="primary">
+            <ActionLink href={appendReturnTo("/admin/events/new", "/admin")} variant="primary">
               Create event
             </ActionLink>
           </div>

@@ -52,10 +52,47 @@ interface GroupConfirmationEmailInput {
 
 function buildEmailShell(content: string) {
   return `
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1117;border-collapse:collapse;font-family:Arial,sans-serif;line-height:1.6;color:#dce5ec">
+    <style>
+      @media only screen and (max-width: 620px) {
+        .email-shell-inner {
+          max-width: 100% !important;
+        }
+
+        .ticket-card__layout,
+        .ticket-card__layout tbody,
+        .ticket-card__layout tr {
+          display: block !important;
+          width: 100% !important;
+        }
+
+        .ticket-card__poster-cell,
+        .ticket-card__meta-cell {
+          display: block !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+
+        .ticket-card__poster-image {
+          height: 148px !important;
+        }
+
+        .ticket-card__meta-cell {
+          border-left: 0 !important;
+          border-top: 2px dashed #d2c7ba !important;
+          padding: 14px 14px 16px !important;
+        }
+
+        .ticket-card__qr-image {
+          width: 100% !important;
+          max-width: 304px !important;
+          height: auto !important;
+        }
+      }
+    </style>
+    <table class="email-shell" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0b1117;border-collapse:collapse;font-family:Arial,sans-serif;line-height:1.6;color:#dce5ec">
       <tr>
         <td align="center" style="padding:24px 12px">
-          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;border-collapse:collapse">
+          <table class="email-shell-inner" role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:680px;border-collapse:collapse">
             <tr>
               <td>
                 ${content}

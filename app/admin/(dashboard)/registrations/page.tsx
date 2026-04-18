@@ -1,9 +1,11 @@
+import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
 import { AnalyticsCards } from "@/components/admin/analytics-cards";
 import { DownloadDropdown } from "@/components/admin/download-dropdown";
 import { Pagination } from "@/components/admin/pagination";
 import { RegistrationsTable } from "@/components/admin/registrations-table";
 import { StatusPill } from "@/components/ui/status-pill";
+import { appendReturnTo, buildPathWithSearch } from "@/lib/admin-navigation";
 import { isRetryableUpstreamError, withTransientRetry } from "@/lib/transient-retry";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
@@ -28,6 +30,7 @@ export default async function RegistrationsPage({
   searchParams: { eventId?: string; status?: string; q?: string; page?: string; aPage?: string };
 }) {
   const selectedEventId = searchParams.eventId?.trim() || undefined;
+  const currentRegistrationsHref = buildPathWithSearch("/admin/registrations", searchParams);
   let events: Awaited<ReturnType<typeof listAdminEvents>>;
   let rows: Awaited<ReturnType<typeof listRegistrations>>;
   let selectedEvent: Awaited<ReturnType<typeof getEventById>>;
@@ -115,89 +118,102 @@ export default async function RegistrationsPage({
   return (
     <main className="admin-page">
       <section className="admin-card p-2.5 sm:p-3.5">
-        <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
-          <div className="min-w-0">
-            <div className="mb-0.5 flex flex-wrap items-center gap-1.5 text-[11px] sm:mb-1 sm:text-xs">
-              <Link href="/admin" className="font-medium text-slate transition hover:text-ink">
-                Admin
-              </Link>
-              <span className="text-slate/50">/</span>
-              <span className="font-medium text-slate">Registrations</span>
-            </div>
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <h2 className="text-[13px] font-semibold tracking-tight text-ink sm:text-base">
-                {selectedEvent?.title ?? "All events"}
-              </h2>
-              {selectedEvent ? (
-                <>
-                  <StatusPill
-                    tone={
-                      selectedEvent.status === "live"
-                        ? "success"
-                        : selectedEvent.status === "draft" || selectedEvent.status === "archived"
-                          ? "warning"
-                          : "neutral"
-                    }
-                  >
-                    {selectedEvent.status}
-                  </StatusPill>
-                  {registrationState ? (
+        <div className="flex flex-col gap-3">
+          <a href="/admin" className="admin-back-link self-start">
+            <ArrowLeft className="h-4 w-4" />
+            Back to admin
+          </a>
+
+          <div className="flex flex-col gap-2 xl:flex-row xl:items-center xl:justify-between">
+            <div className="min-w-0">
+              <div className="mb-0.5 flex flex-wrap items-center gap-1.5 text-[11px] sm:mb-1 sm:text-xs">
+                <Link href="/admin" className="font-medium text-slate transition hover:text-ink">
+                  Admin
+                </Link>
+                <span className="text-slate/50">/</span>
+                <span className="font-medium text-slate">Registrations</span>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <h2 className="text-[13px] font-semibold tracking-tight text-ink sm:text-base">
+                  {selectedEvent?.title ?? "All events"}
+                </h2>
+                {selectedEvent ? (
+                  <>
                     <StatusPill
                       tone={
-                        registrationState.state === "open"
+                        selectedEvent.status === "live"
                           ? "success"
-                          : registrationState.state === "not_open_yet"
+                          : selectedEvent.status === "draft" || selectedEvent.status === "archived"
                             ? "warning"
-                            : "danger"
+                            : "neutral"
                       }
                     >
-                      {registrationState.label}
+                      {selectedEvent.status}
                     </StatusPill>
-                  ) : null}
-                </>
+                    {registrationState ? (
+                      <StatusPill
+                        tone={
+                          registrationState.state === "open"
+                            ? "success"
+                            : registrationState.state === "not_open_yet"
+                              ? "warning"
+                              : "danger"
+                        }
+                      >
+                        {registrationState.label}
+                      </StatusPill>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+              {selectedEvent ? (
+                <p className="mt-0.5 text-[11px] text-slate sm:text-xs">
+                  {formatEventDateRange(selectedEvent.start_at, selectedEvent.end_at, selectedEvent.timezone)}
+                </p>
               ) : null}
             </div>
-            {selectedEvent ? (
-              <p className="mt-0.5 text-[11px] text-slate sm:text-xs">
-                {formatEventDateRange(selectedEvent.start_at, selectedEvent.end_at, selectedEvent.timezone)}
-              </p>
-            ) : null}
-          </div>
 
-          <div className="flex flex-wrap gap-1 sm:gap-1.5">
-            {selectedEvent ? (
-              <>
-                <DownloadDropdown eventId={selectedEvent.id} />
-                <Link href={`/check-in/${selectedEvent.slug}`} className="admin-action-primary">
-                  Check in
-                </Link>
-                <Link href={`/admin/events/${selectedEvent.id}/edit`} className="admin-action">
-                  Edit
-                </Link>
-                <Link href={`/events/${selectedEvent.slug}`} className="admin-action">
-                  Public
-                </Link>
-              </>
-            ) : (
-              <>
-                <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
-                  <span className="text-[10px] text-slate sm:text-xs">Rows</span>
-                  <span className="text-xs font-semibold text-ink sm:text-sm">{rows.length}</span>
-                </div>
-                <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
-                  <span className="text-[10px] text-slate sm:text-xs">Checked in</span>
-                  <span className="text-xs font-semibold text-ink sm:text-sm">{checkedInCount}</span>
-                </div>
-                <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
-                  <span className="text-[10px] text-slate sm:text-xs">Revoked</span>
-                  <span className="text-xs font-semibold text-ink sm:text-sm">{revokedCount}</span>
-                </div>
-                <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
-                  <span className="text-[10px] text-slate sm:text-xs">Events</span>
-                  <span className="text-xs font-semibold text-ink sm:text-sm">{events.length}</span>
-                </div>
-              </>
-            )}
+            <div className="flex flex-wrap gap-1 sm:gap-1.5">
+              {selectedEvent ? (
+                <>
+                  <DownloadDropdown eventId={selectedEvent.id} />
+                  <a
+                    href={appendReturnTo(`/check-in/${selectedEvent.slug}`, currentRegistrationsHref)}
+                    className="admin-action-primary"
+                  >
+                    Check in
+                  </a>
+                  <a
+                    href={appendReturnTo(`/admin/events/${selectedEvent.id}/edit`, currentRegistrationsHref)}
+                    className="admin-action"
+                  >
+                    Edit
+                  </a>
+                  <Link href={`/events/${selectedEvent.slug}`} className="admin-action">
+                    Public
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
+                    <span className="text-[10px] text-slate sm:text-xs">Rows</span>
+                    <span className="text-xs font-semibold text-ink sm:text-sm">{rows.length}</span>
+                  </div>
+                  <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
+                    <span className="text-[10px] text-slate sm:text-xs">Checked in</span>
+                    <span className="text-xs font-semibold text-ink sm:text-sm">{checkedInCount}</span>
+                  </div>
+                  <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
+                    <span className="text-[10px] text-slate sm:text-xs">Revoked</span>
+                    <span className="text-xs font-semibold text-ink sm:text-sm">{revokedCount}</span>
+                  </div>
+                  <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
+                    <span className="text-[10px] text-slate sm:text-xs">Events</span>
+                    <span className="text-xs font-semibold text-ink sm:text-sm">{events.length}</span>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </section>
@@ -240,7 +256,7 @@ export default async function RegistrationsPage({
         </form>
       </section>
 
-      <RegistrationsTable rows={pagedRows} />
+      <RegistrationsTable rows={pagedRows} returnTo={currentRegistrationsHref} />
 
       <Pagination
         currentPage={registrationsPage}

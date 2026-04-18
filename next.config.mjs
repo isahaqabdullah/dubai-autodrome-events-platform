@@ -1,8 +1,10 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  experimental: {
-    typedRoutes: true
-  }
-};
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 
-export default nextConfig;
+export default function nextConfig(phase) {
+  return {
+    distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next/dev" : ".next/build",
+    experimental: {
+      typedRoutes: true
+    }
+  };
+}

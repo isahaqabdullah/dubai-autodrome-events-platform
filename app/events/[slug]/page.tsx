@@ -4,7 +4,7 @@ import { SiteHeader } from "@/components/public/site-header";
 import { getRegistrationWindowState } from "@/lib/utils";
 import { getEventBySlug, getRegistrationSummaryForEvent } from "@/services/events";
 
-export const revalidate = 30;
+export const dynamic = "force-dynamic";
 
 export default async function EventDetailPage({
   params

@@ -35,6 +35,8 @@ interface EventFormProps {
   event?: EventRecord | null;
   action: (formData: FormData) => Promise<EventFormResult>;
   hideRegistrationSections?: boolean;
+  cancelHref?: string;
+  successHref?: string;
 }
 
 function FormSection({
@@ -193,13 +195,20 @@ function FileUploadField({
   );
 }
 
-export function EventForm({ event, action, hideRegistrationSections = false }: EventFormProps) {
+export function EventForm({
+  event,
+  action,
+  hideRegistrationSections = false,
+  cancelHref = "/admin",
+  successHref
+}: EventFormProps) {
   const config = (event?.form_config ?? {}) as EventFormConfig;
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formVersion = event ? `${event.id}:${event.updated_at}` : "new";
+  const finalSuccessHref = successHref ?? cancelHref;
 
   // File upload state
   const initialPosterImage = config.posterImage ?? DEFAULT_POSTER_IMAGE;
@@ -524,9 +533,17 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
             <p className="admin-label">{event ? "Editing event" : "Create event"}</p>
             <p className="mt-0.5 hidden text-sm font-medium text-ink sm:block">{event ? "Ready to save changes." : "Ready to create the event."}</p>
           </div>
-          <Button type="submit" disabled={isPending} className="shrink-0 rounded-xl px-4 py-2 text-xs sm:min-w-[150px] sm:rounded-2xl sm:text-sm">
-            {isPending ? "Saving..." : event ? "Save event" : "Create event"}
-          </Button>
+          <div className="flex shrink-0 items-center gap-2">
+            <a
+              href={cancelHref}
+              className="inline-flex items-center justify-center rounded-xl border border-slate/15 bg-white px-4 py-2 text-xs font-semibold text-ink transition hover:border-slate/30 hover:bg-slate-50 sm:rounded-2xl sm:text-sm"
+            >
+              Cancel
+            </a>
+            <Button type="submit" disabled={isPending} className="rounded-xl px-4 py-2 text-xs sm:min-w-[150px] sm:rounded-2xl sm:text-sm">
+              {isPending ? "Saving..." : event ? "Save event" : "Create event"}
+            </Button>
+          </div>
         </div>
       </form>
 
@@ -544,7 +561,7 @@ export function EventForm({ event, action, hideRegistrationSections = false }: E
             </p>
             <Button
               type="button"
-              onClick={() => router.push("/admin")}
+              onClick={() => window.location.assign(finalSuccessHref)}
               className="mt-6 w-full rounded-2xl"
             >
               OK
