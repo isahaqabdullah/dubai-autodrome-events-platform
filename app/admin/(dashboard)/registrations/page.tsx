@@ -4,12 +4,15 @@ import { DownloadDropdown } from "@/components/admin/download-dropdown";
 import { Pagination } from "@/components/admin/pagination";
 import { RegistrationsTable } from "@/components/admin/registrations-table";
 import { StatusPill } from "@/components/ui/status-pill";
+import { isRetryableUpstreamError, withTransientRetry } from "@/lib/transient-retry";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { formatEventDateRange, formatShortDateTime, getRegistrationWindowState } from "@/lib/utils";
 import { getScanAnalytics } from "@/services/checkin";
 import { listRegistrations } from "@/services/admin";
 import { getEventById, listAdminEvents } from "@/services/events";
+
+export const dynamic = "force-dynamic";
 
 const REGISTRATIONS_PAGE_SIZE = 25;
 const ACTIVITY_PAGE_SIZE = 10;
@@ -25,16 +28,64 @@ export default async function RegistrationsPage({
   searchParams: { eventId?: string; status?: string; q?: string; page?: string; aPage?: string };
 }) {
   const selectedEventId = searchParams.eventId?.trim() || undefined;
-  const [events, rows, selectedEvent] = await Promise.all([
-    listAdminEvents(),
-    listRegistrations({
-      eventId: selectedEventId,
-      status: searchParams.status,
-      query: searchParams.q
-    }),
-    selectedEventId ? getEventById(selectedEventId) : Promise.resolve(null)
-  ]);
-  const analytics = selectedEvent ? await getScanAnalytics(selectedEvent.id) : null;
+  let events: Awaited<ReturnType<typeof listAdminEvents>>;
+  let rows: Awaited<ReturnType<typeof listRegistrations>>;
+  let selectedEvent: Awaited<ReturnType<typeof getEventById>>;
+  let analytics: Awaited<ReturnType<typeof getScanAnalytics>> | null;
+
+  try {
+    [events, rows, selectedEvent] = await Promise.all([
+      withTransientRetry(() => listAdminEvents(), { label: "admin registrations listAdminEvents" }),
+      withTransientRetry(
+        () =>
+          listRegistrations({
+            eventId: selectedEventId,
+            status: searchParams.status,
+            query: searchParams.q
+          }),
+        { label: "admin registrations listRegistrations" }
+      ),
+      selectedEventId
+        ? withTransientRetry(() => getEventById(selectedEventId), { label: "admin registrations getEventById" })
+        : Promise.resolve(null)
+    ]);
+    if (selectedEvent) {
+      const analyticsEventId = selectedEvent.id;
+      analytics = await withTransientRetry(() => getScanAnalytics(analyticsEventId), {
+        label: "admin registrations getScanAnalytics"
+      });
+    } else {
+      analytics = null;
+    }
+  } catch (error) {
+    if (!isRetryableUpstreamError(error)) {
+      throw error;
+    }
+
+    return (
+      <main className="admin-page">
+        <section className="admin-card p-4 sm:p-6">
+          <div className="max-w-2xl">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate">Registrations</p>
+            <h2 className="mt-2 text-xl font-semibold tracking-tight text-ink sm:text-2xl">Live data temporarily unavailable</h2>
+            <p className="mt-2 text-sm text-slate sm:text-base">
+              The admin page is configured to fetch the latest registrations on every request. A temporary upstream gateway error
+              interrupted this load, so the page could not safely show current data.
+            </p>
+            <div className="mt-4 flex flex-wrap gap-2">
+              <a href="/admin/registrations" className="admin-action-primary">
+                Retry now
+              </a>
+              <Link href="/admin" className="admin-action">
+                Back to admin
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   const checkedInCount = rows.filter((row) => String(row.status ?? "") === "checked_in").length;
   const revokedCount = rows.filter((row) => String(row.status ?? "") === "revoked").length;
   const registrationState = selectedEvent ? getRegistrationWindowState(selectedEvent) : null;

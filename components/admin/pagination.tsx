@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 export function Pagination({
   currentPage,
   totalItems,
@@ -32,7 +30,7 @@ export function Pagination({
       params.set(paramKey, String(page));
     }
     const query = params.toString();
-    return (query ? `?${query}` : "?") as __next_route_internal_types__.RouteImpl<string>;
+    return query ? `?${query}` : "?";
   }
 
   const rangeStart = (clamped - 1) * pageSize + 1;
@@ -54,24 +52,29 @@ export function Pagination({
         <span className="font-semibold text-ink">{totalItems}</span>
       </span>
       <div className="flex items-center gap-1.5">
-        <Link
-          href={hrefFor(clamped - 1)}
-          aria-disabled={prevDisabled}
-          className={`${baseBtn} ${prevDisabled ? disabledBtn : ""}`}
-        >
-          Prev
-        </Link>
+        {prevDisabled ? (
+          <span aria-disabled="true" className={`${baseBtn} ${disabledBtn}`}>
+            Prev
+          </span>
+        ) : (
+          // Use document navigation here so paginated admin data is always fetched fresh.
+          <a href={hrefFor(clamped - 1)} className={baseBtn}>
+            Prev
+          </a>
+        )}
         <span className="px-1">
           Page <span className="font-semibold text-ink">{clamped}</span> of{" "}
           <span className="font-semibold text-ink">{totalPages}</span>
         </span>
-        <Link
-          href={hrefFor(clamped + 1)}
-          aria-disabled={nextDisabled}
-          className={`${baseBtn} ${nextDisabled ? disabledBtn : ""}`}
-        >
-          Next
-        </Link>
+        {nextDisabled ? (
+          <span aria-disabled="true" className={`${baseBtn} ${disabledBtn}`}>
+            Next
+          </span>
+        ) : (
+          <a href={hrefFor(clamped + 1)} className={baseBtn}>
+            Next
+          </a>
+        )}
       </div>
     </div>
   );
