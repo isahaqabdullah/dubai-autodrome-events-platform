@@ -229,21 +229,29 @@ export async function searchRegistrationsForEvent(eventId: string, query: string
   return data ?? [];
 }
 
-export async function getRecentCheckins(eventId: string, limit = 10) {
+export async function getRecentCheckins(eventId: string, limit = 10, gateName?: string | null) {
   if (isDemoMode()) {
-    return demoRecentScans.filter((row) => row.registration?.id || row.result).slice(0, limit);
+    return demoRecentScans
+      .filter((row) => row.registration?.id || row.result)
+      .filter((row) => !gateName || row.gate_name === gateName)
+      .slice(0, limit);
   }
 
   const supabase = createAdminSupabaseClient();
 
-  const { data, error } = await supabase
+  let query = supabase
     .from("checkins")
     .select(
       "id, result, gate_name, scanned_at, registration:registrations(id, full_name, email_raw, phone, status, category_title)"
     )
     .eq("event_id", eventId)
-    .order("scanned_at", { ascending: false })
-    .limit(limit);
+    .order("scanned_at", { ascending: false });
+
+  if (gateName) {
+    query = query.eq("gate_name", gateName);
+  }
+
+  const { data, error } = await query.limit(limit);
 
   if (error) {
     throw error;
@@ -292,10 +300,27 @@ function countByGate(gates: Array<string | null>) {
     .sort((left, right) => right.count - left.count);
 }
 
-export async function getScanAnalytics(eventId: string) {
+export async function getScanAnalytics(eventId: string, recentActivityGateName?: string | null) {
   if (isDemoMode()) {
+    const filteredScans = demoRecentScans.filter(
+      (row) => !recentActivityGateName || row.gate_name === recentActivityGateName
+    );
+    const deskCheckedIn = demoRecentScans.filter(
+      (row) => row.result === "success" && (!recentActivityGateName || row.gate_name === recentActivityGateName)
+    ).length;
+    const duplicateScans = filteredScans.filter((row) => row.result === "already_checked_in").length;
+    const invalidScans = filteredScans.filter(
+      (row) => row.result === "invalid_token" || row.result === "revoked" || row.result === "wrong_event"
+    ).length;
+
     return {
-      summary: demoAnalyticsSummary,
+      summary: {
+        ...demoAnalyticsSummary,
+        deskCheckedIn,
+        totalScans: filteredScans.length,
+        duplicateScans,
+        invalidScans
+      },
       scansByGate: [
         { name: "Main gate", count: 2 },
         { name: "North gate", count: 1 }
@@ -304,7 +329,7 @@ export async function getScanAnalytics(eventId: string) {
         { label: "2026-05-22 05:00", count: 1 },
         { label: "2026-05-22 05:15", count: 2 }
       ],
-      recentActivity: demoRecentScans
+      recentActivity: demoRecentScans.filter((row) => !recentActivityGateName || row.gate_name === recentActivityGateName)
     };
   }
 
@@ -322,7 +347,7 @@ export async function getScanAnalytics(eventId: string) {
       .select("result, gate_name, scanned_at")
       .eq("event_id", eventId)
       .order("scanned_at", { ascending: true }),
-    getRecentCheckins(eventId, 200)
+    getRecentCheckins(eventId, 200, recentActivityGateName)
   ]);
 
   if (registrationTotal.error) throw registrationTotal.error;
@@ -330,11 +355,17 @@ export async function getScanAnalytics(eventId: string) {
   if (allCheckins.error) throw allCheckins.error;
 
   const checkinRows = allCheckins.data ?? [];
+  const filteredCheckinRows = recentActivityGateName
+    ? checkinRows.filter((row) => row.gate_name === recentActivityGateName)
+    : checkinRows;
   let duplicateCount = 0;
   let invalidCount = 0;
+  let deskCheckedIn = 0;
 
-  for (const row of checkinRows) {
-    if (row.result === "already_checked_in") duplicateCount++;
+  for (const row of filteredCheckinRows) {
+    if (row.result === "success") {
+      deskCheckedIn++;
+    } else if (row.result === "already_checked_in") duplicateCount++;
     else if (row.result === "invalid_token" || row.result === "revoked" || row.result === "wrong_event")
       invalidCount++;
   }
@@ -342,8 +373,9 @@ export async function getScanAnalytics(eventId: string) {
   const summary: EventAnalyticsSummary = {
     totalRegistered: registrationTotal.count ?? 0,
     totalCheckedIn: checkedInTotal.count ?? 0,
+    deskCheckedIn,
     remaining: Math.max((registrationTotal.count ?? 0) - (checkedInTotal.count ?? 0), 0),
-    totalScans: checkinRows.length,
+    totalScans: filteredCheckinRows.length,
     duplicateScans: duplicateCount,
     invalidScans: invalidCount
   };

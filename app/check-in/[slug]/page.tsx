@@ -16,15 +16,14 @@ export default async function CheckinPage({
   params: { slug: string };
   searchParams: { returnTo?: string };
 }) {
-  await requireAuthenticatedUser("staff");
-
+  const user = await requireAuthenticatedUser("staff");
   const event = await getEventBySlug(params.slug);
 
   if (!event) {
     notFound();
   }
 
-  const analytics = await getScanAnalytics(event.id);
+  const analytics = await getScanAnalytics(event.id, user.gateName);
   const backHref = normalizeAdminReturnTo(searchParams.returnTo, "/admin");
   const backLabel = getAdminBackLabel(backHref);
 
@@ -35,12 +34,13 @@ export default async function CheckinPage({
     summary.totalRegistered > 0 ? Math.round((summary.totalCheckedIn / summary.totalRegistered) * 100) : 0;
 
   return (
-    <main className="page-shell page-stack-compact">
+    <main className="page-stack-compact">
       <section className="card-panel overflow-hidden">
         <div className="px-3.5 py-2.5 sm:px-6 sm:py-4 lg:px-7">
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             <StatusPill tone="success">staff access</StatusPill>
             <StatusPill tone="neutral">check-in desk</StatusPill>
+            <StatusPill tone="neutral">{user.gateName}</StatusPill>
           </div>
 
           <div className="mt-2 flex flex-wrap items-center gap-3 text-[13px] sm:mt-3 sm:text-sm">
@@ -64,7 +64,7 @@ export default async function CheckinPage({
             </div>
           </div>
 
-          <div className="mt-2 grid grid-cols-3 gap-2 sm:mt-4 sm:gap-3 sm:grid-cols-2 md:grid-cols-3">
+          <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-4 sm:gap-3 md:grid-cols-3">
             <div className="rounded-xl border border-slate/10 bg-white px-3 py-2 sm:rounded-2xl sm:px-4 sm:py-3">
               <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-slate sm:text-[11px] sm:tracking-[0.16em]">Checked in</p>
               <p className="mt-1 text-lg font-semibold tracking-tight text-ink sm:mt-1.5 sm:text-2xl">{summary.totalCheckedIn}</p>
@@ -82,7 +82,12 @@ export default async function CheckinPage({
         </div>
       </section>
 
-      <ScanConsole eventId={event.id} initialRecentScans={recentScans} initialSummary={summary} />
+      <ScanConsole
+        eventId={event.id}
+        initialRecentScans={recentScans}
+        initialSummary={summary}
+        assignedGateName={user.gateName}
+      />
 
       <section className="card-panel overflow-hidden">
         <div className="mx-auto w-full max-w-2xl px-3.5 py-4 sm:px-8 sm:py-8">

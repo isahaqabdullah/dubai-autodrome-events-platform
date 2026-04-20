@@ -50,7 +50,7 @@ export function getAdminBackLabel(path: string) {
     return "Back to events";
   }
 
-  if (path.startsWith("/check-in/")) {
+  if (path === "/check-in" || path.startsWith("/check-in/")) {
     return "Back to check-in";
   }
 

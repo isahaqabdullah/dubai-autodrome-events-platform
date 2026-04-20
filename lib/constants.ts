@@ -6,6 +6,8 @@ export const DEFAULT_FORM_CONFIG: EventFormConfig = {
   ticketOptions: []
 };
 
+export const DEFAULT_GATE_NAME = "Main gate";
+
 export const DEFAULT_CATEGORY = {
   id: "general-admission",
   title: "General Admission",

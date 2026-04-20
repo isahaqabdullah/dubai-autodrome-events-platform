@@ -19,10 +19,11 @@ export async function POST(request: Request) {
 
   const scan = await performCheckinScan({
     ...parsed.data,
+    gateName: user.gateName,
     staffUserId: user.id
   });
 
-  const recent = await getRecentCheckins(parsed.data.eventId, 1);
+  const recent = await getRecentCheckins(parsed.data.eventId, 1, user.gateName);
 
   return NextResponse.json({
     result: scan?.result ?? "invalid_token",

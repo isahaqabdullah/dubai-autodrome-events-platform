@@ -3,9 +3,20 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createBrowserSupabaseClient } from "@/lib/supabase/browser";
+import type { AppUserRole } from "@/lib/types";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+
+function getRoleFromUser(user: { app_metadata?: Record<string, unknown> } | null | undefined): AppUserRole | null {
+  const role = user?.app_metadata?.role;
+
+  if (role === "admin" || role === "staff") {
+    return role;
+  }
+
+  return null;
+}
 
 export function LoginForm() {
   const router = useRouter();
@@ -23,7 +34,7 @@ export function LoginForm() {
         setError(null);
 
         const supabase = createBrowserSupabaseClient();
-        const { error: signInError } = await supabase.auth.signInWithPassword({
+        const { data, error: signInError } = await supabase.auth.signInWithPassword({
           email,
           password
         });
@@ -34,7 +45,16 @@ export function LoginForm() {
           return;
         }
 
-        router.replace("/admin");
+        const role = getRoleFromUser(data.user);
+
+        if (!role) {
+          await supabase.auth.signOut();
+          setError("Your account does not have staff access.");
+          setSubmitting(false);
+          return;
+        }
+
+        router.replace(role === "admin" ? "/admin" : "/check-in");
         router.refresh();
       }}
     >

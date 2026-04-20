@@ -171,6 +171,7 @@ export const demoRecentScans: RecentScanActivity[] = [
 export const demoAnalyticsSummary: EventAnalyticsSummary = {
   totalRegistered: 3,
   totalCheckedIn: 1,
+  deskCheckedIn: 1,
   remaining: 2,
   totalScans: 3,
   duplicateScans: 1,

@@ -1,7 +1,7 @@
 import "server-only";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { ADMIN_ROLES, STAFF_ROLES } from "@/lib/constants";
+import { ADMIN_ROLES, DEFAULT_GATE_NAME, STAFF_ROLES } from "@/lib/constants";
 import { isDemoMode } from "@/lib/demo-mode";
 import { createServerSupabaseClient } from "@/lib/supabase/server";
 import type { AppUserRole } from "@/lib/types";
@@ -10,6 +10,7 @@ export interface AuthenticatedAppUser {
   id: string;
   email: string | null;
   role: AppUserRole;
+  gateName: string;
 }
 
 function hasSupabaseAuthCookie(cookieNames: string[]) {
@@ -26,12 +27,22 @@ function getRoleFromUser(user: { app_metadata?: Record<string, unknown> }): AppU
   return null;
 }
 
+function normalizeGateName(value: unknown) {
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
 export async function getAuthenticatedAppUser() {
   if (isDemoMode()) {
     return {
       id: "00000000-0000-0000-0000-000000000001",
       email: "demo-admin@local.test",
-      role: "admin"
+      role: "admin",
+      gateName: DEFAULT_GATE_NAME
     } satisfies AuthenticatedAppUser;
   }
 
@@ -56,10 +67,16 @@ export async function getAuthenticatedAppUser() {
     return null;
   }
 
+  const gateName =
+    normalizeGateName(user.app_metadata?.gate_name) ??
+    normalizeGateName(user.app_metadata?.gateName) ??
+    DEFAULT_GATE_NAME;
+
   return {
     id: user.id,
     email: user.email ?? null,
-    role
+    role,
+    gateName
   } satisfies AuthenticatedAppUser;
 }
 
@@ -73,6 +90,10 @@ export async function requireAuthenticatedUser(scope: "staff" | "admin" = "staff
   const allowedRoles = scope === "admin" ? ADMIN_ROLES : STAFF_ROLES;
 
   if (!allowedRoles.includes(user.role)) {
+    if (scope === "admin" && user.role === "staff") {
+      redirect("/check-in");
+    }
+
     redirect("/admin/login?error=insufficient_role");
   }
 

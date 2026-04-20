@@ -31,6 +31,7 @@ function applySummaryUpdate(summary: EventAnalyticsSummary, result: string): Eve
   if (result === "success") {
     return {
       ...next,
+      deskCheckedIn: summary.deskCheckedIn + 1,
       totalCheckedIn: summary.totalCheckedIn + 1,
       remaining: Math.max(summary.remaining - 1, 0)
     };
@@ -103,11 +104,13 @@ function getResultPresentation(result: string | null | undefined) {
 export function ScanConsole({
   eventId,
   initialRecentScans,
-  initialSummary
+  initialSummary,
+  assignedGateName
 }: {
   eventId: string;
   initialRecentScans: RecentScanRow[];
   initialSummary: EventAnalyticsSummary;
+  assignedGateName: string;
 }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -118,7 +121,6 @@ export function ScanConsole({
   const detectorRef = useRef<{ detect: (source: CanvasImageSource) => Promise<Array<{ rawValue?: string }>> } | null>(null);
   const lastCameraTokenRef = useRef<{ value: string; at: number }>({ value: "", at: 0 });
   const [token, setToken] = useState("");
-  const [gateName, setGateName] = useState("Main gate");
   const [deviceId, setDeviceId] = useState("");
   const [busy, setBusy] = useState(false);
   const [cameraState, setCameraState] = useState<"idle" | "starting" | "active" | "unsupported" | "error">("idle");
@@ -294,7 +296,6 @@ export function ScanConsole({
         body: JSON.stringify({
           eventId,
           token: normalized,
-          gateName,
           deviceId
         })
       });
@@ -397,7 +398,7 @@ export function ScanConsole({
             </div>
           </div>
 
-          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-5">
+          <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-6">
             <div className="rounded-2xl border border-slate/10 bg-white px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate">Open queue</p>
               <p className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{openQueue}</p>
@@ -405,6 +406,10 @@ export function ScanConsole({
             <div className="rounded-2xl border border-slate/10 bg-white px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate">Checked in</p>
               <p className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{summary.totalCheckedIn}</p>
+            </div>
+            <div className="rounded-2xl border border-slate/10 bg-white px-4 py-3">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate">This desk</p>
+              <p className="mt-1.5 text-2xl font-semibold tracking-tight text-ink">{summary.deskCheckedIn}</p>
             </div>
             <div className="rounded-2xl border border-slate/10 bg-white px-4 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate">Scan quality</p>
@@ -620,7 +625,6 @@ export function ScanConsole({
             {recentScans.map((scan) => {
               const presentation = getResultPresentation(scan.result);
               const attendeeName = scan.registration?.full_name ?? "Unknown attendee";
-              const attendeeEmail = scan.registration?.email_raw ?? null;
               const attendeeCategory = scan.registration?.category_title ?? null;
               const gateLabel = scan.gate_name ?? null;
 
@@ -660,11 +664,11 @@ export function ScanConsole({
 
           <div className="mt-4 space-y-4">
             <label className="block">
-              <span className="mb-2 block text-sm font-semibold text-ink">Gate name</span>
+              <span className="mb-2 block text-sm font-semibold text-ink">Assigned gate</span>
               <input
-                value={gateName}
+                value={assignedGateName}
+                disabled
                 className="w-full rounded-2xl border border-slate/15 bg-[#f7fafc] px-4 py-3 text-sm text-ink outline-none transition focus:border-[#2f7b76]/30 focus:bg-white focus:shadow-[0_0_0_4px_rgba(47,123,118,0.08)]"
-                onChange={(eventObject) => setGateName(eventObject.target.value)}
               />
             </label>
 
@@ -684,7 +688,7 @@ export function ScanConsole({
               <Smartphone className="h-4 w-4 text-[#2f7b76]" />
               <span className="font-semibold">{deviceId.trim() || "Browser station"}</span>
             </div>
-            <p className="mt-2">Scans will be logged against {gateName || "this gate"}.</p>
+            <p className="mt-2">Scans and recent activity are locked to {assignedGateName}.</p>
           </div>
         </div>
 

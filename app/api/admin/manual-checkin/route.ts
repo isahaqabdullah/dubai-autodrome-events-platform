@@ -17,6 +17,7 @@ export async function POST(request: Request) {
   if (codeParsed.success) {
     const result = await manualCheckinByCode({
       ...codeParsed.data,
+      gateName: user.gateName,
       staffUserId: user.id
     });
 
@@ -39,6 +40,7 @@ export async function POST(request: Request) {
 
   const result = await manualCheckin({
     ...parsed.data,
+    gateName: user.gateName,
     staffUserId: user.id
   });
 

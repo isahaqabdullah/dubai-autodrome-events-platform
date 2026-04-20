@@ -93,6 +93,7 @@ export interface RegistrationWindowState {
 export interface EventAnalyticsSummary {
   totalRegistered: number;
   totalCheckedIn: number;
+  deskCheckedIn: number;
   remaining: number;
   totalScans: number;
   duplicateScans: number;
