@@ -16,7 +16,8 @@ import { getEventById, listAdminEvents } from "@/services/events";
 
 export const dynamic = "force-dynamic";
 
-const REGISTRATIONS_PAGE_SIZE = 25;
+const DEFAULT_REGISTRATIONS_PAGE_SIZE = 25;
+const REGISTRATIONS_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 const ACTIVITY_PAGE_SIZE = 10;
 
 function parsePage(value: string | undefined) {
@@ -24,13 +25,21 @@ function parsePage(value: string | undefined) {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : 1;
 }
 
+function parseRegistrationsPageSize(value: string | undefined) {
+  const parsed = Number.parseInt(value ?? String(DEFAULT_REGISTRATIONS_PAGE_SIZE), 10);
+  return REGISTRATIONS_PAGE_SIZE_OPTIONS.includes(parsed as (typeof REGISTRATIONS_PAGE_SIZE_OPTIONS)[number])
+    ? parsed
+    : DEFAULT_REGISTRATIONS_PAGE_SIZE;
+}
+
 export default async function RegistrationsPage({
   searchParams
 }: {
-  searchParams: { eventId?: string; status?: string; q?: string; page?: string; aPage?: string };
+  searchParams: { eventId?: string; status?: string; q?: string; page?: string; pageSize?: string; aPage?: string };
 }) {
   const selectedEventId = searchParams.eventId?.trim() || undefined;
   const requestedRegistrationsPage = parsePage(searchParams.page);
+  const registrationsPageSize = parseRegistrationsPageSize(searchParams.pageSize);
   let events: Awaited<ReturnType<typeof listAdminEvents>>;
   let registrations: Awaited<ReturnType<typeof listRegistrations>>;
   let selectedEvent: Awaited<ReturnType<typeof getEventById>>;
@@ -44,7 +53,7 @@ export default async function RegistrationsPage({
       status: searchParams.status,
       query: searchParams.q
     };
-    const loadRegistrations = (page: number, statusOverride?: string, pageSize = REGISTRATIONS_PAGE_SIZE) =>
+    const loadRegistrations = (page: number, statusOverride?: string, pageSize = registrationsPageSize) =>
       withTransientRetry(
         () =>
           listRegistrations({
@@ -62,7 +71,7 @@ export default async function RegistrationsPage({
       !selectedEventId && !searchParams.status ? loadRegistrations(1, "revoked", 1) : Promise.resolve(null)
     ]);
 
-    const totalRegistrationPages = Math.max(1, Math.ceil(requestedRegistrations.total / REGISTRATIONS_PAGE_SIZE));
+    const totalRegistrationPages = Math.max(1, Math.ceil(requestedRegistrations.total / registrationsPageSize));
     registrations =
       requestedRegistrationsPage > totalRegistrationPages && requestedRegistrations.total > 0
         ? await loadRegistrations(totalRegistrationPages)
@@ -122,11 +131,13 @@ export default async function RegistrationsPage({
   const totalRows = registrations.total;
   const registrationsPage = Math.min(
     requestedRegistrationsPage,
-    Math.max(1, Math.ceil(totalRows / REGISTRATIONS_PAGE_SIZE))
+    Math.max(1, Math.ceil(totalRows / registrationsPageSize))
   );
   const pagedRows = registrations.rows;
   const normalizedSearchParams = {
     ...searchParams,
+    pageSize:
+      registrationsPageSize === DEFAULT_REGISTRATIONS_PAGE_SIZE ? undefined : String(registrationsPageSize),
     page: registrationsPage > 1 ? String(registrationsPage) : undefined
   };
   const currentRegistrationsHref = buildPathWithSearch("/admin/registrations", normalizedSearchParams);
@@ -280,6 +291,21 @@ export default async function RegistrationsPage({
             defaultValue={searchParams.q ?? ""}
             className="rounded-lg border-ink/25 bg-white px-2.5 py-1.5 text-sm shadow-sm"
           />
+          <div className="flex items-center gap-2">
+            <span className="shrink-0 text-xs font-medium text-slate">Show</span>
+            <Select
+              name="pageSize"
+              defaultValue={String(registrationsPageSize)}
+              className="min-w-[5.5rem] rounded-lg border-ink/25 bg-white px-2.5 py-1.5 text-sm font-medium shadow-sm focus:border-ink/40 focus:ring-1 focus:ring-ink/20 sm:w-auto"
+            >
+              {REGISTRATIONS_PAGE_SIZE_OPTIONS.map((size) => (
+                <option key={size} value={size}>
+                  {size}
+                </option>
+              ))}
+            </Select>
+            <span className="shrink-0 text-xs text-slate">rows</span>
+          </div>
           <button className="admin-action-primary shrink-0 !py-1.5 text-sm">Apply</button>
         </form>
       </section>
@@ -289,7 +315,7 @@ export default async function RegistrationsPage({
       <Pagination
         currentPage={registrationsPage}
         totalItems={totalRows}
-        pageSize={REGISTRATIONS_PAGE_SIZE}
+        pageSize={registrationsPageSize}
         paramKey="page"
         searchParams={normalizedSearchParams}
       />
