@@ -234,13 +234,26 @@ export async function deleteEvent(eventId: string, actor: AuthenticatedAppUser) 
   return { ok: true, slug: event.slug as string };
 }
 
-export async function listRegistrations(filters: {
+type ListRegistrationsFilters = {
   eventId?: string;
   status?: string;
   query?: string;
-}) {
+  page?: number;
+  pageSize?: number;
+};
+
+const ADMIN_REGISTRATION_SELECT =
+  "id, event_id, full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, checked_in_at, created_at, booking_id, is_primary, registered_by_email, events(title, slug)";
+
+export async function listRegistrations(filters: ListRegistrationsFilters) {
+  const page = Number.isFinite(filters.page) && (filters.page ?? 0) > 0 ? Math.floor(filters.page ?? 1) : 1;
+  const pageSize =
+    Number.isFinite(filters.pageSize) && (filters.pageSize ?? 0) > 0 ? Math.floor(filters.pageSize ?? 25) : 25;
+  const rangeStart = (page - 1) * pageSize;
+  const rangeEnd = rangeStart + pageSize - 1;
+
   if (isDemoMode()) {
-    return demoRegistrations
+    const filteredRows = demoRegistrations
       .filter((row) => !filters.eventId || row.event_id === filters.eventId)
       .filter((row) => !filters.status || row.status === filters.status)
       .filter((row) => {
@@ -262,14 +275,17 @@ export async function listRegistrations(filters: {
           slug: demoEvents.find((event) => event.id === row.event_id)?.slug ?? "demo-event"
         }
       }));
+
+    return {
+      rows: filteredRows.slice(rangeStart, rangeEnd + 1),
+      total: filteredRows.length
+    };
   }
 
   const supabase = createAdminSupabaseClient();
   let query = supabase
     .from("registrations")
-    .select(
-      "id, event_id, full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, checked_in_at, created_at, booking_id, is_primary, registered_by_email, events(title, slug)"
-    )
+    .select(ADMIN_REGISTRATION_SELECT, { count: "exact" })
     .order("created_at", { ascending: false });
 
   if (filters.eventId) {
@@ -285,13 +301,16 @@ export async function listRegistrations(filters: {
     query = query.or(`full_name.ilike.%${needle}%,email_raw.ilike.%${needle}%,phone.ilike.%${needle}%`);
   }
 
-  const { data, error } = await query.limit(200);
+  const { data, error, count } = await query.range(rangeStart, rangeEnd);
 
   if (error) {
     throw error;
   }
 
-  return data ?? [];
+  return {
+    rows: data ?? [],
+    total: count ?? 0
+  };
 }
 
 export async function revokeRegistration(

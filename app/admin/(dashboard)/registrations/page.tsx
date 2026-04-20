@@ -30,24 +30,53 @@ export default async function RegistrationsPage({
   searchParams: { eventId?: string; status?: string; q?: string; page?: string; aPage?: string };
 }) {
   const selectedEventId = searchParams.eventId?.trim() || undefined;
-  const currentRegistrationsHref = buildPathWithSearch("/admin/registrations", searchParams);
+  const requestedRegistrationsPage = parsePage(searchParams.page);
   let events: Awaited<ReturnType<typeof listAdminEvents>>;
-  let rows: Awaited<ReturnType<typeof listRegistrations>>;
+  let registrations: Awaited<ReturnType<typeof listRegistrations>>;
   let selectedEvent: Awaited<ReturnType<typeof getEventById>>;
   let analytics: Awaited<ReturnType<typeof getScanAnalytics>> | null;
+  let checkedInCount = 0;
+  let revokedCount = 0;
 
   try {
-    [events, rows, selectedEvent] = await Promise.all([
-      withTransientRetry(() => listAdminEvents(), { label: "admin registrations listAdminEvents" }),
+    const registrationFilters = {
+      eventId: selectedEventId,
+      status: searchParams.status,
+      query: searchParams.q
+    };
+    const loadRegistrations = (page: number, statusOverride?: string, pageSize = REGISTRATIONS_PAGE_SIZE) =>
       withTransientRetry(
         () =>
           listRegistrations({
-            eventId: selectedEventId,
-            status: searchParams.status,
-            query: searchParams.q
+            ...registrationFilters,
+            status: statusOverride ?? registrationFilters.status,
+            page,
+            pageSize
           }),
         { label: "admin registrations listRegistrations" }
-      ),
+      );
+
+    const [requestedRegistrations, checkedInRegistrations, revokedRegistrations] = await Promise.all([
+      loadRegistrations(requestedRegistrationsPage),
+      !selectedEventId && !searchParams.status ? loadRegistrations(1, "checked_in", 1) : Promise.resolve(null),
+      !selectedEventId && !searchParams.status ? loadRegistrations(1, "revoked", 1) : Promise.resolve(null)
+    ]);
+
+    const totalRegistrationPages = Math.max(1, Math.ceil(requestedRegistrations.total / REGISTRATIONS_PAGE_SIZE));
+    registrations =
+      requestedRegistrationsPage > totalRegistrationPages && requestedRegistrations.total > 0
+        ? await loadRegistrations(totalRegistrationPages)
+        : requestedRegistrations;
+
+    if (!selectedEventId) {
+      checkedInCount =
+        searchParams.status === "checked_in" ? registrations.total : checkedInRegistrations?.total ?? 0;
+      revokedCount =
+        searchParams.status === "revoked" ? registrations.total : revokedRegistrations?.total ?? 0;
+    }
+
+    [events, selectedEvent] = await Promise.all([
+      withTransientRetry(() => listAdminEvents(), { label: "admin registrations listAdminEvents" }),
       selectedEventId
         ? withTransientRetry(() => getEventById(selectedEventId), { label: "admin registrations getEventById" })
         : Promise.resolve(null)
@@ -89,19 +118,18 @@ export default async function RegistrationsPage({
     );
   }
 
-  const checkedInCount = rows.filter((row) => String(row.status ?? "") === "checked_in").length;
-  const revokedCount = rows.filter((row) => String(row.status ?? "") === "revoked").length;
   const registrationState = selectedEvent ? getRegistrationWindowState(selectedEvent) : null;
-
-  const totalRows = rows.length;
+  const totalRows = registrations.total;
   const registrationsPage = Math.min(
-    parsePage(searchParams.page),
+    requestedRegistrationsPage,
     Math.max(1, Math.ceil(totalRows / REGISTRATIONS_PAGE_SIZE))
   );
-  const pagedRows = rows.slice(
-    (registrationsPage - 1) * REGISTRATIONS_PAGE_SIZE,
-    registrationsPage * REGISTRATIONS_PAGE_SIZE
-  );
+  const pagedRows = registrations.rows;
+  const normalizedSearchParams = {
+    ...searchParams,
+    page: registrationsPage > 1 ? String(registrationsPage) : undefined
+  };
+  const currentRegistrationsHref = buildPathWithSearch("/admin/registrations", normalizedSearchParams);
 
   const totalActivity = analytics?.recentActivity.length ?? 0;
   const activityPage = Math.min(
@@ -197,7 +225,7 @@ export default async function RegistrationsPage({
                 <>
                   <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
                     <span className="text-[10px] text-slate sm:text-xs">Rows</span>
-                    <span className="text-xs font-semibold text-ink sm:text-sm">{rows.length}</span>
+                    <span className="text-xs font-semibold text-ink sm:text-sm">{totalRows}</span>
                   </div>
                   <div className="admin-card-muted flex items-center gap-1.5 px-2 py-1 sm:gap-2 sm:px-3 sm:py-1.5">
                     <span className="text-[10px] text-slate sm:text-xs">Checked in</span>
@@ -263,7 +291,7 @@ export default async function RegistrationsPage({
         totalItems={totalRows}
         pageSize={REGISTRATIONS_PAGE_SIZE}
         paramKey="page"
-        searchParams={searchParams}
+        searchParams={normalizedSearchParams}
       />
 
       {analytics ? (
