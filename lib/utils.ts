@@ -101,14 +101,33 @@ export function formatEventDateRange(startAt: string, endAt: string, timeZone: s
   return `${dateFormatter.format(start)} · ${timeFormatter.format(start)} - ${timeFormatter.format(end)} (${timeZone})`;
 }
 
-export function formatShortDateTime(value: string, timeZone = "UTC") {
+function formatDateTimeValue(value: string, timeZone: string, options: Intl.DateTimeFormatOptions) {
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
   return new Intl.DateTimeFormat("en-US", {
     timeZone,
+    ...options
+  }).format(date);
+}
+
+export function formatShortDateTime(value: string, timeZone: string) {
+  return formatDateTimeValue(value, timeZone, {
     month: "short",
     day: "numeric",
     hour: "numeric",
     minute: "2-digit"
-  }).format(new Date(value));
+  });
+}
+
+export function formatShortTime(value: string, timeZone: string) {
+  return formatDateTimeValue(value, timeZone, {
+    hour: "numeric",
+    minute: "2-digit"
+  });
 }
 
 export function formatInputDateTimeInZone(value: string | null, timeZone: string) {

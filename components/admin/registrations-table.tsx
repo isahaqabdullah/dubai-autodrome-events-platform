@@ -26,10 +26,12 @@ function displayEmail(row: Record<string, unknown>) {
 
 function RegistrationCard({
   row,
-  returnTo
+  returnTo,
+  timeZone
 }: {
   row: Record<string, unknown>;
   returnTo?: string;
+  timeZone: string;
 }) {
   const event = (row.events as { title?: string; slug?: string } | null) ?? null;
   const status = String(row.status ?? "registered");
@@ -53,7 +55,7 @@ function RegistrationCard({
       ) : null}
       <div className="mt-1 flex items-center justify-between gap-2 border-t border-slate/10 pt-1 text-[11px] text-slate">
         <span className="truncate font-medium text-ink">{event?.title ?? "Unknown event"}</span>
-        <span className="shrink-0">{formatShortDateTime(String(row.created_at ?? ""), "Asia/Dubai")}</span>
+        <span className="shrink-0">{formatShortDateTime(String(row.created_at ?? ""), timeZone)}</span>
       </div>
       <div className="mt-1.5 flex items-center gap-1">
         {event?.slug ? (
@@ -69,10 +71,12 @@ function RegistrationCard({
 
 export function RegistrationsTable({
   rows,
-  returnTo
+  returnTo,
+  timeZone
 }: {
   rows: Array<Record<string, unknown>>;
   returnTo?: string;
+  timeZone: string;
 }) {
   return (
     <>
@@ -83,7 +87,7 @@ export function RegistrationsTable({
           </div>
         ) : null}
         {rows.map((row) => (
-          <RegistrationCard key={String(row.id)} row={row} returnTo={returnTo} />
+          <RegistrationCard key={String(row.id)} row={row} returnTo={returnTo} timeZone={timeZone} />
         ))}
       </div>
 
@@ -144,7 +148,7 @@ export function RegistrationsTable({
                     <td className="px-3 py-2">
                       <StatusPill tone={registrationTone(status)}>{status.replaceAll("_", " ")}</StatusPill>
                     </td>
-                    <td className="px-3 py-2 text-xs text-slate">{formatShortDateTime(String(row.created_at ?? ""), "Asia/Dubai")}</td>
+                    <td className="px-3 py-2 text-xs text-slate">{formatShortDateTime(String(row.created_at ?? ""), timeZone)}</td>
                     <td className="px-3 py-2">
                       <RegistrationActions registrationId={String(row.id)} status={status} />
                     </td>

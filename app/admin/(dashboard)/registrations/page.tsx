@@ -141,6 +141,7 @@ export default async function RegistrationsPage({
     page: registrationsPage > 1 ? String(registrationsPage) : undefined
   };
   const currentRegistrationsHref = buildPathWithSearch("/admin/registrations", normalizedSearchParams);
+  const activityTimeZone = selectedEvent?.timezone ?? "Asia/Dubai";
 
   const totalActivity = analytics?.recentActivity.length ?? 0;
   const activityPage = Math.min(
@@ -310,7 +311,7 @@ export default async function RegistrationsPage({
         </form>
       </section>
 
-      <RegistrationsTable rows={pagedRows} returnTo={currentRegistrationsHref} />
+      <RegistrationsTable rows={pagedRows} returnTo={currentRegistrationsHref} timeZone={activityTimeZone} />
 
       <Pagination
         currentPage={registrationsPage}
@@ -357,7 +358,7 @@ export default async function RegistrationsPage({
                   </StatusPill>
                   <span className="hidden text-xs text-slate sm:inline">
                     {scan.gate_name ? `${scan.gate_name} · ` : ""}
-                    {formatShortDateTime(scan.scanned_at)}
+                    {formatShortDateTime(scan.scanned_at, activityTimeZone)}
                   </span>
                 </div>
               </div>

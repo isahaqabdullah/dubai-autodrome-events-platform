@@ -14,7 +14,7 @@ import {
   TimerReset
 } from "lucide-react";
 import type { EventAnalyticsSummary, RecentScanActivity } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, formatShortTime } from "@/lib/utils";
 
 type RecentScanRow = RecentScanActivity;
 type CameraOverlayState = {
@@ -58,11 +58,8 @@ function formatResultLabel(value: string | null | undefined) {
   return value.replaceAll("_", " ");
 }
 
-function formatScanTime(value: string) {
-  return new Intl.DateTimeFormat("en-US", {
-    hour: "numeric",
-    minute: "2-digit"
-  }).format(new Date(value));
+function formatScanTime(value: string, timeZone: string) {
+  return formatShortTime(value, timeZone);
 }
 
 function getResultPresentation(result: string | null | undefined) {
@@ -103,11 +100,13 @@ function getResultPresentation(result: string | null | undefined) {
 
 export function ScanConsole({
   eventId,
+  eventTimeZone,
   initialRecentScans,
   initialSummary,
   assignedGateName
 }: {
   eventId: string;
+  eventTimeZone: string;
   initialRecentScans: RecentScanRow[];
   initialSummary: EventAnalyticsSummary;
   assignedGateName: string;
@@ -634,7 +633,7 @@ export function ScanConsole({
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold text-ink">{attendeeName}</p>
                       <p className="mt-0.5 text-xs text-slate">
-                        {[attendeeCategory, gateLabel, formatScanTime(scan.scanned_at)].filter(Boolean).join(" \u00b7 ")}
+                        {[attendeeCategory, gateLabel, formatScanTime(scan.scanned_at, eventTimeZone)].filter(Boolean).join(" \u00b7 ")}
                       </p>
                     </div>
                     <span
@@ -702,7 +701,7 @@ export function ScanConsole({
             <div className="flex items-center justify-between gap-3">
               <span>Last accepted scan</span>
               <span className="font-semibold text-ink">
-                {lastScan ? formatScanTime(lastScan.scanned_at) : "Waiting"}
+                {lastScan ? formatScanTime(lastScan.scanned_at, eventTimeZone) : "Waiting"}
               </span>
             </div>
             <div className="flex items-center justify-between gap-3">

@@ -84,6 +84,7 @@ export default async function CheckinPage({
 
       <ScanConsole
         eventId={event.id}
+        eventTimeZone={event.timezone}
         initialRecentScans={recentScans}
         initialSummary={summary}
         assignedGateName={user.gateName}
