@@ -3,12 +3,11 @@ import Link from "next/link";
 import { AnalyticsCards } from "@/components/admin/analytics-cards";
 import { DownloadDropdown } from "@/components/admin/download-dropdown";
 import { Pagination } from "@/components/admin/pagination";
+import { RegistrationsFilters } from "@/components/admin/registrations-filters";
 import { RegistrationsTable } from "@/components/admin/registrations-table";
 import { StatusPill } from "@/components/ui/status-pill";
 import { appendReturnTo, buildPathWithSearch } from "@/lib/admin-navigation";
 import { isRetryableUpstreamError, withTransientRetry } from "@/lib/transient-retry";
-import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { formatEventDateRange, formatShortDateTime, getRegistrationWindowState } from "@/lib/utils";
 import { getScanAnalytics } from "@/services/checkin";
 import { listRegistrations } from "@/services/admin";
@@ -261,54 +260,14 @@ export default async function RegistrationsPage({
       {analytics ? <AnalyticsCards summary={analytics.summary} hideDetail /> : null}
 
       <section className="rounded-xl border-2 border-ink/25 bg-ink/[0.03] p-2 sm:p-3.5">
-        <form className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
-          <span className="shrink-0 self-start rounded bg-ink px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white">Filter</span>
-          <Select
-            name="eventId"
-            defaultValue={selectedEventId ?? ""}
-            className="rounded-lg border-ink/25 bg-white px-2.5 py-1.5 text-sm font-medium shadow-sm focus:border-ink/40 focus:ring-1 focus:ring-ink/20"
-          >
-            <option value="">All events</option>
-            {events.map((event) => (
-              <option key={event.id} value={event.id}>
-                {event.title}
-              </option>
-            ))}
-          </Select>
-          <Select
-            name="status"
-            defaultValue={searchParams.status ?? ""}
-            className="rounded-lg border-ink/25 bg-white px-2.5 py-1.5 text-sm font-medium shadow-sm focus:border-ink/40 focus:ring-1 focus:ring-ink/20"
-          >
-            <option value="">All statuses</option>
-            <option value="registered">Registered</option>
-            <option value="checked_in">Checked in</option>
-            <option value="revoked">Revoked</option>
-            <option value="cancelled">Cancelled</option>
-          </Select>
-          <Input
-            name="q"
-            placeholder="Search name, email, phone"
-            defaultValue={searchParams.q ?? ""}
-            className="rounded-lg border-ink/25 bg-white px-2.5 py-1.5 text-sm shadow-sm"
-          />
-          <div className="flex items-center gap-2">
-            <span className="shrink-0 text-xs font-medium text-slate">Show</span>
-            <Select
-              name="pageSize"
-              defaultValue={String(registrationsPageSize)}
-              className="min-w-[5.5rem] rounded-lg border-ink/25 bg-white px-2.5 py-1.5 text-sm font-medium shadow-sm focus:border-ink/40 focus:ring-1 focus:ring-ink/20 sm:w-auto"
-            >
-              {REGISTRATIONS_PAGE_SIZE_OPTIONS.map((size) => (
-                <option key={size} value={size}>
-                  {size}
-                </option>
-              ))}
-            </Select>
-            <span className="shrink-0 text-xs text-slate">rows</span>
-          </div>
-          <button className="admin-action-primary shrink-0 !py-1.5 text-sm">Apply</button>
-        </form>
+        <RegistrationsFilters
+          events={events.map((event) => ({ id: event.id, title: event.title }))}
+          selectedEventId={selectedEventId}
+          status={searchParams.status}
+          query={searchParams.q}
+          pageSize={registrationsPageSize}
+          pageSizeOptions={REGISTRATIONS_PAGE_SIZE_OPTIONS}
+        />
       </section>
 
       <RegistrationsTable rows={pagedRows} returnTo={currentRegistrationsHref} timeZone={activityTimeZone} />
