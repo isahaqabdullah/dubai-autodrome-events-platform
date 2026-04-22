@@ -1,6 +1,6 @@
 import { ArrowLeft, CalendarDays, MapPin, Users } from "lucide-react";
 import { notFound } from "next/navigation";
-import { ManualCheckinByCode } from "@/components/checkin/manual-checkin-button";
+import { ManualCheckinByCode, ManualCheckinByName } from "@/components/checkin/manual-checkin-button";
 import { ScanConsole } from "@/components/checkin/scan-console";
 import { StatusPill } from "@/components/ui/status-pill";
 import { getAdminBackLabel, normalizeAdminReturnTo } from "@/lib/admin-navigation";
@@ -96,13 +96,20 @@ export default async function CheckinPage({
             <Users className="h-4 w-4 text-[#2f7b76]" />
             <p className="section-title">Manual fallback</p>
           </div>
-          <h2 className="mt-2 text-lg font-semibold tracking-tight text-ink sm:mt-3 sm:text-2xl">Check in by code</h2>
+          <h2 className="mt-2 text-lg font-semibold tracking-tight text-ink sm:mt-3 sm:text-2xl">
+            Check in by code or name
+          </h2>
           <p className="mt-1.5 text-[13px] text-slate sm:mt-2 sm:text-sm">
-            Enter the 4-character code printed below the attendee&apos;s QR code to check them in directly.
+            Enter the 4-character code from the ticket, or type at least 4 letters from an attendee&apos;s name to get
+            event-scoped recommendations.
           </p>
 
           <div className="mt-4 sm:mt-6">
             <ManualCheckinByCode eventId={event.id} />
+          </div>
+
+          <div className="mt-6 border-t border-slate/10 pt-6">
+            <ManualCheckinByName eventId={event.id} />
           </div>
         </div>
       </section>

@@ -22,3 +22,8 @@ export const manualCheckinByCodeSchema = z.object({
     .regex(/^[A-HJ-NP-Za-hj-np-z2-9]{4}$/, "Enter the 4-character manual code.")
     .transform((value) => value.toUpperCase())
 });
+
+export const searchRegistrationsSchema = z.object({
+  eventId: z.string().uuid(),
+  query: z.string().trim().min(4).max(100)
+});

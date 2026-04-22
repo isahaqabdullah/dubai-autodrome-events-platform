@@ -55,7 +55,7 @@ function RegistrationCard({
         <span className="shrink-0">{formatShortDateTime(String(row.created_at ?? ""), timeZone)}</span>
       </div>
       <div className="mt-1.5 flex items-center gap-1">
-        <RegistrationActions registrationId={String(row.id)} status={status} />
+        <RegistrationActions registrationId={String(row.id)} eventId={String(row.event_id ?? "")} status={status} />
       </div>
     </div>
   );
@@ -132,7 +132,11 @@ export function RegistrationsTable({
                     </td>
                     <td className="px-3 py-2 text-xs text-slate">{formatShortDateTime(String(row.created_at ?? ""), timeZone)}</td>
                     <td className="px-3 py-2">
-                      <RegistrationActions registrationId={String(row.id)} status={status} />
+                      <RegistrationActions
+                        registrationId={String(row.id)}
+                        eventId={String(row.event_id ?? "")}
+                        status={status}
+                      />
                     </td>
                   </tr>
                 );

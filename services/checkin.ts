@@ -204,7 +204,8 @@ export async function searchRegistrationsForEvent(eventId: string, query: string
           row.full_name.toLowerCase().includes(needle) ||
           row.email_raw.toLowerCase().includes(needle) ||
           (row.phone ?? "").toLowerCase().includes(needle)
-      );
+      )
+      .sort((left, right) => left.full_name.localeCompare(right.full_name));
   }
 
   const supabase = createAdminSupabaseClient();
@@ -219,7 +220,7 @@ export async function searchRegistrationsForEvent(eventId: string, query: string
     .select("id, full_name, email_raw, phone, status, checked_in_at, created_at")
     .eq("event_id", eventId)
     .or(`full_name.ilike.%${needle}%,email_raw.ilike.%${needle}%,phone.ilike.%${needle}%`)
-    .order("created_at", { ascending: false })
+    .order("full_name", { ascending: true })
     .limit(20);
 
   if (error) {
