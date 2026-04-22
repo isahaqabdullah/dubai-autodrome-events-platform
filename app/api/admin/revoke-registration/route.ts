@@ -18,5 +18,5 @@ export async function POST(request: Request) {
   }
 
   await revokeRegistration(parsed.data.registrationId, user, parsed.data.reason);
-  return NextResponse.json({ ok: true, message: "Registration revoked." });
+  return NextResponse.json({ ok: true, message: "Registration deleted." });
 }

@@ -53,9 +53,11 @@ export function RegistrationActions({ registrationId, status }: RegistrationActi
         type="button"
         variant="danger"
         className="!rounded-lg !px-2 !py-1 !text-xs"
-        disabled={busy !== null || status === "revoked"}
+        disabled={busy !== null}
         onClick={async () => {
-          const confirmed = window.confirm("Revoke this registration?");
+          const confirmed = window.confirm(
+            "Delete this registration permanently? This will remove it from registrations, exports, and check-in activity."
+          );
 
           if (!confirmed) {
             return;
@@ -66,7 +68,7 @@ export function RegistrationActions({ registrationId, status }: RegistrationActi
           });
         }}
       >
-        {busy === "revoke" ? "Revoking..." : "Revoke"}
+        {busy === "revoke" ? "Deleting..." : status === "revoked" ? "Delete" : "Revoke"}
       </Button>
     </div>
   );

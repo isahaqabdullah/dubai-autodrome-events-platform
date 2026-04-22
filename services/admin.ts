@@ -321,7 +321,7 @@ export async function revokeRegistration(
   if (isDemoMode()) {
     return {
       id: registrationId,
-      status: "revoked",
+      deleted: true,
       reason: blankToNull(reason)
     };
   }
@@ -338,14 +338,19 @@ export async function revokeRegistration(
     throw beforeError;
   }
 
-  const { data, error } = await supabase
+  const { error: deleteCheckinsError } = await supabase
+    .from("checkins")
+    .delete()
+    .eq("registration_id", registrationId);
+
+  if (deleteCheckinsError) {
+    throw deleteCheckinsError;
+  }
+
+  const { error } = await supabase
     .from("registrations")
-    .update({
-      status: "revoked"
-    })
-    .eq("id", registrationId)
-    .select("*")
-    .single();
+    .delete()
+    .eq("id", registrationId);
 
   if (error) {
     throw error;
@@ -353,17 +358,21 @@ export async function revokeRegistration(
 
   await logAuditEvent({
     actor,
-    action: "registration.revoked",
+    action: "registration.deleted",
     entityType: "registration",
     entityId: registrationId,
     beforeJson: before,
     afterJson: {
-      ...data,
-      revoke_reason: blankToNull(reason)
+      deleted: true,
+      delete_reason: blankToNull(reason)
     }
   });
 
-  return data;
+  return {
+    id: registrationId,
+    deleted: true,
+    reason: blankToNull(reason)
+  };
 }
 
 export async function rotateQrAndResend(registrationId: string, actor: AuthenticatedAppUser) {
