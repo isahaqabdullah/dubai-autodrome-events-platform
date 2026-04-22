@@ -7,7 +7,9 @@ import { RegistrationsFilters } from "@/components/admin/registrations-filters";
 import { RegistrationsTable } from "@/components/admin/registrations-table";
 import { StatusPill } from "@/components/ui/status-pill";
 import { appendReturnTo, buildPathWithSearch } from "@/lib/admin-navigation";
+import { DEFAULT_CATEGORY } from "@/lib/constants";
 import { isRetryableUpstreamError, withTransientRetry } from "@/lib/transient-retry";
+import type { EventRecord } from "@/lib/types";
 import { formatEventDateRange, formatShortDateTime, getRegistrationWindowState } from "@/lib/utils";
 import { getScanAnalytics } from "@/services/checkin";
 import { listRegistrations } from "@/services/admin";
@@ -18,6 +20,11 @@ export const dynamic = "force-dynamic";
 const DEFAULT_REGISTRATIONS_PAGE_SIZE = 25;
 const REGISTRATIONS_PAGE_SIZE_OPTIONS = [25, 50, 100] as const;
 const ACTIVITY_PAGE_SIZE = 10;
+
+type CategoryFilterOption = {
+  value: string;
+  label: string;
+};
 
 function parsePage(value: string | undefined) {
   const parsed = Number.parseInt(value ?? "1", 10);
@@ -31,12 +38,71 @@ function parseRegistrationsPageSize(value: string | undefined) {
     : DEFAULT_REGISTRATIONS_PAGE_SIZE;
 }
 
+function buildCategoryOptions(
+  events: EventRecord[],
+  selectedEventId?: string,
+  selectedCategory?: string
+): CategoryFilterOption[] {
+  const scopedEvents = selectedEventId ? events.filter((event) => event.id === selectedEventId) : events;
+  const options = new Map<string, CategoryFilterOption>();
+
+  for (const event of scopedEvents) {
+    const categories = event.form_config?.categories ?? [];
+    const ticketOptions = event.form_config?.ticketOptions ?? [];
+
+    if (categories.length === 0) {
+      options.set(`category:${DEFAULT_CATEGORY.id}`, {
+        value: `category:${DEFAULT_CATEGORY.id}`,
+        label: DEFAULT_CATEGORY.title
+      });
+    } else {
+      for (const category of categories) {
+        options.set(`category:${category.id}`, {
+          value: `category:${category.id}`,
+          label: category.title
+        });
+      }
+    }
+
+    for (const ticketOption of ticketOptions) {
+      options.set(`ticket:${ticketOption.id}`, {
+        value: `ticket:${ticketOption.id}`,
+        label: `Add-on: ${ticketOption.title}`
+      });
+    }
+  }
+
+  if (selectedCategory && !options.has(selectedCategory)) {
+    const fallbackLabel = selectedCategory.startsWith("category:")
+      ? selectedCategory.slice("category:".length)
+      : selectedCategory.startsWith("ticket:")
+        ? `Add-on: ${selectedCategory.slice("ticket:".length)}`
+        : selectedCategory;
+
+    options.set(selectedCategory, {
+      value: selectedCategory,
+      label: fallbackLabel
+    });
+  }
+
+  return Array.from(options.values()).sort((left, right) => left.label.localeCompare(right.label));
+}
+
 export default async function RegistrationsPage({
   searchParams
 }: {
-  searchParams: { eventId?: string; status?: string; q?: string; page?: string; pageSize?: string; aPage?: string };
+  searchParams: {
+    eventId?: string;
+    category?: string;
+    status?: string;
+    q?: string;
+    page?: string;
+    pageSize?: string;
+    aPage?: string;
+  };
 }) {
   const selectedEventId = searchParams.eventId?.trim() || undefined;
+  const selectedCategory = searchParams.category?.trim() || undefined;
   const requestedRegistrationsPage = parsePage(searchParams.page);
   const registrationsPageSize = parseRegistrationsPageSize(searchParams.pageSize);
   let events: Awaited<ReturnType<typeof listAdminEvents>>;
@@ -49,6 +115,7 @@ export default async function RegistrationsPage({
   try {
     const registrationFilters = {
       eventId: selectedEventId,
+      category: selectedCategory,
       status: searchParams.status,
       query: searchParams.q
     };
@@ -141,6 +208,7 @@ export default async function RegistrationsPage({
   };
   const currentRegistrationsHref = buildPathWithSearch("/admin/registrations", normalizedSearchParams);
   const activityTimeZone = selectedEvent?.timezone ?? "Asia/Dubai";
+  const categoryOptions = buildCategoryOptions(events, selectedEventId, selectedCategory);
 
   const totalActivity = analytics?.recentActivity.length ?? 0;
   const activityPage = Math.min(
@@ -263,6 +331,8 @@ export default async function RegistrationsPage({
         <RegistrationsFilters
           events={events.map((event) => ({ id: event.id, title: event.title }))}
           selectedEventId={selectedEventId}
+          category={selectedCategory}
+          categoryOptions={categoryOptions}
           status={searchParams.status}
           query={searchParams.q}
           pageSize={registrationsPageSize}
@@ -270,7 +340,7 @@ export default async function RegistrationsPage({
         />
       </section>
 
-      <RegistrationsTable rows={pagedRows} returnTo={currentRegistrationsHref} timeZone={activityTimeZone} />
+      <RegistrationsTable rows={pagedRows} timeZone={activityTimeZone} />
 
       <Pagination
         currentPage={registrationsPage}

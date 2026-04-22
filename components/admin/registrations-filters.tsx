@@ -14,6 +14,11 @@ interface EventOption {
   title: string;
 }
 
+interface CategoryOption {
+  value: string;
+  label: string;
+}
+
 function buildHref(pathname: string, params: URLSearchParams) {
   const query = params.toString();
   return query ? `${pathname}?${query}` : pathname;
@@ -22,6 +27,8 @@ function buildHref(pathname: string, params: URLSearchParams) {
 export function RegistrationsFilters({
   events,
   selectedEventId,
+  category,
+  categoryOptions,
   status,
   query,
   pageSize,
@@ -29,6 +36,8 @@ export function RegistrationsFilters({
 }: {
   events: EventOption[];
   selectedEventId?: string;
+  category?: string;
+  categoryOptions: CategoryOption[];
   status?: string;
   query?: string;
   pageSize: number;
@@ -39,6 +48,7 @@ export function RegistrationsFilters({
   const searchParams = useSearchParams();
   const [isPending, startTransition] = useTransition();
   const [eventIdValue, setEventIdValue] = useState(selectedEventId ?? "");
+  const [categoryValue, setCategoryValue] = useState(category ?? "");
   const [statusValue, setStatusValue] = useState(status ?? "");
   const [queryValue, setQueryValue] = useState(query ?? "");
   const [pageSizeValue, setPageSizeValue] = useState(String(pageSize));
@@ -46,6 +56,10 @@ export function RegistrationsFilters({
   useEffect(() => {
     setEventIdValue(selectedEventId ?? "");
   }, [selectedEventId]);
+
+  useEffect(() => {
+    setCategoryValue(category ?? "");
+  }, [category]);
 
   useEffect(() => {
     setStatusValue(status ?? "");
@@ -61,6 +75,7 @@ export function RegistrationsFilters({
 
   function replaceFilters(next: {
     eventId?: string;
+    category?: string;
     status?: string;
     query?: string;
     pageSize?: string;
@@ -68,6 +83,7 @@ export function RegistrationsFilters({
   }) {
     const params = new URLSearchParams(searchParams.toString());
     const nextEventId = next.eventId ?? eventIdValue;
+    const nextCategory = next.category ?? categoryValue;
     const nextStatus = next.status ?? statusValue;
     const nextQuery = next.query ?? queryValue;
     const nextPageSize = next.pageSize ?? pageSizeValue;
@@ -82,6 +98,12 @@ export function RegistrationsFilters({
       params.set("status", nextStatus);
     } else {
       params.delete("status");
+    }
+
+    if (nextCategory) {
+      params.set("category", nextCategory);
+    } else {
+      params.delete("category");
     }
 
     const trimmedQuery = nextQuery.trim();
@@ -143,6 +165,12 @@ export function RegistrationsFilters({
         params.delete("status");
       }
 
+      if (categoryValue) {
+        params.set("category", categoryValue);
+      } else {
+        params.delete("category");
+      }
+
       if (Number.parseInt(pageSizeValue, 10) !== DEFAULT_PAGE_SIZE) {
         params.set("pageSize", pageSizeValue);
       } else {
@@ -164,7 +192,7 @@ export function RegistrationsFilters({
     }, SEARCH_DEBOUNCE_MS);
 
     return () => window.clearTimeout(timeout);
-  }, [eventIdValue, pageSizeValue, pathname, queryValue, router, searchParams, statusValue]);
+  }, [categoryValue, eventIdValue, pageSizeValue, pathname, queryValue, router, searchParams, statusValue]);
 
   return (
     <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:gap-2">
@@ -184,6 +212,22 @@ export function RegistrationsFilters({
         {events.map((event) => (
           <option key={event.id} value={event.id}>
             {event.title}
+          </option>
+        ))}
+      </Select>
+      <Select
+        value={categoryValue}
+        onChange={(event) => {
+          const nextValue = event.target.value;
+          setCategoryValue(nextValue);
+          replaceFilters({ category: nextValue });
+        }}
+        className="rounded-lg border-ink/25 bg-white px-2.5 py-1.5 text-sm font-medium shadow-sm focus:border-ink/40 focus:ring-1 focus:ring-ink/20"
+      >
+        <option value="">All categories</option>
+        {categoryOptions.map((option) => (
+          <option key={option.value} value={option.value}>
+            {option.label}
           </option>
         ))}
       </Select>

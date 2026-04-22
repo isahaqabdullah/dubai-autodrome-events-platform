@@ -1,5 +1,4 @@
 import { RegistrationActions } from "@/components/admin/registration-actions";
-import { appendReturnTo } from "@/lib/admin-navigation";
 import { StatusPill } from "@/components/ui/status-pill";
 import { formatShortDateTime, isSyntheticEmail } from "@/lib/utils";
 
@@ -26,11 +25,9 @@ function displayEmail(row: Record<string, unknown>) {
 
 function RegistrationCard({
   row,
-  returnTo,
   timeZone
 }: {
   row: Record<string, unknown>;
-  returnTo?: string;
   timeZone: string;
 }) {
   const event = (row.events as { title?: string; slug?: string } | null) ?? null;
@@ -58,11 +55,6 @@ function RegistrationCard({
         <span className="shrink-0">{formatShortDateTime(String(row.created_at ?? ""), timeZone)}</span>
       </div>
       <div className="mt-1.5 flex items-center gap-1">
-        {event?.slug ? (
-          <a href={appendReturnTo(`/check-in/${event.slug}`, returnTo)} className="admin-action !px-2 !py-1">
-            Check-in
-          </a>
-        ) : null}
         <RegistrationActions registrationId={String(row.id)} status={status} />
       </div>
     </div>
@@ -71,11 +63,9 @@ function RegistrationCard({
 
 export function RegistrationsTable({
   rows,
-  returnTo,
   timeZone
 }: {
   rows: Array<Record<string, unknown>>;
-  returnTo?: string;
   timeZone: string;
 }) {
   return (
@@ -87,7 +77,7 @@ export function RegistrationsTable({
           </div>
         ) : null}
         {rows.map((row) => (
-          <RegistrationCard key={String(row.id)} row={row} returnTo={returnTo} timeZone={timeZone} />
+          <RegistrationCard key={String(row.id)} row={row} timeZone={timeZone} />
         ))}
       </div>
 
@@ -136,14 +126,6 @@ export function RegistrationsTable({
                     </td>
                     <td className="px-3 py-2 text-xs text-slate">
                       <p className="font-medium text-ink">{event?.title ?? "Unknown event"}</p>
-                      {event?.slug ? (
-                        <a
-                          href={appendReturnTo(`/check-in/${event.slug}`, returnTo)}
-                          className="text-[11px] font-semibold text-slate hover:text-ink"
-                        >
-                          Check-in desk
-                        </a>
-                      ) : null}
                     </td>
                     <td className="px-3 py-2">
                       <StatusPill tone={registrationTone(status)}>{status.replaceAll("_", " ")}</StatusPill>

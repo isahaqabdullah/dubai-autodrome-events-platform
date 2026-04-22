@@ -172,22 +172,36 @@ describe("listRegistrations", () => {
     });
   });
 
-  it("applies event, status, and search filters before counting and paging", async () => {
+  it("applies event, category, status, and search filters before counting and paging", async () => {
     testState.data = [
       buildRow(1, {
         event_id: "event-1",
+        category_id: "adult",
+        category_title: "Adult",
         status: "checked_in",
         full_name: "Alice Adams",
         email_raw: "alice@example.com"
       }),
       buildRow(2, {
         event_id: "event-2",
+        category_id: "adult",
+        category_title: "Adult",
         status: "checked_in",
         full_name: "Alice Brown",
         email_raw: "alice.brown@example.com"
       }),
       buildRow(3, {
         event_id: "event-1",
+        category_id: "junior",
+        category_title: "Junior",
+        status: "checked_in",
+        full_name: "Alice Carter",
+        email_raw: "alice.carter@example.com"
+      }),
+      buildRow(4, {
+        event_id: "event-1",
+        category_id: "adult",
+        category_title: "Adult",
         status: "registered",
         full_name: "Bob Carter",
         email_raw: "bob@example.com"
@@ -196,6 +210,7 @@ describe("listRegistrations", () => {
 
     const result = await listRegistrations({
       eventId: "event-1",
+      category: "category:adult",
       status: "checked_in",
       query: "alice",
       page: 1,
@@ -210,9 +225,48 @@ describe("listRegistrations", () => {
       })
     ]);
     expect(testState.eqCalls).toContainEqual({ column: "event_id", value: "event-1" });
+    expect(testState.eqCalls).toContainEqual({ column: "category_id", value: "adult" });
     expect(testState.eqCalls).toContainEqual({ column: "status", value: "checked_in" });
     expect(testState.orCalls).toEqual([
       "full_name.ilike.%alice%,email_raw.ilike.%alice%,phone.ilike.%alice%"
     ]);
+  });
+
+  it("filters by additional category using ticket option ids", async () => {
+    testState.data = [
+      buildRow(1, {
+        event_id: "event-1",
+        category_id: "adult",
+        category_title: "Adult",
+        ticket_option_id: "vip-access",
+        ticket_option_title: "VIP Access",
+        status: "registered"
+      }),
+      buildRow(2, {
+        event_id: "event-1",
+        category_id: "adult",
+        category_title: "Adult",
+        ticket_option_id: "pit-walk",
+        ticket_option_title: "Pit Walk",
+        status: "registered"
+      })
+    ];
+
+    const result = await listRegistrations({
+      eventId: "event-1",
+      category: "ticket:vip-access",
+      page: 1,
+      pageSize: 10
+    });
+
+    expect(result.total).toBe(1);
+    expect(result.rows).toEqual([
+      expect.objectContaining({
+        id: "row-1",
+        ticket_option_title: "VIP Access"
+      })
+    ]);
+    expect(testState.eqCalls).toContainEqual({ column: "event_id", value: "event-1" });
+    expect(testState.eqCalls).toContainEqual({ column: "ticket_option_id", value: "vip-access" });
   });
 });

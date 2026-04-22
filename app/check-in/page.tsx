@@ -4,6 +4,8 @@ import type { EventRecord } from "@/lib/types";
 import { formatEventDateRange } from "@/lib/utils";
 import { listAdminEvents } from "@/services/events";
 
+export const dynamic = "force-dynamic";
+
 function EventSection({
   title,
   events

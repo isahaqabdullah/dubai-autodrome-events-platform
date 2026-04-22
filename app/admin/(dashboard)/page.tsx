@@ -8,6 +8,8 @@ import type { EventRecord } from "@/lib/types";
 import { formatEventDateRange, getRegistrationWindowState } from "@/lib/utils";
 import { listAdminEvents } from "@/services/events";
 
+export const dynamic = "force-dynamic";
+
 function ActionLink({
   href,
   children,

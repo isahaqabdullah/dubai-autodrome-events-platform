@@ -80,6 +80,9 @@ export const demoRegistrations: Array<
     | "phone"
     | "age"
     | "uae_resident"
+    | "category_id"
+    | "category_title"
+    | "ticket_option_id"
     | "ticket_option_title"
     | "status"
     | "checked_in_at"
@@ -95,6 +98,9 @@ export const demoRegistrations: Array<
     phone: "+971-50-555-0198",
     age: 29,
     uae_resident: true,
+    category_id: "general-admission",
+    category_title: "General Admission",
+    ticket_option_id: null,
     ticket_option_title: "General Admission",
     status: "checked_in",
     checked_in_at: "2026-05-22T05:18:00.000Z",
@@ -109,6 +115,9 @@ export const demoRegistrations: Array<
     phone: "+971-50-555-0129",
     age: 34,
     uae_resident: false,
+    category_id: "general-admission",
+    category_title: "General Admission",
+    ticket_option_id: "bootcamp-1930",
     ticket_option_title: "General Admission with Bootcamp Admission - 19:30",
     status: "registered",
     checked_in_at: null,
@@ -123,6 +132,9 @@ export const demoRegistrations: Array<
     phone: "+971-50-555-0176",
     age: 26,
     uae_resident: true,
+    category_id: "general-admission",
+    category_title: "General Admission",
+    ticket_option_id: null,
     ticket_option_title: "General Admission",
     status: "revoked",
     checked_in_at: null,

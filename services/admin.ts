@@ -236,11 +236,36 @@ export async function deleteEvent(eventId: string, actor: AuthenticatedAppUser) 
 
 type ListRegistrationsFilters = {
   eventId?: string;
+  category?: string;
   status?: string;
   query?: string;
   page?: number;
   pageSize?: number;
 };
+
+function matchesCategoryFilter(
+  row: {
+    category_id?: string | null;
+    category_title?: string | null;
+    ticket_option_id?: string | null;
+    ticket_option_title?: string | null;
+  },
+  categoryFilter?: string
+) {
+  if (!categoryFilter) {
+    return true;
+  }
+
+  if (categoryFilter.startsWith("category:")) {
+    return row.category_id === categoryFilter.slice("category:".length);
+  }
+
+  if (categoryFilter.startsWith("ticket:")) {
+    return row.ticket_option_id === categoryFilter.slice("ticket:".length);
+  }
+
+  return row.category_title === categoryFilter || row.ticket_option_title === categoryFilter;
+}
 
 const ADMIN_REGISTRATION_SELECT =
   "id, event_id, full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, checked_in_at, created_at, booking_id, is_primary, registered_by_email, events(title, slug)";
@@ -255,6 +280,7 @@ export async function listRegistrations(filters: ListRegistrationsFilters) {
   if (isDemoMode()) {
     const filteredRows = demoRegistrations
       .filter((row) => !filters.eventId || row.event_id === filters.eventId)
+      .filter((row) => matchesCategoryFilter(row, filters.category))
       .filter((row) => !filters.status || row.status === filters.status)
       .filter((row) => {
         if (!filters.query?.trim()) {
@@ -290,6 +316,16 @@ export async function listRegistrations(filters: ListRegistrationsFilters) {
 
   if (filters.eventId) {
     query = query.eq("event_id", filters.eventId);
+  }
+
+  if (filters.category) {
+    if (filters.category.startsWith("category:")) {
+      query = query.eq("category_id", filters.category.slice("category:".length));
+    } else if (filters.category.startsWith("ticket:")) {
+      query = query.eq("ticket_option_id", filters.category.slice("ticket:".length));
+    } else {
+      query = query.eq("category_title", filters.category);
+    }
   }
 
   if (filters.status) {
