@@ -301,6 +301,42 @@ function countByGate(gates: Array<string | null>) {
     .sort((left, right) => right.count - left.count);
 }
 
+const CHECKIN_ANALYTICS_BATCH_SIZE = 1000;
+
+type AnalyticsCheckinRow = {
+  result: string | null;
+  gate_name: string | null;
+  scanned_at: string;
+};
+
+async function fetchAnalyticsCheckinRows(eventId: string) {
+  const supabase = createAdminSupabaseClient();
+  const rows: AnalyticsCheckinRow[] = [];
+
+  for (let from = 0; ; from += CHECKIN_ANALYTICS_BATCH_SIZE) {
+    const to = from + CHECKIN_ANALYTICS_BATCH_SIZE - 1;
+    const { data, error } = await supabase
+      .from("checkins")
+      .select("result, gate_name, scanned_at")
+      .eq("event_id", eventId)
+      .order("scanned_at", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      throw error;
+    }
+
+    const batch = (data ?? []) as AnalyticsCheckinRow[];
+    rows.push(...batch);
+
+    if (batch.length < CHECKIN_ANALYTICS_BATCH_SIZE) {
+      break;
+    }
+  }
+
+  return rows;
+}
+
 export async function getScanAnalytics(eventId: string, recentActivityGateName?: string | null) {
   if (isDemoMode()) {
     const filteredScans = demoRecentScans.filter(
@@ -336,26 +372,20 @@ export async function getScanAnalytics(eventId: string, recentActivityGateName?:
 
   const supabase = createAdminSupabaseClient();
 
-  const [registrationTotal, checkedInTotal, allCheckins, recentActivity] = await Promise.all([
+  const [registrationTotal, checkedInTotal, checkinRows, recentActivity] = await Promise.all([
     supabase.from("registrations").select("*", { count: "exact", head: true }).eq("event_id", eventId),
     supabase
       .from("registrations")
       .select("*", { count: "exact", head: true })
       .eq("event_id", eventId)
       .not("checked_in_at", "is", null),
-    supabase
-      .from("checkins")
-      .select("result, gate_name, scanned_at")
-      .eq("event_id", eventId)
-      .order("scanned_at", { ascending: true }),
+    fetchAnalyticsCheckinRows(eventId),
     getRecentCheckins(eventId, 200, recentActivityGateName)
   ]);
 
   if (registrationTotal.error) throw registrationTotal.error;
   if (checkedInTotal.error) throw checkedInTotal.error;
-  if (allCheckins.error) throw allCheckins.error;
 
-  const checkinRows = allCheckins.data ?? [];
   const filteredCheckinRows = recentActivityGateName
     ? checkinRows.filter((row) => row.gate_name === recentActivityGateName)
     : checkinRows;
