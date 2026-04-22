@@ -494,6 +494,32 @@ type ExportRegistrationRowInput = {
 
 const REGISTRATION_EXPORT_SELECT =
   "full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, registered_by_email, is_primary, created_at, checked_in_at";
+const EXPORT_BATCH_SIZE = 1000;
+const EXPORT_TIME_ZONE = "Asia/Dubai";
+
+async function fetchExportRowsInBatches<T>(
+  fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
+) {
+  const rows: T[] = [];
+
+  for (let from = 0; ; from += EXPORT_BATCH_SIZE) {
+    const to = from + EXPORT_BATCH_SIZE - 1;
+    const { data, error } = await fetchPage(from, to);
+
+    if (error) {
+      throw error;
+    }
+
+    const batch = data ?? [];
+    rows.push(...batch);
+
+    if (batch.length < EXPORT_BATCH_SIZE) {
+      break;
+    }
+  }
+
+  return rows;
+}
 
 function formatExportEmail(value: string | null | undefined) {
   if (!value) {
@@ -501,6 +527,27 @@ function formatExportEmail(value: string | null | undefined) {
   }
 
   return isSyntheticEmail(value) ? "N/A" : value;
+}
+
+function formatExportDateTime(value: string | null | undefined) {
+  if (!value) {
+    return "";
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return "";
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    timeZone: EXPORT_TIME_ZONE,
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  }).format(date);
 }
 
 function formatExportUaeResident(value: boolean | null | undefined, isPrimary?: boolean) {
@@ -527,8 +574,8 @@ function buildRegistrationExportRow(row: ExportRegistrationRowInput, index: numb
     "Add-on": row.ticket_option_title ?? "",
     "Status": row.status ?? "",
     "Booked By": row.registered_by_email ?? "",
-    "Registered At": row.created_at,
-    "Checked In At": row.checked_in_at ?? ""
+    "Registered At": formatExportDateTime(row.created_at),
+    "Checked In At": formatExportDateTime(row.checked_in_at)
   };
 }
 
@@ -543,19 +590,17 @@ export async function exportAttendeesXlsx(eventId: string) {
       .map((row, i) => buildRegistrationExportRow(row, i));
   } else {
     const supabase = createAdminSupabaseClient();
+    const data = await fetchExportRowsInBatches<ExportRegistrationRowInput>((from, to) =>
+      supabase
+        .from("registrations")
+        .select(REGISTRATION_EXPORT_SELECT)
+        .eq("event_id", eventId)
+        .not("checked_in_at", "is", null)
+        .order("checked_in_at", { ascending: true })
+        .range(from, to)
+    );
 
-    const { data, error } = await supabase
-      .from("registrations")
-      .select(REGISTRATION_EXPORT_SELECT)
-      .eq("event_id", eventId)
-      .not("checked_in_at", "is", null)
-      .order("checked_in_at", { ascending: true });
-
-    if (error) {
-      throw error;
-    }
-
-    dataRows = (data ?? []).map((row, i) => buildRegistrationExportRow(row, i));
+    dataRows = data.map((row, i) => buildRegistrationExportRow(row, i));
   }
 
   const ws = XLSX.utils.json_to_sheet(dataRows);
@@ -575,18 +620,16 @@ export async function exportRegistrationsXlsx(eventId: string) {
       .map((row, i) => buildRegistrationExportRow(row, i));
   } else {
     const supabase = createAdminSupabaseClient();
+    const data = await fetchExportRowsInBatches<ExportRegistrationRowInput>((from, to) =>
+      supabase
+        .from("registrations")
+        .select(REGISTRATION_EXPORT_SELECT)
+        .eq("event_id", eventId)
+        .order("created_at", { ascending: true })
+        .range(from, to)
+    );
 
-    const { data, error } = await supabase
-      .from("registrations")
-      .select(REGISTRATION_EXPORT_SELECT)
-      .eq("event_id", eventId)
-      .order("created_at", { ascending: true });
-
-    if (error) {
-      throw error;
-    }
-
-    dataRows = (data ?? []).map((row, i) => buildRegistrationExportRow(row, i));
+    dataRows = data.map((row, i) => buildRegistrationExportRow(row, i));
   }
 
   const ws = XLSX.utils.json_to_sheet(dataRows);
@@ -627,16 +670,14 @@ export async function exportCheckinsCsv(eventId: string) {
   }
 
   const supabase = createAdminSupabaseClient();
-
-  const { data, error } = await supabase
-    .from("checkins")
-    .select("id, result, gate_name, device_id, staff_user_id, scanned_at, registration:registrations(full_name, email_raw)")
-    .eq("event_id", eventId)
-    .order("scanned_at", { ascending: true });
-
-  if (error) {
-    throw error;
-  }
+  const data = await fetchExportRowsInBatches<Record<string, unknown>>((from, to) =>
+    supabase
+      .from("checkins")
+      .select("id, result, gate_name, device_id, staff_user_id, scanned_at, registration:registrations(full_name, email_raw)")
+      .eq("event_id", eventId)
+      .order("scanned_at", { ascending: true })
+      .range(from, to)
+  );
 
   const rows = [
     ["id", "result", "gate_name", "device_id", "staff_user_id", "scanned_at", "full_name", "email"],
@@ -646,7 +687,7 @@ export async function exportCheckinsCsv(eventId: string) {
       row.gate_name,
       row.device_id,
       row.staff_user_id,
-      row.scanned_at,
+      formatExportDateTime(String(row.scanned_at ?? "")),
       (row.registration as { full_name?: string } | null)?.full_name ?? "",
       (row.registration as { email_raw?: string } | null)?.email_raw ?? ""
     ])

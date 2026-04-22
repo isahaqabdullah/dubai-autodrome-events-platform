@@ -8,7 +8,8 @@ const testState = vi.hoisted(() => ({
   selectCalls: [] as string[],
   eqCalls: [] as Array<{ column: string; value: unknown }>,
   notCalls: [] as Array<{ column: string; operator: string; value: unknown }>,
-  orderCalls: [] as Array<{ column: string; ascending: boolean }>
+  orderCalls: [] as Array<{ column: string; ascending: boolean }>,
+  rangeCalls: [] as Array<{ from: number; to: number }>
 }));
 
 vi.mock("@/lib/demo-mode", () => ({
@@ -62,6 +63,8 @@ vi.mock("@/lib/supabase/admin", () => ({
           testState.selectCalls.push(selectString);
 
           const predicates: Array<(row: Record<string, unknown>) => boolean> = [];
+          let orderColumn: string | null = null;
+          let ascending = true;
 
           const chain = {
             eq(column: string, value: unknown) {
@@ -76,15 +79,24 @@ vi.mock("@/lib/supabase/admin", () => ({
               }
               return chain;
             },
-            async order(column: string, options?: { ascending?: boolean }) {
-              const ascending = options?.ascending ?? true;
+            order(column: string, options?: { ascending?: boolean }) {
+              ascending = options?.ascending ?? true;
+              orderColumn = column;
               testState.orderCalls.push({ column, ascending });
+              return chain;
+            },
+            async range(from: number, to: number) {
+              testState.rangeCalls.push({ from, to });
 
               const data = [...testState.data]
                 .filter((row) => predicates.every((predicate) => predicate(row)))
                 .sort((left, right) => {
-                  const leftValue = left[column];
-                  const rightValue = right[column];
+                  if (!orderColumn) {
+                    return 0;
+                  }
+
+                  const leftValue = left[orderColumn];
+                  const rightValue = right[orderColumn];
                   if (leftValue === rightValue) return 0;
                   if (leftValue == null) return 1;
                   if (rightValue == null) return -1;
@@ -94,7 +106,7 @@ vi.mock("@/lib/supabase/admin", () => ({
                 });
 
               return {
-                data,
+                data: data.slice(from, to + 1),
                 error: testState.error
               };
             }
@@ -125,6 +137,7 @@ describe("admin exports", () => {
     testState.eqCalls = [];
     testState.notCalls = [];
     testState.orderCalls = [];
+    testState.rangeCalls = [];
   });
 
   it("exports registrations with the stored timestamps and collected fields", async () => {
@@ -176,7 +189,7 @@ describe("admin exports", () => {
         "Add-on": "VIP Access",
         "Status": "registered",
         "Booked By": "",
-        "Registered At": "2026-04-10T08:00:00.000Z",
+        "Registered At": "Apr 10, 2026, 12:00 PM",
         "Checked In At": ""
       },
       {
@@ -190,12 +203,13 @@ describe("admin exports", () => {
         "Add-on": "",
         "Status": "checked_in",
         "Booked By": "primary@example.com",
-        "Registered At": "2026-04-10T08:00:00.000Z",
-        "Checked In At": "2026-04-17T09:30:00.000Z"
+        "Registered At": "Apr 10, 2026, 12:00 PM",
+        "Checked In At": "Apr 17, 2026, 1:30 PM"
       }
     ]);
     expect(testState.eqCalls).toContainEqual({ column: "event_id", value: "event-1" });
     expect(testState.notCalls).toHaveLength(0);
+    expect(testState.rangeCalls).toEqual([{ from: 0, to: 999 }]);
   });
 
   it("exports attendees using the same columns but only for checked-in rows", async () => {
@@ -247,12 +261,48 @@ describe("admin exports", () => {
         "Add-on": "Pit Walk",
         "Status": "checked_in",
         "Booked By": "primary@example.com",
-        "Registered At": "2026-04-11T08:00:00.000Z",
-        "Checked In At": "2026-04-17T10:45:00.000Z"
+        "Registered At": "Apr 11, 2026, 12:00 PM",
+        "Checked In At": "Apr 17, 2026, 2:45 PM"
       }
     ]);
     expect(testState.eqCalls).toContainEqual({ column: "event_id", value: "event-1" });
     expect(testState.notCalls).toContainEqual({ column: "checked_in_at", operator: "is", value: null });
     expect(testState.orderCalls).toContainEqual({ column: "checked_in_at", ascending: true });
+    expect(testState.rangeCalls).toEqual([{ from: 0, to: 999 }]);
+  });
+
+  it("exports more than 1000 registrations by fetching multiple batches", async () => {
+    testState.data = Array.from({ length: 1001 }, (_, index) => ({
+      event_id: "event-1",
+      full_name: `Attendee ${index + 1}`,
+      email_raw: `attendee-${index + 1}@example.com`,
+      phone: null,
+      age: null,
+      uae_resident: null,
+      category_title: "Adult",
+      ticket_option_title: null,
+      status: "registered",
+      registered_by_email: null,
+      is_primary: true,
+      created_at: new Date(Date.UTC(2026, 3, 10, 8, 0, index)).toISOString(),
+      checked_in_at: null
+    }));
+
+    const buffer = await exportRegistrationsXlsx("event-1");
+    const rows = readSheet(buffer, "Registrations");
+
+    expect(rows).toHaveLength(1001);
+    expect(rows[0]).toMatchObject({
+      "#": 1,
+      "Full Name": "Attendee 1"
+    });
+    expect(rows[1000]).toMatchObject({
+      "#": 1001,
+      "Full Name": "Attendee 1001"
+    });
+    expect(testState.rangeCalls).toEqual([
+      { from: 0, to: 999 },
+      { from: 1000, to: 1999 }
+    ]);
   });
 });
