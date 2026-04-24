@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import { unstable_noStore as noStore } from "next/cache";
 import { EventBookingFlow } from "@/components/public/event-booking-flow";
 import { SiteHeader } from "@/components/public/site-header";
 import { getRegistrationWindowState } from "@/lib/utils";
@@ -11,6 +12,8 @@ export default async function EventDetailPage({
 }: {
   params: { slug: string };
 }) {
+  noStore();
+
   const event = await getEventBySlug(params.slug);
 
   if (!event) {
