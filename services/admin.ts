@@ -6,12 +6,13 @@ import { env } from "@/lib/env";
 import { buildQrEmailAttachment, buildQrEmailCid } from "@/lib/qr";
 import { generateOpaqueToken, hashOpaqueToken } from "@/lib/tokens";
 import type { AuthenticatedAppUser } from "@/lib/auth";
-import type { EventRecord } from "@/lib/types";
-import { blankToNull, buildAbsoluteUrl, isSyntheticEmail, slugify, zonedInputToUtcIso } from "@/lib/utils";
+import type { EventFormConfig, EventRecord, EventTicketOption } from "@/lib/types";
+import { blankToNull, buildAbsoluteUrl, isSyntheticEmail, resolveCategories, slugify, zonedInputToUtcIso } from "@/lib/utils";
 import { adminEventSchema } from "@/lib/validation/admin";
 import { buildConfirmationEmail } from "@/services/email-templates";
 import { executeEmailJob } from "@/services/email-jobs";
 import { sendMail } from "@/services/mailer";
+import { getRegistrationSummaryForEvent } from "@/services/events";
 import type { z } from "zod";
 
 type AdminEventInput = z.infer<typeof adminEventSchema>;
@@ -73,6 +74,71 @@ function buildEventPayload(input: AdminEventInput) {
       disclaimerHeading: blankToNull(input.disclaimerHeading)
     }
   };
+}
+
+function mapOptionsById(options: EventTicketOption[] | undefined) {
+  return new Map((options ?? []).map((option) => [option.id, option]));
+}
+
+function describeOption(option: EventTicketOption | undefined, id: string) {
+  const title = option?.title?.trim();
+  return title ? `"${title}"` : `ID "${id}"`;
+}
+
+function assertRegistrationLinkedOptionsAreStillValid(input: {
+  before: EventRecord;
+  after: ReturnType<typeof buildEventPayload>;
+  summary: Awaited<ReturnType<typeof getRegistrationSummaryForEvent>>;
+}) {
+  const nextConfig = (input.after.form_config ?? {}) as EventFormConfig;
+  const beforeCategoriesById = mapOptionsById(resolveCategories(input.before.form_config));
+  const nextCategoriesById = mapOptionsById(resolveCategories(nextConfig));
+  const beforeTicketsById = mapOptionsById(input.before.form_config?.ticketOptions);
+  const nextTicketsById = mapOptionsById(nextConfig.ticketOptions);
+
+  if (input.after.capacity && input.summary.count > input.after.capacity) {
+    throw new Error(
+      `Event capacity cannot be set below ${input.summary.count} because ${input.summary.count} registrations already exist.`
+    );
+  }
+
+  for (const [categoryId, count] of Object.entries(input.summary.categoryCounts)) {
+    if (count <= 0) {
+      continue;
+    }
+
+    const nextCategory = nextCategoriesById.get(categoryId);
+    if (!nextCategory) {
+      throw new Error(
+        `Cannot remove category ${describeOption(beforeCategoriesById.get(categoryId), categoryId)} because ${count} registrations already use it. Edit the existing category instead of removing and recreating it.`
+      );
+    }
+
+    if (nextCategory.capacity && count > nextCategory.capacity) {
+      throw new Error(
+        `Category ${describeOption(nextCategory, categoryId)} capacity cannot be set below ${count} because ${count} registrations already use it.`
+      );
+    }
+  }
+
+  for (const [ticketId, count] of Object.entries(input.summary.ticketCounts)) {
+    if (count <= 0) {
+      continue;
+    }
+
+    const nextTicket = nextTicketsById.get(ticketId);
+    if (!nextTicket) {
+      throw new Error(
+        `Cannot remove additional category ${describeOption(beforeTicketsById.get(ticketId), ticketId)} because ${count} registrations already use it. Edit the existing additional category instead of removing and recreating it.`
+      );
+    }
+
+    if (nextTicket.capacity && count > nextTicket.capacity) {
+      throw new Error(
+        `Additional category ${describeOption(nextTicket, ticketId)} capacity cannot be set below ${count} because ${count} registrations already use it.`
+      );
+    }
+  }
 }
 
 export async function logAuditEvent(input: {
@@ -153,17 +219,25 @@ export async function updateEvent(input: AdminEventInput, actor: AuthenticatedAp
 
   const supabase = createAdminSupabaseClient();
 
-  const { data: before, error: beforeError } = await supabase
-    .from("events")
-    .select("*")
-    .eq("id", input.id)
-    .single();
+  const [{ data: before, error: beforeError }, registrationSummary] = await Promise.all([
+    supabase
+      .from("events")
+      .select("*")
+      .eq("id", input.id)
+      .single(),
+    getRegistrationSummaryForEvent(input.id)
+  ]);
 
   if (beforeError) {
     throw beforeError;
   }
 
   const payload = buildEventPayload(input);
+  assertRegistrationLinkedOptionsAreStillValid({
+    before: before as EventRecord,
+    after: payload,
+    summary: registrationSummary
+  });
 
   const { data, error } = await supabase
     .from("events")

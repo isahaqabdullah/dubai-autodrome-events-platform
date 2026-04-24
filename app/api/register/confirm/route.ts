@@ -1,8 +1,10 @@
 import { NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
+import { revalidatePath } from "next/cache";
 import { getClientIp } from "@/lib/request";
 import { registrationCompleteSchema } from "@/lib/validation/registration";
 import { runEmailWorker } from "@/services/email-worker";
+import { getEventById } from "@/services/events";
 import { confirmRegistrationFromOtp } from "@/services/registration";
 
 export const maxDuration = 30;
@@ -21,6 +23,15 @@ export async function POST(request: Request) {
   });
 
   if (result.outcome === "confirmed") {
+    if (result.eventId) {
+      const event = await getEventById(result.eventId);
+
+      revalidatePath("/events");
+      if (event?.slug) {
+        revalidatePath(`/events/${event.slug}`);
+      }
+    }
+
     waitUntil(
       runEmailWorker().catch((error) => {
         console.error("[confirm] background email worker failed", error);
