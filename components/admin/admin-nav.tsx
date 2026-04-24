@@ -26,6 +26,13 @@ const navItems = [
     primary: false,
     fresh: true,
     match: (pathname: string) => pathname.startsWith("/admin/registrations")
+  },
+  {
+    href: "/admin/payments",
+    label: "Payments",
+    primary: false,
+    fresh: true,
+    match: (pathname: string) => pathname.startsWith("/admin/payments")
   }
 ];
 

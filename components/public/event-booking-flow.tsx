@@ -119,11 +119,28 @@ function formatTimer(totalSeconds: number) {
   return `${minutes}:${seconds}`;
 }
 
+function formatPrice(amountMinor?: number, currencyCode = "AED") {
+  const amount = amountMinor ?? 0;
+  if (amount <= 0) {
+    return "Free";
+  }
+  return new Intl.NumberFormat("en-AE", {
+    style: "currency",
+    currency: currencyCode,
+    maximumFractionDigits: 2
+  }).format(amount / 100);
+}
+
+function isEmbeddedPaymentHost(userAgent: string) {
+  return /Instagram|FBAN|FBAV|FB_IAB|WhatsApp|TikTok|LinkedInApp/i.test(userAgent);
+}
+
 function SelectionCard({
   title,
   description,
   note,
   meta,
+  price,
   selected,
   disabled,
   onClick
@@ -132,6 +149,7 @@ function SelectionCard({
   description?: string;
   note?: string;
   meta?: string;
+  price?: string;
   selected: boolean;
   disabled?: boolean;
   onClick: () => void;
@@ -161,6 +179,11 @@ function SelectionCard({
           {note ? (
             <p className={`mt-0.5 text-[11px] italic sm:text-xs ${selected ? "text-white/70" : "text-slate/70"}`}>
               {note}
+            </p>
+          ) : null}
+          {price ? (
+            <p className={`mt-1 text-[12px] font-bold sm:text-sm ${selected ? "text-white" : "text-ink"}`}>
+              {price}
             </p>
           ) : null}
         </div>
@@ -240,6 +263,7 @@ export function EventBookingFlow({
   const [emailVerified, setEmailVerified] = useState(false);
   const [verifyingOtp, setVerifyingOtp] = useState(false);
   const [completedRegistration, setCompletedRegistration] = useState<CompletedRegistration | null>(null);
+  const [checkoutToken, setCheckoutToken] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [selectedAdditionalCategoryId, setSelectedAdditionalCategoryId] = useState<string | null>(null);
 
@@ -330,9 +354,8 @@ export function EventBookingFlow({
       ? `${selectedCategory.title} + ${selectedAdditionalCategory.title}`
       : selectedCategory.title
     : "Select a category";
-  const requestSelectedTicketId = selectedAdditionalCategory?.id ?? "general-admission";
-  const requestSelectedTicketTitle = selectedAdditionalCategory?.title ?? "General Admission";
-
+  const selectedTotalMinor = (selectedCategory?.priceMinor ?? 0) + (selectedAdditionalCategory?.priceMinor ?? 0);
+  const selectedCurrencyCode = selectedCategory?.currencyCode ?? selectedAdditionalCategory?.currencyCode ?? "AED";
   const requiredErrors = useMemo(() => {
     if (!showFieldErrors) {
       return {
@@ -399,7 +422,7 @@ export function EventBookingFlow({
     return () => window.clearInterval(timer);
   }, [step, completedRegistration]);
 
-  async function sendOtp(endpoint: "/api/register/start" | "/api/register/resend-verification") {
+  async function sendOtp(_endpoint: "/api/register/start" | "/api/register/resend-verification") {
     if (!selectedCategory) {
       setOtpMessage({ text: "Select a category before requesting a code.", error: true });
       return;
@@ -423,16 +446,15 @@ export function EventBookingFlow({
     setOtpState("sending");
     setOtpMessage(null);
 
-    const response = await fetch(endpoint, {
+    const response = await fetch("/api/checkout/start", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         eventId: event.id,
-        selectedTicketId: requestSelectedTicketId,
-        selectedTicketTitle: requestSelectedTicketTitle,
         categoryId: selectedCategory.id,
-        categoryTitle: selectedCategory.title,
-        fullName,
+        addonId: selectedAdditionalCategory?.id ?? "",
+        firstName: form.firstName,
+        lastName: form.lastName,
         email: form.email,
         phone: form.phone || undefined,
         ...(form.age.trim() ? { age: Number(form.age) } : {}),
@@ -442,9 +464,10 @@ export function EventBookingFlow({
     });
 
     const result = (await response.json()) as {
-      outcome?: "pending_verification" | "already_verified";
+      outcome?: "otp_sent";
       message?: string;
       warning?: string;
+      checkoutToken?: string;
     };
 
     if (!response.ok) {
@@ -457,12 +480,8 @@ export function EventBookingFlow({
       ? `${result.message ?? "Verification code sent."} Note: ${result.warning}`
       : result.message ?? "Verification code sent.";
 
-    if (result.outcome === "already_verified") {
-      setEmailVerified(true);
-      setOtpState("idle");
-      setOtp("");
-      setOtpMessage({ text: otpText, error: false });
-      return;
+    if (result.checkoutToken) {
+      setCheckoutToken(result.checkoutToken);
     }
 
     setOtpState("sent");
@@ -471,16 +490,23 @@ export function EventBookingFlow({
 
   async function verifyOtpCode() {
     if (!otp.trim()) return;
+    if (!checkoutToken) {
+      setOtpMessage({ text: "Request a new verification code before continuing.", error: true });
+      return;
+    }
     setVerifyingOtp(true);
     setOtpMessage(null);
     try {
-      const response = await fetch("/api/register/verify-otp", {
+      const response = await fetch("/api/checkout/verify-otp", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ eventId: event.id, email: form.email, otp })
+        body: JSON.stringify({ checkoutToken, otp })
       });
-      const result = (await response.json()) as { valid?: boolean; message?: string };
-      if (response.ok && result.valid) {
+      const result = (await response.json()) as { outcome?: string; message?: string; checkoutToken?: string };
+      if (response.ok && (result.outcome === "email_verified" || result.outcome === "fulfilled")) {
+        if (result.checkoutToken) {
+          setCheckoutToken(result.checkoutToken);
+        }
         setEmailVerified(true);
         setOtpMessage(null);
       } else {
@@ -657,6 +683,7 @@ export function EventBookingFlow({
       !isValidPhoneNumber(form.phone) ||
       !form.age.trim() ||
       !form.declarationAccepted ||
+      !checkoutToken ||
       !canProceed
     ) {
       return;
@@ -665,32 +692,24 @@ export function EventBookingFlow({
     setSubmissionState("submitting");
     setMessage(null);
 
-    const response = await fetch("/api/register/confirm", {
+    const response = await fetch("/api/checkout/create-payment", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        eventId: event.id,
-        selectedTicketId: requestSelectedTicketId,
-        selectedTicketTitle: requestSelectedTicketTitle,
-        fullName,
-        email: form.email,
-        phone: form.phone,
-        age: Number(form.age),
-        uaeResident: form.uaeResident,
-        declarationAccepted: true,
-        ...(otp.trim() ? { otp } : {}),
-        website: form.website,
-        categoryId: selectedCategory.id,
-        categoryTitle: selectedCategory.title
+        checkoutToken,
+        declarationAccepted: true
       })
     });
 
     const result = (await response.json()) as {
+      outcome?: "redirect" | "fulfilled" | "payment_pending";
       message?: string;
       registrationId?: string;
       email?: string;
       qrToken?: string;
       manualCheckinCode?: string;
+      paymentUrl?: string;
+      checkoutToken?: string;
       attendees?: Array<{
         registrationId: string;
         fullName: string;
@@ -708,7 +727,40 @@ export function EventBookingFlow({
       return;
     }
 
+    if (result.checkoutToken) {
+      setCheckoutToken(result.checkoutToken);
+    }
+
+    if (result.outcome === "redirect" && result.paymentUrl) {
+      const ua = window.navigator.userAgent;
+      if (isEmbeddedPaymentHost(ua)) {
+        const continueInWebview = window.confirm(
+          "This payment may fail inside an in-app browser. Open this page in your system browser if 3DS does not complete. Continue to payment now?"
+        );
+        if (!continueInWebview) {
+          setSubmissionState("idle");
+          setMessage("Payment is ready. Open this page in your system browser, then continue again.");
+          return;
+        }
+      }
+      window.location.assign(result.paymentUrl);
+      return;
+    }
+
+    if (result.outcome === "payment_pending") {
+      setSubmissionState("idle");
+      setMessage(result.message ?? "Payment is being prepared. Try again in a moment.");
+      return;
+    }
+
+    if (result.outcome !== "fulfilled") {
+      setSubmissionState("error");
+      setMessage(result.message ?? "Unable to complete the registration.");
+      return;
+    }
+
     setSubmissionState("success");
+
     try {
       sessionStorage.removeItem(storageKey);
     } catch {
@@ -757,6 +809,7 @@ export function EventBookingFlow({
     setOtpMessage(null);
     setEmailVerified(false);
     setCompletedRegistration(null);
+    setCheckoutToken(null);
     setSelectedCategoryId(null);
     setSelectedAdditionalCategoryId(null);
     setForm(INITIAL_FORM_STATE);
@@ -793,11 +846,12 @@ export function EventBookingFlow({
                   setStep("tickets");
                   setSubmissionState("idle");
                   setMessage(null);
-                  setOtpState("idle");
-                  setOtp("");
-                  setOtpMessage(null);
-                  setEmailVerified(false);
-                }}
+	                  setOtpState("idle");
+	                  setOtp("");
+	                  setOtpMessage(null);
+	                  setEmailVerified(false);
+	                  setCheckoutToken(null);
+	                }}
                 className="inline-flex items-center gap-2 rounded-xl p-1.5 text-sm text-slate transition hover:bg-mist hover:text-ink sm:rounded-2xl sm:px-2 sm:py-2"
               >
                 <ArrowLeft className="h-4 w-4" />
@@ -904,10 +958,11 @@ export function EventBookingFlow({
                           <SelectionCard
                             key={category.id}
                             title={category.title}
-                            description={category.description}
-                            note={category.note}
-                            meta={getAvailabilityMeta(category)}
-                            selected={selectedCategoryId === category.id}
+	                            description={category.description}
+	                            note={category.note}
+	                            meta={getAvailabilityMeta(category)}
+	                            price={formatPrice(category.priceMinor, category.currencyCode)}
+	                            selected={selectedCategoryId === category.id}
                             disabled={category.isUnavailable}
                             onClick={() => {
                               setSelectedCategoryId(category.id);
@@ -932,10 +987,11 @@ export function EventBookingFlow({
                             <SelectionCard
                               key={category.id}
                               title={category.title}
-                              description={category.description}
-                              note={category.note}
-                              meta={getAvailabilityMeta(category)}
-                              selected={selectedAdditionalCategoryId === category.id}
+	                              description={category.description}
+	                              note={category.note}
+	                              meta={getAvailabilityMeta(category)}
+	                              price={formatPrice(category.priceMinor, category.currencyCode)}
+	                              selected={selectedAdditionalCategoryId === category.id}
                               disabled={category.isUnavailable}
                               onClick={() => {
                                 setSelectedAdditionalCategoryId((current) => current === category.id ? null : category.id);
@@ -1246,9 +1302,10 @@ export function EventBookingFlow({
 
                   <div className="mt-3 rounded-[1.5rem] border border-slate/10 bg-white px-4 py-4 shadow-sm sm:mt-6 sm:space-y-4 sm:px-5 sm:py-5">
                     <div className="border-b border-slate/10 pb-3 font-body text-[13px] text-slate sm:text-[15px]">
-                      <p className="font-display font-bold tracking-tight text-ink">Selected admission</p>
-                      <p className="mt-1 text-sm text-slate">{selectionDisplayLabel}</p>
-                    </div>
+	                      <p className="font-display font-bold tracking-tight text-ink">Selected admission</p>
+	                      <p className="mt-1 text-sm text-slate">{selectionDisplayLabel}</p>
+	                      <p className="mt-2 text-sm font-bold text-ink">{formatPrice(selectedTotalMinor, selectedCurrencyCode)}</p>
+	                    </div>
 
                     <div className="mt-3 space-y-1.5 font-body text-[12px] sm:space-y-2 sm:text-sm">
                       <div className="flex items-center gap-2">
@@ -1315,11 +1372,15 @@ export function EventBookingFlow({
                         setMessage("Please enter your email address.");
                         return;
                       }
-                      if (!emailVerified) {
-                        setMessage("Please verify your email above to complete registration.");
-                        return;
-                      }
-                      if (!form.phone.trim()) {
+	                      if (!emailVerified) {
+	                        setMessage("Please verify your email above to complete registration.");
+	                        return;
+	                      }
+	                      if (!checkoutToken) {
+	                        setMessage("Please request a new verification code before continuing.");
+	                        return;
+	                      }
+	                      if (!form.phone.trim()) {
                         setMessage("Please enter your phone number.");
                         return;
                       }
@@ -1337,12 +1398,12 @@ export function EventBookingFlow({
                     disabled={step === "tickets" ? !canContinueFromTickets : submissionState === "submitting"}
                     className="mt-4 w-full rounded-xl bg-black py-2.5 font-display text-[14px] font-bold tracking-tight text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.45)] hover:bg-black/90 sm:mt-6 sm:rounded-2xl sm:py-3.5 sm:text-base"
                   >
-                    {step === "tickets"
-                      ? "Continue"
-                      : submissionState === "submitting"
-                        ? "Completing registration..."
-                        : "Complete registration"}
-                  </Button>
+	                    {step === "tickets"
+	                      ? "Continue"
+	                      : submissionState === "submitting"
+	                        ? selectedTotalMinor > 0 ? "Preparing payment..." : "Completing registration..."
+	                        : selectedTotalMinor > 0 ? "Continue to payment" : "Complete registration"}
+	                  </Button>
 
                   {message && submissionState !== "submitting" ? (
                     <p className="mt-3 text-sm text-rose-700">{message}</p>

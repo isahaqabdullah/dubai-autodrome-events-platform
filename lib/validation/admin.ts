@@ -7,6 +7,8 @@ const eventTicketOptionSchema = z.object({
   note: z.string().trim().max(240).optional().or(z.literal("")).or(z.null()),
   badge: z.string().trim().max(40).optional().or(z.literal("")).or(z.null()),
   capacity: z.coerce.number().int().positive().nullable().optional(),
+  priceMinor: z.coerce.number().int().min(0).default(0).optional(),
+  currencyCode: z.string().trim().regex(/^[A-Z]{3}$/).default("AED").optional(),
   soldOut: z.coerce.boolean().default(false)
 });
 

@@ -1,5 +1,27 @@
 export type EventStatus = "draft" | "open" | "closed" | "live" | "archived";
 export type RegistrationStatus = "registered" | "checked_in" | "cancelled" | "revoked";
+export type BookingIntentStatus =
+  | "draft"
+  | "otp_sent"
+  | "email_verified"
+  | "payment_pending"
+  | "paid"
+  | "fulfilled"
+  | "payment_failed"
+  | "expired"
+  | "manual_action_required"
+  | "cancelled";
+export type PaymentAttemptStatus =
+  | "created"
+  | "order_create_pending"
+  | "payment_pending"
+  | "paid"
+  | "failed"
+  | "cancelled"
+  | "expired"
+  | "manual_action_required";
+export type PaymentJobStatus = "queued" | "processing" | "done" | "failed";
+export type BookingItemType = "category" | "addon";
 export type CheckinResult =
   | "success"
   | "already_checked_in"
@@ -17,6 +39,9 @@ export interface EventTicketOption {
   badge?: string;
   capacity?: number | null;
   soldOut?: boolean;
+  priceMinor?: number;
+  currencyCode?: string;
+  catalogId?: string;
 }
 
 export interface EventFormConfig {
@@ -81,8 +106,96 @@ export interface RegistrationRecord {
   booking_id: string | null;
   is_primary: boolean;
   registered_by_email: string | null;
+  booking_intent_id: string | null;
+  payment_attempt_id: string | null;
+  ni_order_reference: string | null;
+  paid_amount_minor: number | null;
+  paid_currency_code: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface EventCatalogOption {
+  id: string;
+  publicId: string;
+  eventId: string;
+  title: string;
+  description: string;
+  note: string | null;
+  badge: string | null;
+  capacity: number | null;
+  priceMinor: number;
+  currencyCode: string;
+  active: boolean;
+  soldOut: boolean;
+  sortOrder: number;
+}
+
+export interface EventCatalog {
+  categories: EventCatalogOption[];
+  addons: EventCatalogOption[];
+}
+
+export interface CheckoutSignedTokenPayload {
+  bookingIntentId: string;
+  email: string;
+  exp: number;
+}
+
+export interface CheckoutStartResult {
+  outcome: "otp_sent" | "rate_limited" | "registration_closed" | "invalid_selection" | "capacity_exceeded";
+  message: string;
+  bookingIntentId?: string;
+  checkoutToken?: string;
+  totalMinor?: number;
+  currencyCode?: string;
+}
+
+export interface CheckoutOtpResult {
+  outcome: "email_verified" | "fulfilled" | "invalid" | "expired" | "already_used" | "capacity_exceeded" | "manual_action_required";
+  message: string;
+  bookingIntentId?: string;
+  checkoutToken?: string;
+  totalMinor?: number;
+  currencyCode?: string;
+  attendees?: ConfirmedCheckoutAttendee[];
+}
+
+export interface CheckoutPaymentResult {
+  outcome:
+    | "redirect"
+    | "fulfilled"
+    | "payment_pending"
+    | "invalid"
+    | "rate_limited"
+    | "capacity_exceeded"
+    | "attempt_limit_exceeded"
+    | "manual_action_required"
+    | "configuration_error";
+  message: string;
+  bookingIntentId?: string;
+  paymentAttemptId?: string;
+  paymentUrl?: string;
+  checkoutToken?: string;
+  attendees?: ConfirmedCheckoutAttendee[];
+}
+
+export interface CheckoutStatusResult {
+  status: BookingIntentStatus;
+  message: string;
+  bookingIntentId?: string;
+  paymentAttemptStatus?: PaymentAttemptStatus;
+  attendees?: ConfirmedCheckoutAttendee[];
+}
+
+export interface ConfirmedCheckoutAttendee {
+  registrationId: string;
+  fullName: string;
+  qrToken: string;
+  manualCheckinCode: string;
+  categoryTitle: string;
+  ticketTitle: string | null;
+  email?: string;
 }
 
 export interface RegistrationWindowState {

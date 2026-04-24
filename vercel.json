@@ -1,1 +1,20 @@
-{}
+{
+  "crons": [
+    {
+      "path": "/api/cron/email-worker",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/payment-worker",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/cron/payment-reconcile",
+      "schedule": "*/5 * * * *"
+    },
+    {
+      "path": "/api/cron/payment-maintenance",
+      "schedule": "*/5 * * * *"
+    }
+  ]
+}

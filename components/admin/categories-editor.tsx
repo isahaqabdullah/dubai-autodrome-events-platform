@@ -17,6 +17,8 @@ function createCategory(): EventTicketOption {
     description: "",
     note: "",
     badge: "",
+    priceMinor: 0,
+    currencyCode: "AED",
     soldOut: false
   };
 }
@@ -54,7 +56,7 @@ export function CategoriesEditor({ initialCategories }: CategoriesEditorProps) {
             </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <label className="space-y-2">
               <span className="text-sm font-semibold text-ink">Title</span>
               <Input
@@ -101,6 +103,26 @@ export function CategoriesEditor({ initialCategories }: CategoriesEditorProps) {
                   )
                 }
                 placeholder="Popular"
+                className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+              />
+            </label>
+            <label className="space-y-2">
+              <span className="text-sm font-semibold text-ink">Price (AED)</span>
+              <Input
+                type="number"
+                min={0}
+                step="0.01"
+                value={((category.priceMinor ?? 0) / 100).toString()}
+                onChange={(event) =>
+                  setCategories((current) =>
+                    current.map((c) =>
+                      c.id === category.id
+                        ? { ...c, priceMinor: Math.round(Number(event.target.value || 0) * 100), currencyCode: "AED" }
+                        : c
+                    )
+                  )
+                }
+                placeholder="0.00"
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </label>

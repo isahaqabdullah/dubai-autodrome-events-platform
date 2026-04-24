@@ -54,6 +54,8 @@ function buildEventPayload(input: AdminEventInput) {
         note: blankToNull(cat.note),
         badge: blankToNull(cat.badge),
         capacity: cat.capacity ?? null,
+        priceMinor: cat.priceMinor ?? 0,
+        currencyCode: cat.currencyCode ?? "AED",
         soldOut: cat.soldOut
       })),
       ticketOptions: input.ticketOptions.map((ticket) => ({
@@ -63,6 +65,8 @@ function buildEventPayload(input: AdminEventInput) {
         note: blankToNull(ticket.note),
         badge: blankToNull(ticket.badge),
         capacity: ticket.capacity ?? null,
+        priceMinor: ticket.priceMinor ?? 0,
+        currencyCode: ticket.currencyCode ?? "AED",
         soldOut: ticket.soldOut
       })),
       posterImage: blankToNull(input.posterImage),
@@ -141,6 +145,93 @@ function assertRegistrationLinkedOptionsAreStillValid(input: {
   }
 }
 
+async function syncCatalogFromEventInput(eventId: string, input: AdminEventInput) {
+  const supabase = createAdminSupabaseClient();
+  const categoryIds = (input.categories ?? []).map((category) => category.id.trim()).filter(Boolean);
+  const addonIds = input.ticketOptions.map((addon) => addon.id.trim()).filter(Boolean);
+  const categories = categoryIds.length > 0
+    ? input.categories
+    : [{
+      id: "general-admission",
+      title: "General Admission",
+      description: "Free general admission",
+      note: null,
+      badge: null,
+      capacity: null,
+      soldOut: false
+    }];
+
+  const { error: categoryUpsertError } = await supabase.from("event_categories").upsert(
+    categories.map((category, index) => ({
+      event_id: eventId,
+      public_id: category.id.trim(),
+      title: category.title.trim(),
+      description: category.description?.trim() ?? "",
+      note: blankToNull(category.note),
+      badge: blankToNull(category.badge),
+      capacity: category.capacity ?? null,
+      sold_out: category.soldOut,
+      active: true,
+      price_minor: category.priceMinor ?? 0,
+      currency_code: category.currencyCode ?? "AED",
+      sort_order: index
+    })),
+    { onConflict: "event_id,public_id" }
+  );
+
+  if (categoryUpsertError) {
+    throw categoryUpsertError;
+  }
+
+  const activeCategoryIds = categoryIds.length > 0 ? categoryIds : ["general-admission"];
+  const { error: categoryDeactivateError } = await supabase
+    .from("event_categories")
+    .update({ active: false })
+    .eq("event_id", eventId)
+    .not("public_id", "in", `(${activeCategoryIds.map((id) => `"${id}"`).join(",")})`);
+
+  if (categoryDeactivateError) {
+    throw categoryDeactivateError;
+  }
+
+  if (input.ticketOptions.length > 0) {
+    const { error: addonUpsertError } = await supabase.from("event_addons").upsert(
+      input.ticketOptions.map((addon, index) => ({
+        event_id: eventId,
+        public_id: addon.id.trim(),
+        title: addon.title.trim(),
+        description: addon.description?.trim() ?? "",
+        note: blankToNull(addon.note),
+        badge: blankToNull(addon.badge),
+        capacity: addon.capacity ?? null,
+        sold_out: addon.soldOut,
+        active: true,
+        price_minor: addon.priceMinor ?? 0,
+        currency_code: addon.currencyCode ?? "AED",
+        sort_order: index
+      })),
+      { onConflict: "event_id,public_id" }
+    );
+
+    if (addonUpsertError) {
+      throw addonUpsertError;
+    }
+  }
+
+  const addonDeactivateQuery = supabase
+    .from("event_addons")
+    .update({ active: false })
+    .eq("event_id", eventId);
+
+  const { error: addonDeactivateError } = addonIds.length > 0
+    ? await addonDeactivateQuery.not("public_id", "in", `(${addonIds.map((id) => `"${id}"`).join(",")})`)
+    : await addonDeactivateQuery;
+
+  if (addonDeactivateError) {
+    throw addonDeactivateError;
+  }
+}
+
 export async function logAuditEvent(input: {
   actor: AuthenticatedAppUser;
   action: string;
@@ -186,6 +277,8 @@ export async function createEvent(input: AdminEventInput, actor: AuthenticatedAp
   if (error) {
     throw error;
   }
+
+  await syncCatalogFromEventInput(data.id, input);
 
   await logAuditEvent({
     actor,
@@ -250,6 +343,8 @@ export async function updateEvent(input: AdminEventInput, actor: AuthenticatedAp
     throw error;
   }
 
+  await syncCatalogFromEventInput(input.id, input);
+
   await logAuditEvent({
     actor,
     action: "event.updated",
@@ -277,6 +372,26 @@ export async function deleteEvent(eventId: string, actor: AuthenticatedAppUser) 
 
   if (fetchError) {
     throw fetchError;
+  }
+
+  const [
+    registrationsResult,
+    bookingIntentsResult
+  ] = await Promise.all([
+    supabase.from("registrations").select("id", { count: "exact", head: true }).eq("event_id", eventId),
+    supabase.from("booking_intents").select("id", { count: "exact", head: true }).eq("event_id", eventId)
+  ]);
+
+  if (registrationsResult.error) {
+    throw registrationsResult.error;
+  }
+
+  if (bookingIntentsResult.error) {
+    throw bookingIntentsResult.error;
+  }
+
+  if ((registrationsResult.count ?? 0) > 0 || (bookingIntentsResult.count ?? 0) > 0) {
+    throw new Error("Cannot delete an event with registrations, booking intents, or payment activity. Archive or close it instead.");
   }
 
   const { error: deletePendingError } = await supabase
@@ -342,7 +457,7 @@ function matchesCategoryFilter(
 }
 
 const ADMIN_REGISTRATION_SELECT =
-  "id, event_id, full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, checked_in_at, created_at, booking_id, is_primary, registered_by_email, events(title, slug)";
+  "id, event_id, full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, checked_in_at, created_at, booking_id, is_primary, registered_by_email, booking_intent_id, payment_attempt_id, ni_order_reference, paid_amount_minor, paid_currency_code, events(title, slug)";
 
 export async function listRegistrations(filters: ListRegistrationsFilters) {
   const page = Number.isFinite(filters.page) && (filters.page ?? 0) > 0 ? Math.floor(filters.page ?? 1) : 1;
@@ -446,6 +561,38 @@ export async function revokeRegistration(
 
   if (beforeError) {
     throw beforeError;
+  }
+
+  if (before.payment_attempt_id || before.paid_amount_minor != null || before.ni_order_reference) {
+    const { data: updated, error: updateError } = await supabase
+      .from("registrations")
+      .update({ status: "revoked" })
+      .eq("id", registrationId)
+      .select("*")
+      .single();
+
+    if (updateError) {
+      throw updateError;
+    }
+
+    await logAuditEvent({
+      actor,
+      action: "registration.revoked",
+      entityType: "registration",
+      entityId: registrationId,
+      beforeJson: before,
+      afterJson: {
+        ...(updated ?? {}),
+        delete_reason: blankToNull(reason),
+        payment_backed: true
+      }
+    });
+
+    return {
+      id: registrationId,
+      deleted: false,
+      reason: blankToNull(reason)
+    };
   }
 
   const { error: deleteCheckinsError } = await supabase

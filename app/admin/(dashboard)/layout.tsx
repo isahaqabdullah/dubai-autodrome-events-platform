@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { AdminNav } from "@/components/admin/admin-nav";
 import { SignOutButton } from "@/components/admin/sign-out-button";
 import { requireAuthenticatedUser } from "@/lib/auth";
@@ -28,7 +29,9 @@ export default async function AdminLayout({
         </div>
 
         <div className="mt-2.5 border-t border-slate/10 pt-2.5 sm:mt-4 sm:pt-4">
-          <AdminNav hideOnDashboard activeStyle="line" />
+          <Suspense fallback={null}>
+            <AdminNav hideOnDashboard activeStyle="line" />
+          </Suspense>
         </div>
       </header>
 

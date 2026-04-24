@@ -4,6 +4,8 @@ node_modules
 .env.development
 .env.local
 .env.production
+.env.production-current
+.env.uat-checkout
 .DS_Store
 coverage
 dist

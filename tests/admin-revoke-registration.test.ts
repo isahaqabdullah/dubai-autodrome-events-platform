@@ -86,6 +86,32 @@ vi.mock("@/lib/supabase/admin", () => ({
                 return { error: null };
               }
             };
+          },
+          update(payload: Record<string, unknown>) {
+            let idFilter: string | null = null;
+            const chain = {
+              eq(column: string, value: unknown) {
+                if (column === "id") {
+                  idFilter = String(value);
+                }
+                return chain;
+              },
+              select() {
+                return chain;
+              },
+              async single() {
+                const index = testState.registrations.findIndex((registration) => registration.id === idFilter);
+                if (index < 0) {
+                  return { data: null, error: { message: "Registration not found." } };
+                }
+                testState.registrations[index] = {
+                  ...testState.registrations[index],
+                  ...payload
+                };
+                return { data: testState.registrations[index], error: null };
+              }
+            };
+            return chain;
           }
         };
       }
@@ -197,6 +223,61 @@ describe("revokeRegistration", () => {
           deleted: true,
           delete_reason: "Requested removal"
         }
+      })
+    ]);
+  });
+
+  it("revokes payment-backed registrations without deleting tickets or check-ins", async () => {
+    testState.registrations = [
+      {
+        id: "registration-1",
+        event_id: "event-1",
+        full_name: "Paid Attendee",
+        status: "registered",
+        payment_attempt_id: "payment-attempt-1",
+        paid_amount_minor: 5000,
+        ni_order_reference: "ni-order-1"
+      }
+    ];
+    testState.checkins = [
+      {
+        id: "checkin-1",
+        registration_id: "registration-1",
+        event_id: "event-1"
+      }
+    ];
+
+    const result = await revokeRegistration(
+      "registration-1",
+      {
+        id: "admin-1",
+        email: "admin@example.com",
+        role: "admin",
+        gateName: "Main gate"
+      },
+      "Payment-backed revoke"
+    );
+
+    expect(result).toEqual({
+      id: "registration-1",
+      deleted: false,
+      reason: "Payment-backed revoke"
+    });
+    expect(testState.registrations).toEqual([
+      expect.objectContaining({
+        id: "registration-1",
+        status: "revoked",
+        payment_attempt_id: "payment-attempt-1"
+      })
+    ]);
+    expect(testState.checkins).toHaveLength(1);
+    expect(testState.auditLogs).toEqual([
+      expect.objectContaining({
+        action: "registration.revoked",
+        after_json: expect.objectContaining({
+          payment_backed: true,
+          delete_reason: "Payment-backed revoke"
+        })
       })
     ]);
   });
