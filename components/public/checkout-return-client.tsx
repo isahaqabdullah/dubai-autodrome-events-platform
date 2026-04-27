@@ -32,10 +32,10 @@ export function CheckoutReturnClient({
         }
       }
 
-      tick += 3;
+      tick += 2;
       setElapsed(tick);
       if (tick < 60) {
-        window.setTimeout(poll, 3000);
+        window.setTimeout(poll, 2000);
       }
     }
 
@@ -53,7 +53,7 @@ export function CheckoutReturnClient({
         ? "cancelled"
         : settledStatus;
   const icon =
-    finalStatus === "fulfilled"
+    finalStatus === "fulfilled" || finalStatus === "paid"
       ? <CheckCircle2 className="h-12 w-12 text-[#2c7a86]" />
       : finalStatus === "payment_failed" || finalStatus === "cancelled" || finalStatus === "expired"
         ? <XCircle className="h-12 w-12 text-rose-600" />
@@ -62,6 +62,8 @@ export function CheckoutReturnClient({
   const title =
     finalStatus === "fulfilled"
       ? "Registration complete"
+      : finalStatus === "paid"
+        ? "Payment confirmed"
       : finalStatus === "payment_failed"
         ? "Payment failed"
         : finalStatus === "cancelled"
@@ -75,6 +77,8 @@ export function CheckoutReturnClient({
   const message =
     finalStatus === "fulfilled"
       ? "Your tickets are being emailed. You can close this page."
+      : finalStatus === "paid"
+        ? "Your payment is confirmed. We are preparing your tickets and will email them shortly."
       : finalStatus === "manual_action_required"
         ? "Payment was received, but ticket issuance needs manual review."
         : finalStatus === "payment_failed" || finalStatus === "cancelled" || finalStatus === "expired"

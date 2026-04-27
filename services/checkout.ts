@@ -806,6 +806,15 @@ async function reconcileCheckoutReturnAttempt(input: {
     return { booking: input.booking, attempt: input.attempt };
   }
 
+  if (input.booking.status === "paid" && input.attempt.status === "paid") {
+    await ensurePaymentFulfillmentJob({
+      supabase: input.supabase,
+      bookingIntentId: input.booking.id,
+      paymentAttemptId: input.attempt.id
+    });
+    return { booking: input.booking, attempt: input.attempt };
+  }
+
   try {
     const order = await getNgeniusOrder(input.attempt.ni_order_reference);
     const state = interpretNgeniusOrder(order);
@@ -844,26 +853,11 @@ async function reconcileCheckoutReturnAttempt(input: {
         status: "paid",
         manual_action_reason: null
       }).eq("id", input.booking.id);
-      try {
-        await fulfillBooking({
-          supabase: input.supabase,
-          booking: { ...input.booking, status: "paid" },
-          paymentAttemptId: input.attempt.id
-        });
-      } catch (fulfillmentError) {
-        const reason = fulfillmentError instanceof Error
-          ? fulfillmentError.message
-          : "Payment was verified, but ticket fulfillment failed.";
-        await input.supabase.from("payment_attempts").update({
-          status: "manual_action_required",
-          last_error: reason
-        }).eq("id", input.attempt.id);
-        await input.supabase.from("booking_intents").update({
-          status: "manual_action_required",
-          manual_action_reason: reason
-        }).eq("id", input.booking.id);
-        throw fulfillmentError;
-      }
+      await ensurePaymentFulfillmentJob({
+        supabase: input.supabase,
+        bookingIntentId: input.booking.id,
+        paymentAttemptId: input.attempt.id
+      });
     } else if (state.kind === "failed" || state.kind === "cancelled") {
       await input.supabase.from("payment_attempts").update({
         status: state.kind === "cancelled" ? "cancelled" : "failed",
@@ -888,6 +882,37 @@ async function reconcileCheckoutReturnAttempt(input: {
   }
 
   return reloadCheckoutStatusRows(input.supabase, input.booking, input.attempt);
+}
+
+async function ensurePaymentFulfillmentJob(input: {
+  supabase: Supabase;
+  bookingIntentId: string;
+  paymentAttemptId: string;
+}) {
+  const { data, error } = await input.supabase
+    .from("payment_jobs")
+    .select("id")
+    .eq("payment_attempt_id", input.paymentAttemptId)
+    .in("status", ["queued", "processing"])
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  if (data?.length) {
+    return;
+  }
+
+  const { error: insertError } = await input.supabase.from("payment_jobs").insert({
+    kind: "checkout_return",
+    payment_attempt_id: input.paymentAttemptId,
+    booking_intent_id: input.bookingIntentId
+  });
+
+  if (insertError) {
+    throw insertError;
+  }
 }
 
 async function markExpiredHoldAsManualAction(input: {
