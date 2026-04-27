@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Clock3, XCircle } from "lucide-react";
+import { EventTicketCard } from "@/components/public/event-ticket-card";
 import type { CheckoutStatusResult } from "@/lib/types";
 
 export function CheckoutReturnClient({
@@ -14,6 +15,10 @@ export function CheckoutReturnClient({
 }) {
   const [status, setStatus] = useState<CheckoutStatusResult | null>(null);
   const [elapsed, setElapsed] = useState(0);
+  const ticketEvent = status?.status === "fulfilled" && status.event ? status.event : null;
+  const ticketAttendees = ticketEvent ? status?.attendees ?? [] : [];
+  const canShowTickets = Boolean(ticketEvent && ticketAttendees.length > 0);
+  const mapLink = ticketEvent?.form_config?.mapLink ?? null;
 
   useEffect(() => {
     let stopped = false;
@@ -76,7 +81,7 @@ export function CheckoutReturnClient({
 
   const message =
     finalStatus === "fulfilled"
-      ? "Your tickets are being emailed. You can close this page."
+      ? "Your tickets are ready below. We are also emailing a copy."
       : finalStatus === "paid"
         ? "Your payment is confirmed. We are preparing your tickets and will email them shortly."
       : finalStatus === "manual_action_required"
@@ -88,11 +93,23 @@ export function CheckoutReturnClient({
             : "This can take a few seconds after the secure payment page returns.";
 
   return (
-    <div className="mx-auto flex min-h-[70vh] max-w-xl flex-col items-center justify-center px-4 py-12 text-center">
+    <div className={`mx-auto flex min-h-[70vh] flex-col items-center justify-center px-4 py-12 text-center ${canShowTickets ? "max-w-6xl" : "max-w-xl"}`}>
       {icon}
       <h1 className="mt-4 font-title text-3xl font-black italic text-ink">{title}</h1>
       <p className="mt-3 text-sm leading-relaxed text-slate">{message}</p>
-      {status?.attendees?.length ? (
+      {canShowTickets ? (
+        <div className="mt-8 grid w-full gap-5 text-left">
+          {ticketAttendees.map((attendee) => (
+            <EventTicketCard
+              key={attendee.registrationId}
+              event={ticketEvent!}
+              attendee={attendee}
+              qrSrc={`/api/qr?token=${encodeURIComponent(attendee.qrToken)}`}
+              mapLink={mapLink}
+            />
+          ))}
+        </div>
+      ) : status?.attendees?.length ? (
         <div className="mt-6 w-full rounded-2xl border border-slate/10 bg-white p-4 text-left">
           {status.attendees.map((attendee) => (
             <div key={attendee.registrationId} className="flex items-center justify-between gap-3 border-b border-slate/10 py-2 last:border-0">

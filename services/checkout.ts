@@ -769,12 +769,25 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
   const currentAttempt = refreshed.attempt;
 
   if (currentBooking.status === "fulfilled") {
-    const attendees = await loadFulfilledAttendees(supabase, currentBooking);
+    const [attendees, event] = await Promise.all([
+      loadFulfilledAttendees(supabase, currentBooking),
+      getEventById(currentBooking.event_id)
+    ]);
     return {
       status: "fulfilled",
       message: "Registration confirmed.",
       bookingIntentId: currentBooking.id,
       paymentAttemptStatus: currentAttempt?.status as CheckoutStatusResult["paymentAttemptStatus"],
+      event: event
+        ? {
+            title: event.title,
+            venue: event.venue,
+            start_at: event.start_at,
+            end_at: event.end_at,
+            timezone: event.timezone,
+            form_config: event.form_config
+          }
+        : undefined,
       attendees
     };
   }

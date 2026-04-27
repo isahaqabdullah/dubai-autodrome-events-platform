@@ -185,8 +185,11 @@ export interface CheckoutStatusResult {
   message: string;
   bookingIntentId?: string;
   paymentAttemptStatus?: PaymentAttemptStatus;
+  event?: CheckoutTicketEvent;
   attendees?: ConfirmedCheckoutAttendee[];
 }
+
+export type CheckoutTicketEvent = Pick<EventRecord, "title" | "venue" | "start_at" | "end_at" | "timezone" | "form_config">;
 
 export interface ConfirmedCheckoutAttendee {
   registrationId: string;
