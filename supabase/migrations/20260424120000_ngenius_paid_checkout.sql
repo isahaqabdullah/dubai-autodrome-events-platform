@@ -800,6 +800,7 @@ declare
   v_expected_count integer;
   v_manual_checkin_code text;
   v_existing_count integer;
+  v_registration_id uuid;
 begin
   perform public.lock_checkout_capacity_buckets(p_booking_intent_id);
 
@@ -1002,20 +1003,19 @@ begin
       case when booking_row.total_minor > 0 then booking_row.total_minor else null end,
       case when booking_row.total_minor > 0 then booking_row.currency_code else null end
     )
-    returning
-      'fulfilled'::text,
-      id,
-      attendee_row.attendee_index,
-      full_name,
-      email_raw,
-      category_id,
-      category_title,
-      ticket_option_id,
-      ticket_option_title,
-      manual_checkin_code
-    into outcome, registration_id, attendee_index, full_name, email_raw, category_id, category_title, ticket_option_id, ticket_option_title, manual_checkin_code;
+    returning id into v_registration_id;
 
-    return next;
+    return query select
+      'fulfilled'::text,
+      v_registration_id,
+      attendee_row.attendee_index,
+      attendee_row.full_name,
+      attendee_row.email_raw,
+      attendee_row.category_public_id,
+      attendee_row.category_title,
+      attendee_row.addon_public_id,
+      attendee_row.addon_title,
+      v_manual_checkin_code;
   end loop;
 
   update public.booking_capacity_holds
