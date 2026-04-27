@@ -156,7 +156,8 @@ export async function createNgeniusOrder(input: NgeniusCreateOrderInput): Promis
     },
     merchantAttributes: {
       redirectUrl,
-      cancelUrl
+      cancelUrl,
+      skipConfirmationPage: true
     },
     merchantOrderReference: input.merchantOrderReference,
     merchantDefinedData: {
