@@ -19,12 +19,21 @@ export async function GET(request: Request) {
   let result = await getCheckoutStatus(parsed.data.token);
   if (result.status === "paid" && result.bookingIntentId && result.paymentAttemptId) {
     try {
+      console.info("[checkout/status] fulfilling verified paid checkout", {
+        bookingIntentId: result.bookingIntentId,
+        paymentAttemptId: result.paymentAttemptId
+      });
       await fulfillPaidBookingFromWorker({
         bookingIntentId: result.bookingIntentId,
         paymentAttemptId: result.paymentAttemptId
       });
       await runEmailWorker();
       result = await getCheckoutStatus(parsed.data.token);
+      console.info("[checkout/status] fulfilled status reload", {
+        bookingIntentId: result.bookingIntentId,
+        status: result.status,
+        attendeeCount: result.attendees?.length ?? 0
+      });
     } catch (error) {
       console.error("[checkout/status] inline fulfillment failed", error);
       try {

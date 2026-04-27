@@ -39,21 +39,24 @@ export function CheckoutReturnClient({
 
     async function poll() {
       if (stopped) return;
+      let nextStatus: CheckoutStatusResult["status"] | null = null;
       const response = await fetch(`/api/checkout/status?token=${encodeURIComponent(checkoutToken)}`, {
         cache: "no-store"
       });
       if (response.ok) {
         const next = await response.json() as CheckoutStatusResult;
+        nextStatus = next.status;
         setStatus(next);
         if (["fulfilled", "payment_failed", "manual_action_required", "cancelled", "expired"].includes(next.status)) {
           return;
         }
       }
 
-      tick += 2;
+      const delaySeconds = nextStatus === "paid" ? 1 : 2;
+      tick += delaySeconds;
       setElapsed(tick);
       if (tick < 60) {
-        window.setTimeout(poll, 2000);
+        window.setTimeout(poll, delaySeconds * 1000);
       }
     }
 
@@ -110,6 +113,9 @@ export function CheckoutReturnClient({
           : elapsed >= 60
             ? "Payment confirmation is taking longer than usual. Keep this page or check your email."
             : "This can take a few seconds after the secure payment page returns.";
+  const canLeave =
+    elapsed >= 60 ||
+    ["fulfilled", "payment_failed", "manual_action_required", "cancelled", "expired"].includes(finalStatus ?? "");
 
   return (
     <div className={`mx-auto flex min-h-[70vh] flex-col items-center justify-center px-4 py-12 text-center ${canShowTickets ? "max-w-6xl" : "max-w-xl"}`}>
@@ -138,13 +144,15 @@ export function CheckoutReturnClient({
           ))}
         </div>
       ) : null}
-      <Link
-        href="/events"
-        onClick={clearBookingDrafts}
-        className="mt-6 inline-flex items-center justify-center rounded-2xl border border-ink bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-ink/92"
-      >
-        View events
-      </Link>
+      {canLeave ? (
+        <Link
+          href="/events"
+          onClick={clearBookingDrafts}
+          className="mt-6 inline-flex items-center justify-center rounded-2xl border border-ink bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-ink/92"
+        >
+          View events
+        </Link>
+      ) : null}
     </div>
   );
 }
