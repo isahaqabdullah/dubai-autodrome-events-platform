@@ -1,6 +1,5 @@
--- Fix fulfillment RPC ambiguity between RETURNS TABLE output variables and
--- registrations columns. This replaces the function without changing its
--- checkout/fulfillment rules.
+-- Ensure paid fulfillment rejects expired holds even after the maintenance
+-- cron has released them from active capacity counts.
 
 create or replace function public.fulfill_booking_intent(
   p_booking_intent_id uuid,

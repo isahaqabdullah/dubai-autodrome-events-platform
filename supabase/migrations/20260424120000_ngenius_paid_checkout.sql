@@ -861,7 +861,6 @@ begin
     select 1
     from public.booking_capacity_holds
     where booking_intent_id = p_booking_intent_id
-      and released_at is null
       and held_until <= now()
   ) then
     update public.booking_intents
