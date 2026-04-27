@@ -257,6 +257,23 @@ export async function runPaymentReconcile() {
   return { checked, failed };
 }
 
+export async function reconcilePaymentAttempt(input: { paymentAttemptId: string; bookingIntentId: string }) {
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from("payment_attempts")
+    .select("*")
+    .eq("id", input.paymentAttemptId)
+    .eq("booking_intent_id", input.bookingIntentId)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  await processAttempt(supabase, data as PaymentAttemptRow);
+  return { checked: 1, failed: 0 };
+}
+
 export async function runPaymentMaintenance() {
   const supabase = createAdminSupabaseClient();
   const { data, error } = await supabase.rpc("release_expired_booking_holds");

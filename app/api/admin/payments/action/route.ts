@@ -3,8 +3,7 @@ import { requireAuthenticatedUser } from "@/lib/auth";
 import { paymentAdminActionSchema } from "@/lib/validation/checkout";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { formatErrorMessage } from "@/lib/errors";
-import { runPaymentReconcile } from "@/services/payment-worker";
-import { fulfillPaidBookingFromWorker } from "@/services/checkout";
+import { reconcilePaymentAttempt, runPaymentReconcile } from "@/services/payment-worker";
 
 export async function POST(request: Request) {
   try {
@@ -50,9 +49,9 @@ export async function POST(request: Request) {
       if (!parsed.data.paymentAttemptId || !parsed.data.bookingIntentId) {
         return NextResponse.json({ message: "paymentAttemptId and bookingIntentId are required." }, { status: 400 });
       }
-      const result = await fulfillPaidBookingFromWorker({
-        bookingIntentId: parsed.data.bookingIntentId,
-        paymentAttemptId: parsed.data.paymentAttemptId
+      const result = await reconcilePaymentAttempt({
+        paymentAttemptId: parsed.data.paymentAttemptId,
+        bookingIntentId: parsed.data.bookingIntentId
       });
       return NextResponse.json({ ok: true, ...result });
     }
