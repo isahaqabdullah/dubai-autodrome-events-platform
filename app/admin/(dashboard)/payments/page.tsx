@@ -54,6 +54,55 @@ export default async function AdminPaymentsPage() {
   }
 
   const rows = data ?? [];
+  const bookingIds = Array.from(new Set(
+    rows
+      .map((row: Record<string, any>) => {
+        const booking = Array.isArray(row.booking_intents) ? row.booking_intents[0] : row.booking_intents;
+        return booking?.id as string | undefined;
+      })
+      .filter(Boolean)
+  ));
+
+  const [registrationsResult, jobsResult] = bookingIds.length > 0
+    ? await Promise.all([
+        supabase
+          .from("registrations")
+          .select("booking_intent_id, status")
+          .in("booking_intent_id", bookingIds),
+        supabase
+          .from("payment_jobs")
+          .select("booking_intent_id, payment_attempt_id, status, last_error, updated_at, created_at")
+          .in("booking_intent_id", bookingIds)
+          .order("created_at", { ascending: false })
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }];
+
+  if (registrationsResult.error) {
+    throw registrationsResult.error;
+  }
+  if (jobsResult.error) {
+    throw jobsResult.error;
+  }
+
+  const registrationCounts = new Map<string, { total: number; active: number }>();
+  for (const registration of registrationsResult.data ?? []) {
+    const bookingId = registration.booking_intent_id as string | null;
+    if (!bookingId) continue;
+    const current = registrationCounts.get(bookingId) ?? { total: 0, active: 0 };
+    current.total += 1;
+    if (registration.status !== "revoked" && registration.status !== "cancelled") {
+      current.active += 1;
+    }
+    registrationCounts.set(bookingId, current);
+  }
+
+  const latestJobs = new Map<string, Record<string, any>>();
+  for (const job of jobsResult.data ?? []) {
+    const key = job.payment_attempt_id as string | null;
+    if (key && !latestJobs.has(key)) {
+      latestJobs.set(key, job as Record<string, any>);
+    }
+  }
 
   return (
     <main className="admin-card p-4 sm:p-6">
@@ -73,7 +122,10 @@ export default async function AdminPaymentsPage() {
               <th className="px-3 py-3">Event</th>
               <th className="px-3 py-3">Payer</th>
               <th className="px-3 py-3">Amount</th>
-              <th className="px-3 py-3">Status</th>
+              <th className="px-3 py-3">Payment</th>
+              <th className="px-3 py-3">Booking</th>
+              <th className="px-3 py-3">Tickets</th>
+              <th className="px-3 py-3">Job</th>
               <th className="px-3 py-3">NI order</th>
               <th className="px-3 py-3">Age</th>
               <th className="px-3 py-3">Reason</th>
@@ -84,6 +136,8 @@ export default async function AdminPaymentsPage() {
             {rows.map((row: Record<string, any>) => {
               const booking = Array.isArray(row.booking_intents) ? row.booking_intents[0] : row.booking_intents;
               const event = Array.isArray(booking?.events) ? booking.events[0] : booking?.events;
+              const registrations = booking?.id ? registrationCounts.get(booking.id) : null;
+              const latestJob = latestJobs.get(row.id);
               return (
                 <tr key={row.id} className="align-top">
                   <td className="px-3 py-3 font-medium text-ink">
@@ -97,6 +151,24 @@ export default async function AdminPaymentsPage() {
                     <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-ink">
                       {row.status}
                     </span>
+                  </td>
+                  <td className="px-3 py-3">
+                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-ink">
+                      {booking?.status ?? "-"}
+                    </span>
+                  </td>
+                  <td className="px-3 py-3 text-slate">
+                    {registrations ? `${registrations.active}/${registrations.total}` : "0/0"}
+                  </td>
+                  <td className="max-w-xs px-3 py-3 text-slate">
+                    {latestJob ? (
+                      <>
+                        <span className="font-medium text-ink">{latestJob.status}</span>
+                        {latestJob.last_error ? (
+                          <span className="mt-1 block text-xs">{latestJob.last_error}</span>
+                        ) : null}
+                      </>
+                    ) : "-"}
                   </td>
                   <td className="px-3 py-3 font-mono text-xs text-slate">{row.ni_order_reference ?? "-"}</td>
                   <td className="px-3 py-3 text-slate">{formatAge(row.created_at)}</td>
@@ -116,7 +188,7 @@ export default async function AdminPaymentsPage() {
             })}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={9} className="px-3 py-10 text-center text-slate">No payment attempts yet.</td>
+                <td colSpan={12} className="px-3 py-10 text-center text-slate">No payment attempts yet.</td>
               </tr>
             ) : null}
           </tbody>
