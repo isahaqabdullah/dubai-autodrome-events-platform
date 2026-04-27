@@ -3,7 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { checkoutStatusSchema } from "@/lib/validation/checkout";
 import { getCheckoutStatus } from "@/services/checkout";
 import { runEmailWorker } from "@/services/email-worker";
-import { runPaymentWorker } from "@/services/payment-worker";
+import { runPaymentAttemptWorker, runPaymentWorker } from "@/services/payment-worker";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -16,15 +16,27 @@ export async function GET(request: Request) {
     return NextResponse.json({ message: "Invalid checkout status request." }, { status: 400 });
   }
 
-  const result = await getCheckoutStatus(parsed.data.token);
-  if (result.status === "paid") {
-    waitUntil(
-      runPaymentWorker(3)
-        .then(() => runEmailWorker())
-        .catch((error) => {
-          console.error("[checkout/status] background fulfillment failed", error);
-        })
-    );
+  let result = await getCheckoutStatus(parsed.data.token);
+  if (result.status === "paid" && result.paymentAttemptId) {
+    try {
+      await runPaymentAttemptWorker(result.paymentAttemptId);
+      await runEmailWorker();
+      result = await getCheckoutStatus(parsed.data.token);
+    } catch (error) {
+      console.error("[checkout/status] inline fulfillment failed", error);
+      try {
+        result = await getCheckoutStatus(parsed.data.token);
+      } catch {
+        // Keep the already-known paid response if the defensive reload fails.
+      }
+      waitUntil(
+        runPaymentWorker(3)
+          .then(() => runEmailWorker())
+          .catch((workerError) => {
+            console.error("[checkout/status] background fulfillment failed", workerError);
+          })
+      );
+    }
   }
 
   return NextResponse.json(result, {

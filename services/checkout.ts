@@ -777,6 +777,7 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
       status: "fulfilled",
       message: "Registration confirmed.",
       bookingIntentId: currentBooking.id,
+      paymentAttemptId: currentAttempt?.id,
       paymentAttemptStatus: currentAttempt?.status as CheckoutStatusResult["paymentAttemptStatus"],
       event: event
         ? {
@@ -801,6 +802,7 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
           ? "Payment failed. You can try again."
           : "Payment is still processing.",
     bookingIntentId: currentBooking.id,
+    paymentAttemptId: currentAttempt?.id,
     paymentAttemptStatus: currentAttempt?.status as CheckoutStatusResult["paymentAttemptStatus"]
   };
 }

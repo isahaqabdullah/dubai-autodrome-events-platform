@@ -184,6 +184,7 @@ export interface CheckoutStatusResult {
   status: BookingIntentStatus;
   message: string;
   bookingIntentId?: string;
+  paymentAttemptId?: string;
   paymentAttemptStatus?: PaymentAttemptStatus;
   event?: CheckoutTicketEvent;
   attendees?: ConfirmedCheckoutAttendee[];

@@ -260,6 +260,26 @@ export async function runPaymentWorker(limit = 10) {
   return { claimed: jobs.length, processed, failed };
 }
 
+export async function runPaymentAttemptWorker(paymentAttemptId: string) {
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from("payment_attempts")
+    .select("*")
+    .eq("id", paymentAttemptId)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  await processAttempt(supabase, data as PaymentAttemptRow);
+  await supabase
+    .from("payment_jobs")
+    .update({ status: "done", locked_at: null, last_error: null })
+    .eq("payment_attempt_id", paymentAttemptId)
+    .in("status", ["queued", "processing"]);
+}
+
 export async function runPaymentReconcile() {
   const supabase = createAdminSupabaseClient();
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
