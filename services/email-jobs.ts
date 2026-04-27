@@ -86,6 +86,10 @@ export async function enqueueEmailJob<TPayload extends Record<string, unknown>>(
     .select("id")
     .single();
 
+  if (error?.code === "23505") {
+    return { id: "duplicate" };
+  }
+
   if (error || !data) {
     throw error ?? new Error("Unable to queue email job.");
   }

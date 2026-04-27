@@ -525,7 +525,7 @@ async function fulfillBooking(input: {
       };
     });
 
-  if (attendees.length > 0) {
+  if (firstOutcome === "fulfilled" && attendees.length > 0) {
     await queueFulfillmentEmails({ eventId: input.booking.event_id, booking: input.booking, attendees });
   }
 
