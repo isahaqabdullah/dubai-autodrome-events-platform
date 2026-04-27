@@ -6,6 +6,8 @@ import { CheckCircle2, Clock3, XCircle } from "lucide-react";
 import { EventTicketCard } from "@/components/public/event-ticket-card";
 import type { CheckoutStatusResult } from "@/lib/types";
 
+const CHECKOUT_DRAFT_CLEAR_KEY = "checkout-drafts-clear-at";
+
 function clearBookingDrafts() {
   try {
     for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
@@ -16,6 +18,11 @@ function clearBookingDrafts() {
     }
   } catch {
     // Ignore storage access issues; the server-side checkout state remains authoritative.
+  }
+  try {
+    localStorage.setItem(CHECKOUT_DRAFT_CLEAR_KEY, String(Date.now()));
+  } catch {
+    // Ignore cross-tab cleanup failures.
   }
 }
 

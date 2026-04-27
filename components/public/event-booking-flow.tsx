@@ -66,6 +66,7 @@ const INITIAL_FORM_STATE = {
   website: ""
 };
 const BOOKING_SECTION_HEADING_CLASS = "font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]";
+const CHECKOUT_DRAFT_CLEAR_KEY = "checkout-drafts-clear-at";
 
 function drawWrappedText(
   ctx: CanvasRenderingContext2D,
@@ -292,9 +293,34 @@ export function EventBookingFlow({
     });
   }, [additionalCategories]);
 
+  const resetBookingDraftState = useCallback(() => {
+    setStep("tickets");
+    setTimeRemaining(HOLD_DURATION_SECONDS);
+    setSubmissionState("idle");
+    setMessage(null);
+    setSubmitAttempted(false);
+    setOtp("");
+    setOtpState("idle");
+    setOtpMessage(null);
+    setEmailVerified(false);
+    setVerifyingOtp(false);
+    setCompletedRegistration(null);
+    setCheckoutToken(null);
+    setSelectedCategoryId(null);
+    setSelectedAdditionalCategoryId(null);
+    setForm(INITIAL_FORM_STATE);
+
+    try {
+      sessionStorage.removeItem(storageKey);
+    } catch {
+      // Ignore storage cleanup failures.
+    }
+  }, [storageKey]);
+
   const saveDraft = useCallback(() => {
     try {
       sessionStorage.setItem(storageKey, JSON.stringify({
+        savedAt: Date.now(),
         form,
         step,
         emailVerified,
@@ -311,6 +337,13 @@ export function EventBookingFlow({
       const raw = sessionStorage.getItem(storageKey);
       if (raw) {
         const draft = JSON.parse(raw);
+        const clearedAt = Number(localStorage.getItem(CHECKOUT_DRAFT_CLEAR_KEY) ?? 0);
+        const savedAt = Number(draft.savedAt ?? 0);
+        if (clearedAt > 0 && (!savedAt || savedAt <= clearedAt)) {
+          sessionStorage.removeItem(storageKey);
+          setHydrated(true);
+          return;
+        }
         if (draft.step) setStep(draft.step);
         if (draft.emailVerified) setEmailVerified(draft.emailVerified);
         if (draft.selectedCategoryId) setSelectedCategoryId(draft.selectedCategoryId);
@@ -334,6 +367,17 @@ export function EventBookingFlow({
     }
     setHydrated(true);
   }, [storageKey]);
+
+  useEffect(() => {
+    function handleCheckoutDraftClear(event: StorageEvent) {
+      if (event.key === CHECKOUT_DRAFT_CLEAR_KEY) {
+        resetBookingDraftState();
+      }
+    }
+
+    window.addEventListener("storage", handleCheckoutDraftClear);
+    return () => window.removeEventListener("storage", handleCheckoutDraftClear);
+  }, [resetBookingDraftState]);
 
   useEffect(() => {
     if (hydrated) saveDraft();
