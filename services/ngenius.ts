@@ -9,6 +9,7 @@ interface TokenCache {
 }
 
 let tokenCache: TokenCache | null = null;
+const NGENIUS_REQUEST_TIMEOUT_MS = 20_000;
 
 export interface NgeniusOrderItem {
   name: string;
@@ -45,6 +46,27 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit, label: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, NGENIUS_REQUEST_TIMEOUT_MS);
+
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: controller.signal
+    });
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error(`N-Genius ${label} timed out after ${NGENIUS_REQUEST_TIMEOUT_MS / 1000} seconds.`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 async function requestAccessToken() {
   const config = getNgeniusConfig();
   const now = Date.now();
@@ -53,13 +75,13 @@ async function requestAccessToken() {
     return tokenCache.token;
   }
 
-  const response = await fetch(`${trimTrailingSlash(config.apiBaseUrl)}/identity/auth/access-token`, {
+  const response = await fetchWithTimeout(`${trimTrailingSlash(config.apiBaseUrl)}/identity/auth/access-token`, {
     method: "POST",
     headers: {
       Authorization: `Basic ${config.apiKey}`,
       "Content-Type": "application/vnd.ni-identity.v1+json"
     }
-  });
+  }, "token request");
 
   if (!response.ok) {
     throw new Error(`N-Genius token request failed with ${response.status}`);
@@ -81,7 +103,7 @@ async function requestAccessToken() {
 async function ngeniusFetch(path: string, init: RequestInit = {}) {
   const config = getNgeniusConfig();
   const token = await requestAccessToken();
-  const response = await fetch(`${trimTrailingSlash(config.apiBaseUrl)}${path}`, {
+  const response = await fetchWithTimeout(`${trimTrailingSlash(config.apiBaseUrl)}${path}`, {
     ...init,
     headers: {
       Authorization: `Bearer ${token}`,
@@ -89,7 +111,7 @@ async function ngeniusFetch(path: string, init: RequestInit = {}) {
       "Content-Type": "application/vnd.ni-payment.v2+json",
       ...(init.headers ?? {})
     }
-  });
+  }, "API request");
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
