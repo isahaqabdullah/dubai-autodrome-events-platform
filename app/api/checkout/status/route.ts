@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { checkoutStatusSchema } from "@/lib/validation/checkout";
-import { getCheckoutStatus } from "@/services/checkout";
+import { fulfillPaidBookingFromWorker, getCheckoutStatus } from "@/services/checkout";
 import { runEmailWorker } from "@/services/email-worker";
-import { runPaymentAttemptWorker, runPaymentWorker } from "@/services/payment-worker";
+import { runPaymentWorker } from "@/services/payment-worker";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
@@ -17,9 +17,12 @@ export async function GET(request: Request) {
   }
 
   let result = await getCheckoutStatus(parsed.data.token);
-  if (result.status === "paid" && result.paymentAttemptId) {
+  if (result.status === "paid" && result.bookingIntentId && result.paymentAttemptId) {
     try {
-      await runPaymentAttemptWorker(result.paymentAttemptId);
+      await fulfillPaidBookingFromWorker({
+        bookingIntentId: result.bookingIntentId,
+        paymentAttemptId: result.paymentAttemptId
+      });
       await runEmailWorker();
       result = await getCheckoutStatus(parsed.data.token);
     } catch (error) {
