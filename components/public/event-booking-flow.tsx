@@ -736,16 +736,7 @@ export function EventBookingFlow({
     setSubmissionState("submitting");
     setMessage(null);
 
-    const response = await fetch("/api/checkout/create-payment", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        checkoutToken,
-        declarationAccepted: true
-      })
-    });
-
-    const result = (await response.json()) as {
+    type CreatePaymentResult = {
       outcome?: "redirect" | "fulfilled" | "payment_pending";
       message?: string;
       registrationId?: string;
@@ -764,6 +755,39 @@ export function EventBookingFlow({
         email?: string;
       }>;
     };
+
+    const paymentRequestController = new AbortController();
+    const paymentRequestTimeout = window.setTimeout(() => {
+      paymentRequestController.abort();
+    }, 45000);
+
+    let response: Response;
+    let result: CreatePaymentResult;
+
+    try {
+      response = await fetch("/api/checkout/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          checkoutToken,
+          declarationAccepted: true
+        }),
+        signal: paymentRequestController.signal
+      });
+
+      result = (await response.json().catch(() => ({}))) as CreatePaymentResult;
+    } catch (error) {
+      const aborted = error instanceof Error && error.name === "AbortError";
+      setSubmissionState("error");
+      setMessage(
+        aborted
+          ? "Payment preparation is taking longer than expected. Please try again."
+          : "Unable to prepare payment. Please check your connection and try again."
+      );
+      return;
+    } finally {
+      window.clearTimeout(paymentRequestTimeout);
+    }
 
     if (!response.ok) {
       setSubmissionState("error");
