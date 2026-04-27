@@ -817,28 +817,19 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
   const currentAttempt = refreshed.attempt;
 
   if (currentBooking.status === "fulfilled") {
-    const [attendees, event] = await Promise.all([
-      loadFulfilledAttendees(supabase, currentBooking),
-      getEventById(currentBooking.event_id)
-    ]);
-    return {
-      status: "fulfilled",
-      message: "Registration confirmed.",
-      bookingIntentId: currentBooking.id,
-      paymentAttemptId: currentAttempt?.id,
-      paymentAttemptStatus: currentAttempt?.status as CheckoutStatusResult["paymentAttemptStatus"],
-      event: event
-        ? {
-            title: event.title,
-            venue: event.venue,
-            start_at: event.start_at,
-            end_at: event.end_at,
-            timezone: event.timezone,
-            form_config: event.form_config
-          }
-        : undefined,
-      attendees
-    };
+    return buildFulfilledCheckoutStatus(supabase, currentBooking, currentAttempt);
+  }
+
+  if (currentBooking.status === "paid") {
+    const attendees = await loadFulfilledAttendees(supabase, currentBooking);
+    if (attendees.length > 0) {
+      await supabase
+        .from("booking_intents")
+        .update({ status: "fulfilled" })
+        .eq("id", currentBooking.id)
+        .eq("status", "paid");
+      return buildFulfilledCheckoutStatus(supabase, { ...currentBooking, status: "fulfilled" }, currentAttempt, attendees);
+    }
   }
 
   return {
@@ -852,6 +843,37 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
     bookingIntentId: currentBooking.id,
     paymentAttemptId: currentAttempt?.id,
     paymentAttemptStatus: currentAttempt?.status as CheckoutStatusResult["paymentAttemptStatus"]
+  };
+}
+
+async function buildFulfilledCheckoutStatus(
+  supabase: Supabase,
+  booking: BookingRow,
+  attempt: CheckoutStatusPaymentAttempt | null,
+  knownAttendees?: ConfirmedCheckoutAttendee[]
+): Promise<CheckoutStatusResult> {
+  const [attendees, event] = await Promise.all([
+    knownAttendees ? Promise.resolve(knownAttendees) : loadFulfilledAttendees(supabase, booking),
+    getEventById(booking.event_id)
+  ]);
+
+  return {
+    status: "fulfilled",
+    message: "Registration confirmed.",
+    bookingIntentId: booking.id,
+    paymentAttemptId: attempt?.id,
+    paymentAttemptStatus: attempt?.status as CheckoutStatusResult["paymentAttemptStatus"],
+    event: event
+      ? {
+          title: event.title,
+          venue: event.venue,
+          start_at: event.start_at,
+          end_at: event.end_at,
+          timezone: event.timezone,
+          form_config: event.form_config
+        }
+      : undefined,
+    attendees
   };
 }
 
