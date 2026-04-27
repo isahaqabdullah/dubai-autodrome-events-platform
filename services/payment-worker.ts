@@ -6,6 +6,7 @@ import {
   getWebhookOrderReference,
   interpretNgeniusOrder
 } from "@/services/ngenius";
+import { formatErrorMessage } from "@/lib/errors";
 import { fulfillPaidBookingFromWorker } from "@/services/checkout";
 
 type Supabase = ReturnType<typeof createAdminSupabaseClient>;
@@ -30,7 +31,8 @@ type PaymentAttemptRow = {
 };
 
 function errorMessage(error: unknown, fallback: string) {
-  return error instanceof Error ? error.message : fallback;
+  const message = formatErrorMessage(error);
+  return message && message !== "Unknown error" ? message : fallback;
 }
 
 async function finalizeJob(supabase: Supabase, jobId: string) {

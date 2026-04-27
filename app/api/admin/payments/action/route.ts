@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { requireAuthenticatedUser } from "@/lib/auth";
 import { paymentAdminActionSchema } from "@/lib/validation/checkout";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
+import { formatErrorMessage } from "@/lib/errors";
 import { runPaymentReconcile } from "@/services/payment-worker";
 import { fulfillPaidBookingFromWorker } from "@/services/checkout";
 
@@ -58,7 +59,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ message: "Unsupported action." }, { status: 400 });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Payment action failed.";
+    const message = formatErrorMessage(error);
     console.error("[admin/payments/action] failed", { message });
     return NextResponse.json({ message }, { status: 500 });
   }
