@@ -29,6 +29,10 @@ type PaymentAttemptRow = {
   status: string;
 };
 
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof Error ? error.message : fallback;
+}
+
 async function finalizeJob(supabase: Supabase, jobId: string) {
   await supabase
     .from("payment_jobs")
@@ -131,10 +135,24 @@ async function processAttempt(supabase: Supabase, attempt: PaymentAttemptRow) {
       status: "paid",
       manual_action_reason: null
     }).eq("id", attempt.booking_intent_id);
-    await fulfillPaidBookingFromWorker({
-      bookingIntentId: attempt.booking_intent_id,
-      paymentAttemptId: attempt.id
-    });
+
+    try {
+      await fulfillPaidBookingFromWorker({
+        bookingIntentId: attempt.booking_intent_id,
+        paymentAttemptId: attempt.id
+      });
+    } catch (error) {
+      const reason = errorMessage(error, "Payment was verified, but ticket fulfillment failed.");
+      await supabase.from("payment_attempts").update({
+        status: "manual_action_required",
+        last_error: reason
+      }).eq("id", attempt.id);
+      await supabase.from("booking_intents").update({
+        status: "manual_action_required",
+        manual_action_reason: reason
+      }).eq("id", attempt.booking_intent_id);
+      throw error;
+    }
     return;
   }
 
@@ -221,12 +239,20 @@ export async function runPaymentReconcile() {
   }
 
   let checked = 0;
+  let failed = 0;
   for (const attempt of (data ?? []) as PaymentAttemptRow[]) {
-    await processAttempt(supabase, attempt);
-    checked += 1;
+    try {
+      await processAttempt(supabase, attempt);
+      checked += 1;
+    } catch (error) {
+      failed += 1;
+      await supabase.from("payment_attempts").update({
+        last_error: errorMessage(error, "Payment reconcile failed.")
+      }).eq("id", attempt.id);
+    }
   }
 
-  return { checked };
+  return { checked, failed };
 }
 
 export async function runPaymentMaintenance() {

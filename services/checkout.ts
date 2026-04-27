@@ -484,6 +484,10 @@ async function fulfillBooking(input: {
   const rows = Array.isArray(data) ? data : [];
   const firstOutcome = (rows[0]?.outcome as string | undefined) ?? "invalid";
 
+  if (!["fulfilled", "already_fulfilled", "manual_action_required"].includes(firstOutcome)) {
+    throw new Error(`Unable to fulfill booking: ${firstOutcome}`);
+  }
+
   if (firstOutcome === "manual_action_required") {
     return {
       outcome: firstOutcome,
