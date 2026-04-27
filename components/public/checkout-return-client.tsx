@@ -6,6 +6,19 @@ import { CheckCircle2, Clock3, XCircle } from "lucide-react";
 import { EventTicketCard } from "@/components/public/event-ticket-card";
 import type { CheckoutStatusResult } from "@/lib/types";
 
+function clearBookingDrafts() {
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+      const key = sessionStorage.key(i);
+      if (key?.startsWith("booking-draft-")) {
+        sessionStorage.removeItem(key);
+      }
+    }
+  } catch {
+    // Ignore storage access issues; the server-side checkout state remains authoritative.
+  }
+}
+
 export function CheckoutReturnClient({
   checkoutToken,
   cancelled
@@ -49,6 +62,12 @@ export function CheckoutReturnClient({
       stopped = true;
     };
   }, [checkoutToken]);
+
+  useEffect(() => {
+    if (status && ["paid", "fulfilled", "manual_action_required"].includes(status.status)) {
+      clearBookingDrafts();
+    }
+  }, [status]);
 
   const settledStatus = status?.status;
   const finalStatus =
@@ -121,6 +140,7 @@ export function CheckoutReturnClient({
       ) : null}
       <Link
         href="/events"
+        onClick={clearBookingDrafts}
         className="mt-6 inline-flex items-center justify-center rounded-2xl border border-ink bg-ink px-4 py-2.5 text-sm font-semibold text-white shadow-soft transition hover:bg-ink/92"
       >
         View events
