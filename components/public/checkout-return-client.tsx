@@ -45,7 +45,13 @@ export function CheckoutReturnClient({
     };
   }, [checkoutToken]);
 
-  const finalStatus = cancelled ? "cancelled" : status?.status;
+  const settledStatus = status?.status;
+  const finalStatus =
+    settledStatus && !["payment_pending", "paid", "email_verified", "otp_sent"].includes(settledStatus)
+      ? settledStatus
+      : cancelled
+        ? "cancelled"
+        : settledStatus;
   const icon =
     finalStatus === "fulfilled"
       ? <CheckCircle2 className="h-12 w-12 text-[#2c7a86]" />

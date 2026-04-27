@@ -25,7 +25,12 @@ import { enqueueEmailJob, executeEmailJob } from "@/services/email-jobs";
 import { getEventById } from "@/services/events";
 import { sendMail } from "@/services/mailer";
 import { getEventCatalog } from "@/services/catalog";
-import { createNgeniusOrder } from "@/services/ngenius";
+import {
+  createNgeniusOrder,
+  getNgeniusOrder,
+  getNgeniusOrderAmount,
+  interpretNgeniusOrder
+} from "@/services/ngenius";
 
 const CHECKOUT_HOLD_MINUTES = 25;
 const MAX_PAYMENT_ATTEMPTS = 5;
@@ -80,6 +85,15 @@ type PreparedPaymentAttempt = {
   payment_href: string | null;
   held_until: string | null;
   message: string | null;
+};
+
+type CheckoutStatusPaymentAttempt = {
+  id: string;
+  booking_intent_id: string;
+  status: string;
+  ni_order_reference: string | null;
+  amount_minor: number;
+  currency_code: string;
 };
 
 function generateVerificationCode() {
@@ -740,33 +754,192 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
   const booking = await getBookingByToken(supabase, checkoutToken);
   const { data: attempt } = await supabase
     .from("payment_attempts")
-    .select("status")
+    .select("id, booking_intent_id, status, ni_order_reference, amount_minor, currency_code")
     .eq("booking_intent_id", booking.id)
     .order("attempt_number", { ascending: false })
     .limit(1)
     .maybeSingle();
 
-  if (booking.status === "fulfilled") {
-    const attendees = await loadFulfilledAttendees(supabase, booking);
+  const refreshed = await reconcileCheckoutReturnAttempt({
+    supabase,
+    booking,
+    attempt: attempt as CheckoutStatusPaymentAttempt | null
+  });
+  const currentBooking = refreshed.booking;
+  const currentAttempt = refreshed.attempt;
+
+  if (currentBooking.status === "fulfilled") {
+    const attendees = await loadFulfilledAttendees(supabase, currentBooking);
     return {
       status: "fulfilled",
       message: "Registration confirmed.",
-      bookingIntentId: booking.id,
-      paymentAttemptStatus: attempt?.status as CheckoutStatusResult["paymentAttemptStatus"],
+      bookingIntentId: currentBooking.id,
+      paymentAttemptStatus: currentAttempt?.status as CheckoutStatusResult["paymentAttemptStatus"],
       attendees
     };
   }
 
   return {
-    status: booking.status as CheckoutStatusResult["status"],
+    status: currentBooking.status as CheckoutStatusResult["status"],
     message:
-      booking.status === "manual_action_required"
+      currentBooking.status === "manual_action_required"
         ? "Payment needs manual review before ticket issuance."
-        : booking.status === "payment_failed"
+        : currentBooking.status === "payment_failed"
           ? "Payment failed. You can try again."
           : "Payment is still processing.",
-    bookingIntentId: booking.id,
-    paymentAttemptStatus: attempt?.status as CheckoutStatusResult["paymentAttemptStatus"]
+    bookingIntentId: currentBooking.id,
+    paymentAttemptStatus: currentAttempt?.status as CheckoutStatusResult["paymentAttemptStatus"]
+  };
+}
+
+async function reconcileCheckoutReturnAttempt(input: {
+  supabase: Supabase;
+  booking: BookingRow;
+  attempt: CheckoutStatusPaymentAttempt | null;
+}): Promise<{ booking: BookingRow; attempt: CheckoutStatusPaymentAttempt | null }> {
+  if (
+    input.booking.total_minor <= 0 ||
+    input.booking.status === "fulfilled" ||
+    !input.attempt?.ni_order_reference ||
+    !["order_create_pending", "payment_pending", "paid", "manual_action_required"].includes(input.attempt.status)
+  ) {
+    return { booking: input.booking, attempt: input.attempt };
+  }
+
+  try {
+    const order = await getNgeniusOrder(input.attempt.ni_order_reference);
+    const state = interpretNgeniusOrder(order);
+    const amount = getNgeniusOrderAmount(order);
+
+    await input.supabase
+      .from("payment_attempts")
+      .update({ last_order_status: order })
+      .eq("id", input.attempt.id);
+
+    if (amount.value !== input.attempt.amount_minor || amount.currencyCode !== input.attempt.currency_code) {
+      const reason = "N-Genius amount or currency did not match the local booking.";
+      await input.supabase.from("payment_attempts").update({
+        status: "manual_action_required",
+        last_error: reason
+      }).eq("id", input.attempt.id);
+      await input.supabase.from("booking_intents").update({
+        status: "manual_action_required",
+        manual_action_reason: reason
+      }).eq("id", input.booking.id);
+    } else if (state.kind === "paid") {
+      const expiredHold = await markExpiredHoldAsManualAction({
+        supabase: input.supabase,
+        bookingIntentId: input.booking.id,
+        paymentAttemptId: input.attempt.id
+      });
+      if (expiredHold) {
+        return reloadCheckoutStatusRows(input.supabase, input.booking, input.attempt);
+      }
+
+      await input.supabase.from("payment_attempts").update({
+        status: "paid",
+        last_error: null
+      }).eq("id", input.attempt.id);
+      await input.supabase.from("booking_intents").update({
+        status: "paid",
+        manual_action_reason: null
+      }).eq("id", input.booking.id);
+      try {
+        await fulfillBooking({
+          supabase: input.supabase,
+          booking: { ...input.booking, status: "paid" },
+          paymentAttemptId: input.attempt.id
+        });
+      } catch (fulfillmentError) {
+        const reason = fulfillmentError instanceof Error
+          ? fulfillmentError.message
+          : "Payment was verified, but ticket fulfillment failed.";
+        await input.supabase.from("payment_attempts").update({
+          status: "manual_action_required",
+          last_error: reason
+        }).eq("id", input.attempt.id);
+        await input.supabase.from("booking_intents").update({
+          status: "manual_action_required",
+          manual_action_reason: reason
+        }).eq("id", input.booking.id);
+        throw fulfillmentError;
+      }
+    } else if (state.kind === "failed" || state.kind === "cancelled") {
+      await input.supabase.from("payment_attempts").update({
+        status: state.kind === "cancelled" ? "cancelled" : "failed",
+        last_error: state.state ? `N-Genius state: ${state.state}` : null
+      }).eq("id", input.attempt.id);
+      await input.supabase.from("booking_intents").update({
+        status: "payment_failed"
+      }).eq("id", input.booking.id);
+    } else if (state.kind === "manual_review") {
+      const reason = state.state ? `N-Genius manual review state: ${state.state}` : "N-Genius state requires manual review.";
+      await input.supabase.from("payment_attempts").update({
+        status: "manual_action_required",
+        last_error: reason
+      }).eq("id", input.attempt.id);
+      await input.supabase.from("booking_intents").update({
+        status: "manual_action_required",
+        manual_action_reason: reason
+      }).eq("id", input.booking.id);
+    }
+  } catch (error) {
+    console.error("[checkout/status] on-demand reconcile failed", error);
+  }
+
+  return reloadCheckoutStatusRows(input.supabase, input.booking, input.attempt);
+}
+
+async function markExpiredHoldAsManualAction(input: {
+  supabase: Supabase;
+  bookingIntentId: string;
+  paymentAttemptId: string;
+}) {
+  const { data, error } = await input.supabase
+    .from("booking_capacity_holds")
+    .select("id")
+    .eq("booking_intent_id", input.bookingIntentId)
+    .lte("held_until", new Date().toISOString())
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data?.length) {
+    return false;
+  }
+
+  const reason = "Payment succeeded after the capacity hold expired.";
+  await input.supabase.from("payment_attempts").update({
+    status: "manual_action_required",
+    last_error: reason
+  }).eq("id", input.paymentAttemptId);
+  await input.supabase.from("booking_intents").update({
+    status: "manual_action_required",
+    manual_action_reason: reason
+  }).eq("id", input.bookingIntentId);
+
+  return true;
+}
+
+async function reloadCheckoutStatusRows(
+  supabase: Supabase,
+  fallbackBooking: BookingRow,
+  fallbackAttempt: CheckoutStatusPaymentAttempt
+) {
+  const [{ data: booking }, { data: attempt }] = await Promise.all([
+    supabase.from("booking_intents").select("*").eq("id", fallbackBooking.id).single(),
+    supabase
+      .from("payment_attempts")
+      .select("id, booking_intent_id, status, ni_order_reference, amount_minor, currency_code")
+      .eq("id", fallbackAttempt.id)
+      .single()
+  ]);
+
+  return {
+    booking: (booking as BookingRow | null) ?? fallbackBooking,
+    attempt: (attempt as CheckoutStatusPaymentAttempt | null) ?? fallbackAttempt
   };
 }
 

@@ -129,6 +129,11 @@ async function processAttempt(supabase: Supabase, attempt: PaymentAttemptRow) {
   }
 
   if (state.kind === "paid") {
+    const expiredHold = await markExpiredHoldAsManualAction(supabase, attempt);
+    if (expiredHold) {
+      return;
+    }
+
     await supabase.from("payment_attempts").update({
       status: "paid",
       last_error: null
@@ -180,6 +185,35 @@ async function processAttempt(supabase: Supabase, attempt: PaymentAttemptRow) {
       manual_action_reason: reason
     }).eq("id", attempt.booking_intent_id);
   }
+}
+
+async function markExpiredHoldAsManualAction(supabase: Supabase, attempt: PaymentAttemptRow) {
+  const { data, error } = await supabase
+    .from("booking_capacity_holds")
+    .select("id")
+    .eq("booking_intent_id", attempt.booking_intent_id)
+    .lte("held_until", new Date().toISOString())
+    .limit(1);
+
+  if (error) {
+    throw error;
+  }
+
+  if (!data?.length) {
+    return false;
+  }
+
+  const reason = "Payment succeeded after the capacity hold expired.";
+  await supabase.from("payment_attempts").update({
+    status: "manual_action_required",
+    last_error: reason
+  }).eq("id", attempt.id);
+  await supabase.from("booking_intents").update({
+    status: "manual_action_required",
+    manual_action_reason: reason
+  }).eq("id", attempt.booking_intent_id);
+
+  return true;
 }
 
 export async function runPaymentWorker(limit = 10) {
