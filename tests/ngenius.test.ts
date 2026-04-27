@@ -22,10 +22,37 @@ describe("N-Genius order interpretation", () => {
     });
   });
 
+  it("prioritizes a terminal embedded PURCHASED state over earlier payment states", () => {
+    expect(interpretNgeniusOrder({
+      state: "STARTED",
+      _embedded: {
+        payment: [
+          { state: "AUTHORISED" },
+          { state: "PURCHASED" }
+        ]
+      }
+    })).toEqual({
+      kind: "paid",
+      state: "PURCHASED"
+    });
+  });
+
   it("keeps CAPTURED in manual review until UAT confirms it", () => {
     expect(interpretNgeniusOrder({ state: "CAPTURED" })).toEqual({
       kind: "manual_review",
       state: "CAPTURED"
+    });
+  });
+
+  it("reads embedded payment when N-Genius returns a single payment object", () => {
+    expect(interpretNgeniusOrder({
+      state: "STARTED",
+      _embedded: {
+        payment: { state: "PURCHASED" }
+      }
+    })).toEqual({
+      kind: "paid",
+      state: "PURCHASED"
     });
   });
 

@@ -199,16 +199,32 @@ export async function getNgeniusOrder(orderReference: string) {
 
 function getEmbeddedPayments(order: Record<string, unknown>) {
   const embedded = order._embedded as Record<string, unknown> | undefined;
-  const payments = embedded?.payment;
-  return Array.isArray(payments) ? payments as Array<Record<string, unknown>> : [];
+  const payments = embedded?.payment ?? embedded?.payments;
+  if (Array.isArray(payments)) {
+    return payments as Array<Record<string, unknown>>;
+  }
+  return payments && typeof payments === "object" ? [payments as Record<string, unknown>] : [];
+}
+
+function getNgeniusStates(order: Record<string, unknown>) {
+  const states = getEmbeddedPayments(order)
+    .map((payment) => payment.state)
+    .filter((state): state is string => typeof state === "string");
+  const orderState = typeof order.state === "string" ? order.state : null;
+  return orderState ? [...states, orderState] : states;
 }
 
 export function interpretNgeniusOrder(order: Record<string, unknown>): NgeniusPaymentState {
-  const orderState = typeof order.state === "string" ? order.state : null;
+  const states = getNgeniusStates(order);
+  const hasState = (candidates: string[]) => states.find((state) => candidates.includes(state));
   const paymentState =
-    getEmbeddedPayments(order)
-      .map((payment) => payment.state)
-      .find((state): state is string => typeof state === "string") ?? orderState;
+    hasState(["PURCHASED"]) ??
+    hasState(["CAPTURED"]) ??
+    hasState(["PURCHASE_REVERSED", "REFUNDED", "PARTIALLY_REFUNDED"]) ??
+    hasState(["PURCHASE_DECLINED", "PURCHASE_FAILED", "DECLINED", "AUTHORISATION_FAILED", "FAILED"]) ??
+    hasState(["CANCELLED"]) ??
+    states[0] ??
+    null;
 
   switch (paymentState) {
     case "PURCHASED":
@@ -219,6 +235,7 @@ export function interpretNgeniusOrder(order: Record<string, unknown>): NgeniusPa
     case "PURCHASE_FAILED":
     case "DECLINED":
     case "AUTHORISATION_FAILED":
+    case "FAILED":
       return { kind: "failed", state: paymentState };
     case "CANCELLED":
       return { kind: "cancelled", state: paymentState };
