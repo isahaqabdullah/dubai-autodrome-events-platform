@@ -604,6 +604,54 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
     return { outcome: "invalid", message: windowState.label };
   }
 
+  if (booking.status === "fulfilled") {
+    const status = await getCheckoutStatus(checkoutToken);
+    return {
+      outcome: "fulfilled",
+      message: status.message,
+      attendees: status.attendees,
+      bookingIntentId: booking.id,
+      checkoutToken: signForBooking(booking)
+    };
+  }
+
+  if (booking.status === "paid") {
+    const { data: latestAttempt, error: attemptError } = await supabase
+      .from("payment_attempts")
+      .select("id, status")
+      .eq("booking_intent_id", booking.id)
+      .order("attempt_number", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (attemptError) {
+      throw attemptError;
+    }
+
+    if (!latestAttempt?.id) {
+      return {
+        outcome: "payment_pending",
+        message: "Payment is confirmed. We are preparing your tickets.",
+        bookingIntentId: booking.id,
+        checkoutToken: signForBooking(booking)
+      };
+    }
+
+    const fulfilled = await fulfillPaidBookingFromWorker({
+      bookingIntentId: booking.id,
+      paymentAttemptId: latestAttempt.id as string
+    });
+
+    return {
+      outcome: fulfilled.outcome === "manual_action_required" ? "manual_action_required" : "fulfilled",
+      message: fulfilled.message,
+      attendees: fulfilled.attendees,
+      bookingIntentId: booking.id,
+      paymentAttemptId: latestAttempt.id as string,
+      checkoutToken: signForBooking(booking)
+    };
+  }
+
   const rateLimit = await checkCheckoutRateLimit({
     supabase,
     key: booking.id,
