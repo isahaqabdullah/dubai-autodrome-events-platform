@@ -828,6 +828,7 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
         .update({ status: "fulfilled" })
         .eq("id", currentBooking.id)
         .eq("status", "paid");
+      await markPaymentJobsDone(supabase, currentAttempt?.id);
       return buildFulfilledCheckoutStatus(supabase, { ...currentBooking, status: "fulfilled" }, currentAttempt, attendees);
     }
   }
@@ -875,6 +876,21 @@ async function buildFulfilledCheckoutStatus(
       : undefined,
     attendees
   };
+}
+
+async function markPaymentJobsDone(
+  supabase: Supabase,
+  paymentAttemptId: string | null | undefined
+) {
+  if (!paymentAttemptId) {
+    return;
+  }
+
+  await supabase
+    .from("payment_jobs")
+    .update({ status: "done", locked_at: null, last_error: null })
+    .eq("payment_attempt_id", paymentAttemptId)
+    .in("status", ["queued", "processing"]);
 }
 
 async function reconcileCheckoutReturnAttempt(input: {
@@ -1097,5 +1113,9 @@ export async function fulfillPaidBookingFromWorker(input: {
     throw error ?? new Error("Booking not found.");
   }
 
-  return fulfillBooking({ supabase, booking: booking as BookingRow, paymentAttemptId: input.paymentAttemptId });
+  const result = await fulfillBooking({ supabase, booking: booking as BookingRow, paymentAttemptId: input.paymentAttemptId });
+  if (["fulfilled", "already_fulfilled"].includes(result.outcome)) {
+    await markPaymentJobsDone(supabase, input.paymentAttemptId);
+  }
+  return result;
 }

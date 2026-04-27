@@ -59,10 +59,11 @@ export function CheckoutReturnClient({
         }
       }
 
-      const delaySeconds = nextStatus === "paid" ? 1 : 2;
+      const delaySeconds = nextStatus === "paid" ? (tick >= 60 ? 5 : 1) : 2;
+      const maxPollSeconds = nextStatus === "paid" ? 300 : 60;
       tick += delaySeconds;
       setElapsed(tick);
-      if (tick < 60) {
+      if (tick < maxPollSeconds) {
         window.setTimeout(poll, delaySeconds * 1000);
       }
     }
