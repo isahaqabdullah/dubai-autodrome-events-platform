@@ -34,6 +34,7 @@ import {
 
 const CHECKOUT_HOLD_MINUTES = 25;
 const MAX_PAYMENT_ATTEMPTS = 5;
+export const HOLD_EXPIRED_AFTER_PAYMENT_REASON = "Payment succeeded after the capacity hold expired.";
 
 export interface CheckoutRequestMetadata {
   ipAddress: string | null;
@@ -57,6 +58,7 @@ type BookingRow = {
   verification_token_hash: string | null;
   verification_expires_at: string | null;
   email_verified_at: string | null;
+  manual_action_reason: string | null;
 };
 
 type AttendeeDraft = {
@@ -820,13 +822,19 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
     return buildFulfilledCheckoutStatus(supabase, currentBooking, currentAttempt);
   }
 
-  if (currentBooking.status === "paid") {
+  const canRecoverIssuedTickets =
+    currentBooking.status === "paid" ||
+    (currentBooking.status === "manual_action_required" &&
+      currentBooking.manual_action_reason === HOLD_EXPIRED_AFTER_PAYMENT_REASON);
+
+  if (canRecoverIssuedTickets) {
     const attendees = await loadFulfilledAttendees(supabase, currentBooking);
     if (attendees.length > 0) {
       await markBookingFulfilledAfterTicketIssue({
         supabase,
         bookingIntentId: currentBooking.id,
-        paymentAttemptId: currentAttempt?.id
+        paymentAttemptId: currentAttempt?.id,
+        recoverManualHoldExpired: currentBooking.status === "manual_action_required"
       });
       return buildFulfilledCheckoutStatus(supabase, { ...currentBooking, status: "fulfilled" }, currentAttempt, attendees);
     }
@@ -896,7 +904,34 @@ async function markBookingFulfilledAfterTicketIssue(input: {
   supabase: Supabase;
   bookingIntentId: string;
   paymentAttemptId?: string | null;
+  recoverManualHoldExpired?: boolean;
 }) {
+  if (input.recoverManualHoldExpired) {
+    const { error: manualBookingError } = await input.supabase
+      .from("booking_intents")
+      .update({ status: "fulfilled", manual_action_reason: null })
+      .eq("id", input.bookingIntentId)
+      .eq("status", "manual_action_required")
+      .eq("manual_action_reason", HOLD_EXPIRED_AFTER_PAYMENT_REASON);
+
+    if (manualBookingError) {
+      throw manualBookingError;
+    }
+
+    if (input.paymentAttemptId) {
+      const { error: manualAttemptError } = await input.supabase
+        .from("payment_attempts")
+        .update({ status: "paid", last_error: null })
+        .eq("id", input.paymentAttemptId)
+        .eq("status", "manual_action_required")
+        .eq("last_error", HOLD_EXPIRED_AFTER_PAYMENT_REASON);
+
+      if (manualAttemptError) {
+        throw manualAttemptError;
+      }
+    }
+  }
+
   const { error: bookingError } = await input.supabase
     .from("booking_intents")
     .update({ status: "fulfilled", manual_action_reason: null })
@@ -1011,7 +1046,7 @@ async function ensurePaymentFulfillmentJob(input: {
     .from("payment_jobs")
     .select("id")
     .eq("payment_attempt_id", input.paymentAttemptId)
-    .in("status", ["queued", "processing"])
+    .in("status", ["queued", "processing", "done"])
     .limit(1);
 
   if (error) {
@@ -1053,14 +1088,13 @@ async function markExpiredHoldAsManualAction(input: {
     return false;
   }
 
-  const reason = "Payment succeeded after the capacity hold expired.";
   await input.supabase.from("payment_attempts").update({
     status: "manual_action_required",
-    last_error: reason
+    last_error: HOLD_EXPIRED_AFTER_PAYMENT_REASON
   }).eq("id", input.paymentAttemptId);
   await input.supabase.from("booking_intents").update({
     status: "manual_action_required",
-    manual_action_reason: reason
+    manual_action_reason: HOLD_EXPIRED_AFTER_PAYMENT_REASON
   }).eq("id", input.bookingIntentId);
 
   return true;

@@ -7,7 +7,7 @@ import {
   interpretNgeniusOrder
 } from "@/services/ngenius";
 import { formatErrorMessage } from "@/lib/errors";
-import { fulfillPaidBookingFromWorker } from "@/services/checkout";
+import { fulfillPaidBookingFromWorker, HOLD_EXPIRED_AFTER_PAYMENT_REASON } from "@/services/checkout";
 
 type Supabase = ReturnType<typeof createAdminSupabaseClient>;
 
@@ -188,6 +188,20 @@ async function processAttempt(supabase: Supabase, attempt: PaymentAttemptRow) {
 }
 
 async function markExpiredHoldAsManualAction(supabase: Supabase, attempt: PaymentAttemptRow) {
+  const { count: issuedCount, error: issuedError } = await supabase
+    .from("registrations")
+    .select("id", { count: "exact", head: true })
+    .eq("booking_intent_id", attempt.booking_intent_id)
+    .eq("payment_attempt_id", attempt.id);
+
+  if (issuedError) {
+    throw issuedError;
+  }
+
+  if ((issuedCount ?? 0) > 0) {
+    return false;
+  }
+
   const { data, error } = await supabase
     .from("booking_capacity_holds")
     .select("id")
@@ -203,14 +217,13 @@ async function markExpiredHoldAsManualAction(supabase: Supabase, attempt: Paymen
     return false;
   }
 
-  const reason = "Payment succeeded after the capacity hold expired.";
   await supabase.from("payment_attempts").update({
     status: "manual_action_required",
-    last_error: reason
+    last_error: HOLD_EXPIRED_AFTER_PAYMENT_REASON
   }).eq("id", attempt.id);
   await supabase.from("booking_intents").update({
     status: "manual_action_required",
-    manual_action_reason: reason
+    manual_action_reason: HOLD_EXPIRED_AFTER_PAYMENT_REASON
   }).eq("id", attempt.booking_intent_id);
 
   return true;
