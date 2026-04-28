@@ -26,7 +26,10 @@ export async function GET(request: Request) {
   const parsed = checkoutStatusSchema.safeParse({ token: url.searchParams.get("token") ?? "" });
 
   if (!parsed.success) {
-    return NextResponse.json({ message: "Invalid checkout status request." }, { status: 400 });
+    return NextResponse.json(
+      { message: "Invalid checkout status request." },
+      { status: 400, headers: runtimeDiagnosticsHeaders() }
+    );
   }
 
   let result = await getCheckoutStatus(parsed.data.token);
