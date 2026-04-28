@@ -116,7 +116,6 @@ function splitName(fullName: string) {
 function signForBooking(booking: Pick<BookingRow, "id" | "payer_email_normalized">) {
   return signCheckoutToken({
     bookingIntentId: booking.id,
-    email: booking.payer_email_normalized,
     expiresInSeconds: 60 * 60
   });
 }
@@ -394,12 +393,16 @@ export async function startCheckout(
 
 async function getBookingByToken(supabase: Supabase, token: string) {
   const payload = validateToken(token);
-  const { data, error } = await supabase
+  let query = supabase
     .from("booking_intents")
     .select("*")
-    .eq("id", payload.bookingIntentId)
-    .eq("payer_email_normalized", payload.email)
-    .single();
+    .eq("id", payload.bookingIntentId);
+
+  if (payload.email) {
+    query = query.eq("payer_email_normalized", payload.email);
+  }
+
+  const { data, error } = await query.single();
 
   if (error || !data) {
     throw error ?? new Error("Booking not found.");
@@ -542,7 +545,11 @@ async function fulfillBooking(input: {
   };
 }
 
-export async function verifyCheckoutOtp(input: { checkoutToken: string; otp: string }): Promise<CheckoutOtpResult> {
+export async function verifyCheckoutOtp(input: {
+  checkoutToken: string;
+  otp: string;
+  metadata?: CheckoutRequestMetadata;
+}): Promise<CheckoutOtpResult> {
   if (isDemoMode()) {
     return {
       outcome: input.otp === "123456" ? "email_verified" : "invalid",
@@ -563,6 +570,32 @@ export async function verifyCheckoutOtp(input: { checkoutToken: string; otp: str
       checkoutToken: signForBooking(booking),
       totalMinor: booking.total_minor,
       currencyCode: booking.currency_code
+    };
+  }
+
+  const bookingAttemptLimit = await checkCheckoutRateLimit({
+    supabase,
+    key: booking.id,
+    action: "checkout_verify_otp_booking",
+    maxRequests: 10,
+    windowSeconds: VERIFICATION_TOKEN_TTL_MINUTES * 60
+  });
+  const ipAttemptLimit = await checkCheckoutRateLimit({
+    supabase,
+    key: `${input.metadata?.ipAddress ?? "unknown"}:${booking.id}`,
+    action: "checkout_verify_otp_ip",
+    maxRequests: 6,
+    windowSeconds: RATE_LIMIT_WINDOW_SECONDS
+  });
+
+  if (!bookingAttemptLimit?.allowed || !ipAttemptLimit?.allowed) {
+    return {
+      outcome: "rate_limited",
+      message: `Too many verification attempts. Please wait ${Math.max(
+        bookingAttemptLimit?.retry_after_seconds ?? 0,
+        ipAttemptLimit?.retry_after_seconds ?? 0,
+        60
+      )} seconds before trying again.`
     };
   }
 
@@ -814,11 +847,24 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
     .limit(1)
     .maybeSingle();
 
-  const refreshed = await reconcileCheckoutReturnAttempt({
+  const statusReconcileLimit = await checkCheckoutRateLimit({
     supabase,
-    booking,
-    attempt: attempt as CheckoutStatusPaymentAttempt | null
+    key: booking.id,
+    action: "checkout_status_reconcile",
+    maxRequests: 15,
+    windowSeconds: RATE_LIMIT_WINDOW_SECONDS
   });
+
+  const refreshed = statusReconcileLimit?.allowed
+    ? await reconcileCheckoutReturnAttempt({
+        supabase,
+        booking,
+        attempt: attempt as CheckoutStatusPaymentAttempt | null
+      })
+    : {
+        booking,
+        attempt: attempt as CheckoutStatusPaymentAttempt | null
+      };
   const currentBooking = refreshed.booking;
   const currentAttempt = refreshed.attempt;
 
@@ -920,6 +966,23 @@ export async function buildFulfilledCheckoutStatusForBooking(input: {
     attempt as CheckoutStatusPaymentAttempt | null,
     input.attendees
   );
+}
+
+export async function claimCheckoutStatusSideEffect(input: {
+  bookingIntentId: string;
+  action: string;
+  maxRequests?: number;
+  windowSeconds?: number;
+}) {
+  const supabase = createAdminSupabaseClient();
+  const result = await checkCheckoutRateLimit({
+    supabase,
+    key: input.bookingIntentId,
+    action: input.action,
+    maxRequests: input.maxRequests ?? 5,
+    windowSeconds: input.windowSeconds ?? RATE_LIMIT_WINDOW_SECONDS
+  });
+  return Boolean(result?.allowed);
 }
 
 async function markPaymentJobsDone(
@@ -1110,6 +1173,20 @@ async function markExpiredHoldAsManualAction(input: {
   bookingIntentId: string;
   paymentAttemptId: string;
 }) {
+  const { count: issuedCount, error: issuedError } = await input.supabase
+    .from("registrations")
+    .select("id", { count: "exact", head: true })
+    .eq("booking_intent_id", input.bookingIntentId)
+    .eq("payment_attempt_id", input.paymentAttemptId);
+
+  if (issuedError) {
+    throw issuedError;
+  }
+
+  if ((issuedCount ?? 0) > 0) {
+    return false;
+  }
+
   const { data, error } = await input.supabase
     .from("booking_capacity_holds")
     .select("id")

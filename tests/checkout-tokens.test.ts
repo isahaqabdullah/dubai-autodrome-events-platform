@@ -15,20 +15,17 @@ describe("checkout token utilities", () => {
   it("signs and verifies checkout tokens", () => {
     const token = signCheckoutToken({
       bookingIntentId: "booking-1",
-      email: "buyer@example.com",
       expiresInSeconds: 60
     });
 
     expect(verifyCheckoutToken(token)).toMatchObject({
-      bookingIntentId: "booking-1",
-      email: "buyer@example.com"
+      bookingIntentId: "booking-1"
     });
   });
 
   it("rejects tampered checkout tokens", () => {
     const token = signCheckoutToken({
       bookingIntentId: "booking-1",
-      email: "buyer@example.com",
       expiresInSeconds: 60
     });
     const [payload] = token.split(".");

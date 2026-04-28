@@ -29,7 +29,7 @@ export function signCheckoutToken(input: Omit<CheckoutSignedTokenPayload, "exp">
   const secret = requireCheckoutTokenSecret();
   const payload: CheckoutSignedTokenPayload = {
     bookingIntentId: input.bookingIntentId,
-    email: input.email,
+    ...(input.email ? { email: input.email } : {}),
     exp: Math.floor(Date.now() / 1000) + (input.expiresInSeconds ?? 60 * 60)
   };
   const encodedPayload = base64UrlJson(payload);
@@ -55,7 +55,10 @@ export function verifyCheckoutToken(token: string): CheckoutSignedTokenPayload |
 
   try {
     const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as CheckoutSignedTokenPayload;
-    if (!payload.bookingIntentId || !payload.email || !payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
+    if (!payload.bookingIntentId || !payload.exp || payload.exp < Math.floor(Date.now() / 1000)) {
+      return null;
+    }
+    if (payload.email !== undefined && typeof payload.email !== "string") {
       return null;
     }
     return payload;

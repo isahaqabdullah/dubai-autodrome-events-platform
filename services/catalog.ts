@@ -1,5 +1,6 @@
 import "server-only";
 import { DEFAULT_CATEGORY } from "@/lib/constants";
+import { isDemoMode } from "@/lib/demo-mode";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { EventCatalog, EventCatalogOption, EventRecord, EventTicketOption } from "@/lib/types";
 import { resolveCategories } from "@/lib/utils";
@@ -90,14 +91,20 @@ export async function getEventCatalog(event: EventRecord): Promise<EventCatalog>
   ]);
 
   if (categoriesResult.error || addonsResult.error) {
-    return fallbackCatalogFromEvent(event);
+    if (isDemoMode()) {
+      return fallbackCatalogFromEvent(event);
+    }
+    throw categoriesResult.error ?? addonsResult.error ?? new Error("Unable to load event catalog.");
   }
 
   const categories = ((categoriesResult.data ?? []) as CatalogRow[]).map(mapCatalogRow);
   const addons = ((addonsResult.data ?? []) as CatalogRow[]).map(mapCatalogRow);
 
   if (categories.length === 0) {
-    return fallbackCatalogFromEvent(event);
+    if (isDemoMode()) {
+      return fallbackCatalogFromEvent(event);
+    }
+    throw new Error("Event catalog is not configured.");
   }
 
   return { categories, addons };

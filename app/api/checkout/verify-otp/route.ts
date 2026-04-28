@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getClientIp } from "@/lib/request";
 import { checkoutVerifyOtpSchema } from "@/lib/validation/checkout";
 import { verifyCheckoutOtp } from "@/services/checkout";
 
@@ -17,7 +18,11 @@ export async function POST(request: Request) {
 
   const result = await verifyCheckoutOtp({
     checkoutToken: parsed.data.checkoutToken,
-    otp: parsed.data.otp
+    otp: parsed.data.otp,
+    metadata: {
+      ipAddress: getClientIp(request.headers),
+      userAgent: request.headers.get("user-agent")
+    }
   });
 
   return NextResponse.json(result, {
@@ -26,6 +31,8 @@ export async function POST(request: Request) {
         ? 200
         : result.outcome === "expired"
           ? 410
+          : result.outcome === "rate_limited"
+            ? 429
           : result.outcome === "capacity_exceeded"
             ? 409
             : 400

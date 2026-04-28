@@ -3,6 +3,7 @@ import { waitUntil } from "@vercel/functions";
 import { checkoutStatusSchema } from "@/lib/validation/checkout";
 import {
   buildFulfilledCheckoutStatusForBooking,
+  claimCheckoutStatusSideEffect,
   fulfillPaidBookingFromWorker,
   getCheckoutStatus
 } from "@/services/checkout";
@@ -12,34 +13,10 @@ import { runPaymentWorker } from "@/services/payment-worker";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
-function runtimeDiagnosticsHeaders() {
-  const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
-    ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
-    : "missing";
-  const supabaseRole = getSupabaseKeyRole();
-
+function responseHeaders() {
   return {
-    "Cache-Control": "no-store",
-    "X-App-Commit": process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? "local",
-    "X-App-Branch": process.env.VERCEL_GIT_COMMIT_REF ?? "local",
-    "X-Supabase-Host": supabaseHost,
-    "X-Supabase-Key-Role": supabaseRole
+    "Cache-Control": "no-store"
   };
-}
-
-function getSupabaseKeyRole() {
-  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const payload = key?.split(".")[1];
-  if (!payload) {
-    return "unknown";
-  }
-
-  try {
-    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { role?: unknown };
-    return typeof parsed.role === "string" ? parsed.role : "unknown";
-  } catch {
-    return "unknown";
-  }
 }
 
 export async function GET(request: Request) {
@@ -49,12 +26,21 @@ export async function GET(request: Request) {
   if (!parsed.success) {
     return NextResponse.json(
       { message: "Invalid checkout status request." },
-      { status: 400, headers: runtimeDiagnosticsHeaders() }
+      { status: 400, headers: responseHeaders() }
     );
   }
 
   let result = await getCheckoutStatus(parsed.data.token);
-  if (result.status === "paid" && result.bookingIntentId && result.paymentAttemptId) {
+  if (
+    result.status === "paid" &&
+    result.bookingIntentId &&
+    result.paymentAttemptId &&
+    await claimCheckoutStatusSideEffect({
+      bookingIntentId: result.bookingIntentId,
+      action: "checkout_status_inline_fulfillment",
+      maxRequests: 5
+    })
+  ) {
     try {
       console.info("[checkout/status] fulfilling verified paid checkout", {
         bookingIntentId: result.bookingIntentId,
@@ -100,6 +86,6 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json(result, {
-    headers: runtimeDiagnosticsHeaders()
+    headers: responseHeaders()
   });
 }

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { createHash } from "node:crypto";
 import { getNgeniusConfig } from "@/lib/env";
 import { getClientIp } from "@/lib/request";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
@@ -27,10 +28,48 @@ function isAllowedIp(sourceIp: string | null, allowedIps?: string) {
     .includes(sourceIp);
 }
 
-function headersToJson(headers: Headers) {
+const SENSITIVE_HEADER_NAMES = new Set([
+  "authorization",
+  "cookie",
+  "set-cookie",
+  "proxy-authorization",
+  "x-api-key"
+]);
+
+function stableWebhookEventId(input: {
+  payload: Record<string, unknown>;
+  eventName: string | null;
+  orderReference: string | null;
+  rawBody: string;
+}) {
+  const explicitId =
+    typeof input.payload.eventId === "string"
+      ? input.payload.eventId
+      : typeof input.payload.id === "string"
+        ? input.payload.id
+        : null;
+
+  if (explicitId) {
+    return explicitId;
+  }
+
+  const digest = createHash("sha256").update(input.rawBody).digest("hex").slice(0, 32);
+  return [
+    input.orderReference ?? "unknown-order",
+    input.eventName ?? "unknown-event",
+    digest
+  ].join(":");
+}
+
+function headersToJson(headers: Headers, secretHeaderName?: string) {
   const output: Record<string, string> = {};
+  const configuredSecretHeader = secretHeaderName?.toLowerCase();
+
   headers.forEach((value, key) => {
-    output[key] = value;
+    const normalizedKey = key.toLowerCase();
+    output[key] = SENSITIVE_HEADER_NAMES.has(normalizedKey) || normalizedKey === configuredSecretHeader
+      ? "[redacted]"
+      : value;
   });
   return output;
 }
@@ -57,12 +96,7 @@ export async function POST(request: Request) {
   const payload = JSON.parse(decryptedBody) as Record<string, unknown>;
   const eventName = getWebhookEventName(payload);
   const orderReference = getWebhookOrderReference(payload);
-  const eventId =
-    typeof payload.eventId === "string"
-      ? payload.eventId
-      : typeof payload.id === "string"
-        ? payload.id
-        : null;
+  const eventId = stableWebhookEventId({ payload, eventName, orderReference, rawBody });
 
   const supabase = createAdminSupabaseClient();
   const { data: attempt } = orderReference
@@ -82,7 +116,7 @@ export async function POST(request: Request) {
       ni_order_reference: orderReference,
       payment_attempt_id: attempt?.id ?? null,
       booking_intent_id: attempt?.booking_intent_id ?? null,
-      headers: headersToJson(request.headers),
+      headers: headersToJson(request.headers, config.webhookHeaderName),
       payload,
       raw_body: rawBody,
       encrypted: Boolean(config.webhookEncryptionKey),
@@ -98,12 +132,29 @@ export async function POST(request: Request) {
     throw error ?? new Error("Unable to persist payment event.");
   }
 
-  await supabase.from("payment_jobs").insert({
-    kind: "ngenius_webhook",
-    payment_event_id: paymentEvent.id,
-    payment_attempt_id: attempt?.id ?? null,
-    booking_intent_id: attempt?.booking_intent_id ?? null
-  });
+  const { data: existingJobs, error: jobLookupError } = await supabase
+    .from("payment_jobs")
+    .select("id")
+    .eq("payment_event_id", paymentEvent.id)
+    .neq("status", "failed")
+    .limit(1);
+
+  if (jobLookupError) {
+    throw jobLookupError;
+  }
+
+  if (!existingJobs?.length) {
+    const { error: jobInsertError } = await supabase.from("payment_jobs").insert({
+      kind: "ngenius_webhook",
+      payment_event_id: paymentEvent.id,
+      payment_attempt_id: attempt?.id ?? null,
+      booking_intent_id: attempt?.booking_intent_id ?? null
+    });
+
+    if (jobInsertError && jobInsertError.code !== "23505") {
+      throw jobInsertError;
+    }
+  }
 
   return NextResponse.json({ ok: true }, { status: 201 });
 }

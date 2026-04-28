@@ -138,7 +138,7 @@ export interface EventCatalog {
 
 export interface CheckoutSignedTokenPayload {
   bookingIntentId: string;
-  email: string;
+  email?: string;
   exp: number;
 }
 
@@ -152,7 +152,15 @@ export interface CheckoutStartResult {
 }
 
 export interface CheckoutOtpResult {
-  outcome: "email_verified" | "fulfilled" | "invalid" | "expired" | "already_used" | "capacity_exceeded" | "manual_action_required";
+  outcome:
+    | "email_verified"
+    | "fulfilled"
+    | "invalid"
+    | "expired"
+    | "already_used"
+    | "capacity_exceeded"
+    | "manual_action_required"
+    | "rate_limited";
   message: string;
   bookingIntentId?: string;
   checkoutToken?: string;
