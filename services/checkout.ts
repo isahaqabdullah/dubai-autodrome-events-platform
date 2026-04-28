@@ -519,7 +519,11 @@ async function fulfillBooking(input: {
       return {
         registrationId: row.registration_id as string,
         fullName: row.full_name as string,
-        qrToken: qrTokens[attendeeIndex],
+        qrToken: qrTokens[attendeeIndex] ?? deriveCheckoutQrToken({
+          bookingIntentId: input.booking.id,
+          paymentAttemptId: input.paymentAttemptId,
+          attendeeIndex
+        }),
         manualCheckinCode: row.manual_checkin_code as string,
         categoryTitle: row.category_title as string,
         ticketTitle: (row.ticket_option_title as string | null) ?? null,
@@ -885,6 +889,39 @@ async function buildFulfilledCheckoutStatus(
   };
 }
 
+export async function buildFulfilledCheckoutStatusForBooking(input: {
+  bookingIntentId: string;
+  paymentAttemptId?: string | null;
+  attendees: ConfirmedCheckoutAttendee[];
+}): Promise<CheckoutStatusResult> {
+  const supabase = createAdminSupabaseClient();
+  const [{ data: booking, error: bookingError }, { data: attempt, error: attemptError }] = await Promise.all([
+    supabase.from("booking_intents").select("*").eq("id", input.bookingIntentId).single(),
+    input.paymentAttemptId
+      ? supabase
+          .from("payment_attempts")
+          .select("id, booking_intent_id, status, ni_order_reference, amount_minor, currency_code")
+          .eq("id", input.paymentAttemptId)
+          .single()
+      : Promise.resolve({ data: null, error: null })
+  ]);
+
+  if (bookingError || !booking) {
+    throw bookingError ?? new Error("Booking not found.");
+  }
+
+  if (attemptError) {
+    throw attemptError;
+  }
+
+  return buildFulfilledCheckoutStatus(
+    supabase,
+    { ...(booking as BookingRow), status: "fulfilled" },
+    attempt as CheckoutStatusPaymentAttempt | null,
+    input.attendees
+  );
+}
+
 async function markPaymentJobsDone(
   supabase: Supabase,
   paymentAttemptId: string | null | undefined
@@ -1164,6 +1201,24 @@ export async function fulfillPaidBookingFromWorker(input: {
     throw error ?? new Error("Booking not found.");
   }
 
+  const existingAttendees = await loadFulfilledAttendees(supabase, booking as BookingRow);
+  if (existingAttendees.length > 0) {
+    await markBookingFulfilledAfterTicketIssue({
+      supabase,
+      bookingIntentId: input.bookingIntentId,
+      paymentAttemptId: input.paymentAttemptId,
+      recoverManualHoldExpired:
+        (booking as BookingRow).status === "manual_action_required" &&
+        (booking as BookingRow).manual_action_reason === HOLD_EXPIRED_AFTER_PAYMENT_REASON
+    });
+    return {
+      outcome: "already_fulfilled",
+      attendees: existingAttendees,
+      message: "Registration confirmed. Your ticket QR code has been sent by email.",
+      bookingIntentId: input.bookingIntentId
+    };
+  }
+
   const result = await fulfillBooking({ supabase, booking: booking as BookingRow, paymentAttemptId: input.paymentAttemptId });
   if (["fulfilled", "already_fulfilled"].includes(result.outcome)) {
     await markBookingFulfilledAfterTicketIssue({
@@ -1172,5 +1227,5 @@ export async function fulfillPaidBookingFromWorker(input: {
       paymentAttemptId: input.paymentAttemptId
     });
   }
-  return result;
+  return { ...result, bookingIntentId: input.bookingIntentId };
 }

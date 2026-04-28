@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { checkoutStatusSchema } from "@/lib/validation/checkout";
-import { fulfillPaidBookingFromWorker, getCheckoutStatus } from "@/services/checkout";
+import {
+  buildFulfilledCheckoutStatusForBooking,
+  fulfillPaidBookingFromWorker,
+  getCheckoutStatus
+} from "@/services/checkout";
 import { runEmailWorker } from "@/services/email-worker";
 import { runPaymentWorker } from "@/services/payment-worker";
 
@@ -12,13 +16,30 @@ function runtimeDiagnosticsHeaders() {
   const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
     ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
     : "missing";
+  const supabaseRole = getSupabaseKeyRole();
 
   return {
     "Cache-Control": "no-store",
     "X-App-Commit": process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? "local",
     "X-App-Branch": process.env.VERCEL_GIT_COMMIT_REF ?? "local",
-    "X-Supabase-Host": supabaseHost
+    "X-Supabase-Host": supabaseHost,
+    "X-Supabase-Key-Role": supabaseRole
   };
+}
+
+function getSupabaseKeyRole() {
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const payload = key?.split(".")[1];
+  if (!payload) {
+    return "unknown";
+  }
+
+  try {
+    const parsed = JSON.parse(Buffer.from(payload, "base64url").toString("utf8")) as { role?: unknown };
+    return typeof parsed.role === "string" ? parsed.role : "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 export async function GET(request: Request) {
@@ -39,12 +60,23 @@ export async function GET(request: Request) {
         bookingIntentId: result.bookingIntentId,
         paymentAttemptId: result.paymentAttemptId
       });
-      await fulfillPaidBookingFromWorker({
+      const fulfilled = await fulfillPaidBookingFromWorker({
         bookingIntentId: result.bookingIntentId,
         paymentAttemptId: result.paymentAttemptId
       });
       await runEmailWorker();
       result = await getCheckoutStatus(parsed.data.token);
+      if (
+        result.status !== "fulfilled" &&
+        ["fulfilled", "already_fulfilled"].includes(fulfilled.outcome) &&
+        fulfilled.attendees.length > 0
+      ) {
+        result = await buildFulfilledCheckoutStatusForBooking({
+          bookingIntentId: fulfilled.bookingIntentId,
+          paymentAttemptId: result.paymentAttemptId,
+          attendees: fulfilled.attendees
+        });
+      }
       console.info("[checkout/status] fulfilled status reload", {
         bookingIntentId: result.bookingIntentId,
         status: result.status,
