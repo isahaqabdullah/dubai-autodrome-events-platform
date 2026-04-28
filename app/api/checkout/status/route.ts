@@ -8,6 +8,19 @@ import { runPaymentWorker } from "@/services/payment-worker";
 export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
+function runtimeDiagnosticsHeaders() {
+  const supabaseHost = process.env.NEXT_PUBLIC_SUPABASE_URL
+    ? new URL(process.env.NEXT_PUBLIC_SUPABASE_URL).hostname
+    : "missing";
+
+  return {
+    "Cache-Control": "no-store",
+    "X-App-Commit": process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 12) ?? "local",
+    "X-App-Branch": process.env.VERCEL_GIT_COMMIT_REF ?? "local",
+    "X-Supabase-Host": supabaseHost
+  };
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const parsed = checkoutStatusSchema.safeParse({ token: url.searchParams.get("token") ?? "" });
@@ -52,8 +65,6 @@ export async function GET(request: Request) {
   }
 
   return NextResponse.json(result, {
-    headers: {
-      "Cache-Control": "no-store"
-    }
+    headers: runtimeDiagnosticsHeaders()
   });
 }

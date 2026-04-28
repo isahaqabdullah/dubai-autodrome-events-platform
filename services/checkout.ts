@@ -823,12 +823,11 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
   if (currentBooking.status === "paid") {
     const attendees = await loadFulfilledAttendees(supabase, currentBooking);
     if (attendees.length > 0) {
-      await supabase
-        .from("booking_intents")
-        .update({ status: "fulfilled" })
-        .eq("id", currentBooking.id)
-        .eq("status", "paid");
-      await markPaymentJobsDone(supabase, currentAttempt?.id);
+      await markBookingFulfilledAfterTicketIssue({
+        supabase,
+        bookingIntentId: currentBooking.id,
+        paymentAttemptId: currentAttempt?.id
+      });
       return buildFulfilledCheckoutStatus(supabase, { ...currentBooking, status: "fulfilled" }, currentAttempt, attendees);
     }
   }
@@ -891,6 +890,24 @@ async function markPaymentJobsDone(
     .update({ status: "done", locked_at: null, last_error: null })
     .eq("payment_attempt_id", paymentAttemptId)
     .in("status", ["queued", "processing"]);
+}
+
+async function markBookingFulfilledAfterTicketIssue(input: {
+  supabase: Supabase;
+  bookingIntentId: string;
+  paymentAttemptId?: string | null;
+}) {
+  const { error: bookingError } = await input.supabase
+    .from("booking_intents")
+    .update({ status: "fulfilled", manual_action_reason: null })
+    .eq("id", input.bookingIntentId)
+    .in("status", ["paid", "fulfilled"]);
+
+  if (bookingError) {
+    throw bookingError;
+  }
+
+  await markPaymentJobsDone(input.supabase, input.paymentAttemptId);
 }
 
 async function reconcileCheckoutReturnAttempt(input: {
@@ -1115,7 +1132,11 @@ export async function fulfillPaidBookingFromWorker(input: {
 
   const result = await fulfillBooking({ supabase, booking: booking as BookingRow, paymentAttemptId: input.paymentAttemptId });
   if (["fulfilled", "already_fulfilled"].includes(result.outcome)) {
-    await markPaymentJobsDone(supabase, input.paymentAttemptId);
+    await markBookingFulfilledAfterTicketIssue({
+      supabase,
+      bookingIntentId: input.bookingIntentId,
+      paymentAttemptId: input.paymentAttemptId
+    });
   }
   return result;
 }
