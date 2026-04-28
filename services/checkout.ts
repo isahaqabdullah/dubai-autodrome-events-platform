@@ -874,6 +874,7 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
 
   const canRecoverIssuedTickets =
     currentBooking.status === "paid" ||
+    currentAttempt?.status === "paid" ||
     (currentBooking.status === "manual_action_required" &&
       currentBooking.manual_action_reason === HOLD_EXPIRED_AFTER_PAYMENT_REASON);
 
@@ -888,6 +889,21 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
       });
       return buildFulfilledCheckoutStatus(supabase, { ...currentBooking, status: "fulfilled" }, currentAttempt, attendees);
     }
+  }
+
+  if (currentAttempt?.status === "paid" && currentBooking.total_minor > 0) {
+    await ensurePaymentFulfillmentJob({
+      supabase,
+      bookingIntentId: currentBooking.id,
+      paymentAttemptId: currentAttempt.id
+    });
+    return {
+      status: "paid",
+      message: "Payment is confirmed. We are preparing your tickets.",
+      bookingIntentId: currentBooking.id,
+      paymentAttemptId: currentAttempt.id,
+      paymentAttemptStatus: currentAttempt.status as CheckoutStatusResult["paymentAttemptStatus"]
+    };
   }
 
   return {

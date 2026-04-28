@@ -32,7 +32,7 @@ export async function GET(request: Request) {
 
   let result = await getCheckoutStatus(parsed.data.token);
   if (
-    result.status === "paid" &&
+    (result.status === "paid" || result.paymentAttemptStatus === "paid") &&
     result.bookingIntentId &&
     result.paymentAttemptId &&
     await claimCheckoutStatusSideEffect({
