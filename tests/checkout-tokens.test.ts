@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { deriveCheckoutQrToken, signCheckoutToken, verifyCheckoutToken } from "../lib/tokens";
+import {
+  deriveCheckoutQrToken,
+  signCheckoutToken,
+  signTicketAccessToken,
+  verifyCheckoutToken,
+  verifyTicketAccessToken
+} from "../lib/tokens";
 
 const originalSecret = process.env.CHECKOUT_HMAC_SECRET;
 
@@ -52,5 +58,19 @@ describe("checkout token utilities", () => {
 
     expect(retry).toBe(first);
     expect(nextAttempt).not.toBe(first);
+  });
+
+  it("signs ticket access tokens with a nonce", () => {
+    const token = signTicketAccessToken({
+      bookingIntentId: "booking-1",
+      nonce: "nonce-1"
+    });
+
+    expect(verifyTicketAccessToken(token)).toEqual({
+      kind: "ticket_access",
+      bookingIntentId: "booking-1",
+      nonce: "nonce-1"
+    });
+    expect(verifyCheckoutToken(token)).toBeNull();
   });
 });

@@ -3,13 +3,13 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Clock3, FileText, MapPin } from "lucide-react";
-import { EventTicketCard } from "@/components/public/event-ticket-card";
+import { TicketWallet } from "@/components/public/ticket-wallet";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
-import { buildTicketAdmissionLabel, formatTicketDateTimeLine, getTicketPosterImageSrc } from "@/lib/ticket-presentation";
+import { formatTicketDateTimeLine, getTicketPosterImageSrc } from "@/lib/ticket-presentation";
 import type { EventRecord, EventTicketOption, RegistrationWindowState } from "@/lib/types";
 import { isValidPhoneNumber, mergeFormConfig, PHONE_NUMBER_VALIDATION_MESSAGE, resolveCategories } from "@/lib/utils";
 import { PdfViewer } from "@/components/public/pdf-viewer";
@@ -27,18 +27,20 @@ type SubmissionState = "idle" | "submitting" | "success" | "error";
 type OtpState = "idle" | "sending" | "sent";
 
 interface CompletedAttendee {
-  registrationId?: string;
+  registrationId: string;
   fullName: string;
   categoryTitle: string;
   ticketTitle: string | null;
   qrToken: string;
-  manualCheckinCode?: string | null;
+  manualCheckinCode: string;
   email?: string;
 }
 
 interface CompletedRegistration {
   email: string;
   attendees: CompletedAttendee[];
+  ticketToken?: string;
+  ticketUrl?: string;
 }
 
 interface SelectableOption extends EventTicketOption {
@@ -67,47 +69,6 @@ const INITIAL_FORM_STATE = {
 };
 const BOOKING_SECTION_HEADING_CLASS = "font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]";
 const CHECKOUT_DRAFT_CLEAR_KEY = "checkout-drafts-clear-at";
-
-function drawWrappedText(
-  ctx: CanvasRenderingContext2D,
-  text: string,
-  x: number,
-  y: number,
-  maxWidth: number,
-  lineHeight: number,
-  maxLines: number
-) {
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let current = "";
-
-  for (const word of words) {
-    const candidate = current ? `${current} ${word}` : word;
-    if (ctx.measureText(candidate).width <= maxWidth) {
-      current = candidate;
-    } else {
-      if (current) lines.push(current);
-      current = word;
-    }
-    if (lines.length >= maxLines) break;
-  }
-
-  if (lines.length < maxLines && current) {
-    lines.push(current);
-  }
-
-  if (lines.length === maxLines && current && lines[lines.length - 1] !== current) {
-    let truncated = lines[lines.length - 1];
-    while (truncated.length > 0 && ctx.measureText(`${truncated}…`).width > maxWidth) {
-      truncated = truncated.slice(0, -1);
-    }
-    lines[lines.length - 1] = `${truncated}…`;
-  }
-
-  lines.forEach((line, index) => {
-    ctx.fillText(line, x, y + index * lineHeight);
-  });
-}
 
 function formatTimer(totalSeconds: number) {
   const minutes = Math.floor(totalSeconds / 60)
@@ -561,163 +522,6 @@ export function EventBookingFlow({
     }
   }
 
-  async function downloadTicketForAttendee(attendee: CompletedAttendee) {
-    const qrSrc = `/api/qr?token=${encodeURIComponent(attendee.qrToken)}`;
-    const logoSrc = "/autodrome-header-logo.svg";
-    const dateLine = formatTicketDateTimeLine(event);
-    const venue = event.venue ?? "Venue to be announced";
-    const ticketLabel = buildTicketAdmissionLabel(attendee);
-    const manualCheckinCode = attendee.manualCheckinCode?.trim().toUpperCase() || null;
-
-    const logoImage = new window.Image();
-    logoImage.crossOrigin = "anonymous";
-    await new Promise<void>((resolve, reject) => {
-      logoImage.onload = () => resolve();
-      logoImage.onerror = () => reject(new Error("logo load failed"));
-      logoImage.src = logoSrc;
-    }).catch(() => null);
-
-    const qrImage = new window.Image();
-    qrImage.crossOrigin = "anonymous";
-    await new Promise<void>((resolve, reject) => {
-      qrImage.onload = () => resolve();
-      qrImage.onerror = () => reject(new Error("qr load failed"));
-      qrImage.src = qrSrc;
-    }).catch(() => null);
-
-    const W = 900;
-    const H = 1300;
-    const canvas = document.createElement("canvas");
-    canvas.width = W;
-    canvas.height = H;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-
-    ctx.fillStyle = "#f4f5f7";
-    ctx.fillRect(0, 0, W, H);
-
-    const cardX = 50;
-    const cardY = 50;
-    const cardW = W - 100;
-    const cardH = H - 100;
-    const radius = 28;
-
-    ctx.fillStyle = "#ffffff";
-    ctx.beginPath();
-    ctx.moveTo(cardX + radius, cardY);
-    ctx.arcTo(cardX + cardW, cardY, cardX + cardW, cardY + cardH, radius);
-    ctx.arcTo(cardX + cardW, cardY + cardH, cardX, cardY + cardH, radius);
-    ctx.arcTo(cardX, cardY + cardH, cardX, cardY, radius);
-    ctx.arcTo(cardX, cardY, cardX + cardW, cardY, radius);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.fillStyle = "#0c1723";
-    ctx.beginPath();
-    ctx.moveTo(cardX + radius, cardY);
-    ctx.lineTo(cardX + cardW - radius, cardY);
-    ctx.arcTo(cardX + cardW, cardY, cardX + cardW, cardY + radius, radius);
-    ctx.lineTo(cardX + cardW, cardY + 200);
-    ctx.lineTo(cardX, cardY + 200);
-    ctx.lineTo(cardX, cardY + radius);
-    ctx.arcTo(cardX, cardY, cardX + radius, cardY, radius);
-    ctx.closePath();
-    ctx.fill();
-
-    const font = "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
-    let ticketLabelX = cardX + 40;
-    if (logoImage.complete && logoImage.naturalWidth > 0) {
-      const logoMaxW = 156;
-      const logoScale = logoMaxW / logoImage.naturalWidth;
-      const logoW = logoMaxW;
-      const logoH = Math.max(28, logoImage.naturalHeight * logoScale);
-      const logoX = cardX + 40;
-      const logoY = cardY + 34;
-      ctx.drawImage(logoImage, logoX, logoY, logoW, logoH);
-      ticketLabelX = logoX + logoW + 24;
-    }
-
-    ctx.fillStyle = "rgba(255,255,255,0.6)";
-    ctx.font = `bold 16px ${font}`;
-    ctx.textBaseline = "top";
-    ctx.fillText("YOUR EVENT TICKET", ticketLabelX, cardY + 55);
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = `bold 36px ${font}`;
-    drawWrappedText(ctx, event.title, cardX + 40, cardY + 95, cardW - 80, 44, 2);
-
-    const rows: Array<[string, string]> = [
-      ["ATTENDEE", attendee.fullName],
-      ["ADMISSION", ticketLabel],
-      ["DATE & TIME", dateLine],
-      ["LOCATION", venue]
-    ];
-
-    let y = cardY + 250;
-    for (let i = 0; i < rows.length; i += 2) {
-      const colW = (cardW - 80) / 2;
-      for (let c = 0; c < 2 && i + c < rows.length; c++) {
-        const [label, value] = rows[i + c];
-        const x = cardX + 40 + c * colW;
-        ctx.fillStyle = "rgba(15,23,42,0.55)";
-        ctx.font = `bold 13px ${font}`;
-        ctx.fillText(label, x, y);
-        ctx.fillStyle = "#0c1723";
-        ctx.font = `600 20px ${font}`;
-        drawWrappedText(ctx, value, x, y + 24, colW - 20, 26, 2);
-      }
-      y += 100;
-    }
-
-    const dashY = y + 10;
-    ctx.strokeStyle = "rgba(15,23,42,0.2)";
-    ctx.setLineDash([6, 8]);
-    ctx.beginPath();
-    ctx.moveTo(cardX + 40, dashY);
-    ctx.lineTo(cardX + cardW - 40, dashY);
-    ctx.stroke();
-    ctx.setLineDash([]);
-
-    const qrSize = 360;
-    const qrX = cardX + (cardW - qrSize) / 2;
-    const qrY = dashY + 40;
-    if (qrImage.complete && qrImage.naturalWidth > 0) {
-      ctx.drawImage(qrImage, qrX, qrY, qrSize, qrSize);
-    } else {
-      ctx.strokeStyle = "rgba(15,23,42,0.2)";
-      ctx.strokeRect(qrX, qrY, qrSize, qrSize);
-    }
-
-    ctx.fillStyle = "rgba(15,23,42,0.6)";
-    ctx.font = `500 18px ${font}`;
-    ctx.textAlign = "center";
-    ctx.fillText("Present this QR code at check-in", cardX + cardW / 2, qrY + qrSize + 30);
-    if (manualCheckinCode) {
-      ctx.fillStyle = "rgba(15,23,42,0.55)";
-      ctx.font = `bold 14px ${font}`;
-      ctx.fillText("MANUAL CODE", cardX + cardW / 2, qrY + qrSize + 64);
-      ctx.fillStyle = "#0c1723";
-      ctx.font = `800 36px ${font}`;
-      ctx.fillText(manualCheckinCode, cardX + cardW / 2, qrY + qrSize + 88);
-    }
-    ctx.textAlign = "start";
-
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob((result) => resolve(result), "image/png")
-    );
-    if (!blob) return;
-
-    const safeName = event.title.replace(/[^a-z0-9]+/gi, "-").replace(/^-|-$/g, "").toLowerCase() || "event";
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${safeName}-${attendee.fullName.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}-ticket.png`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
   async function submitRegistration() {
     if (
       !selectedCategory ||
@@ -745,6 +549,8 @@ export function EventBookingFlow({
       manualCheckinCode?: string;
       paymentUrl?: string;
       checkoutToken?: string;
+      ticketToken?: string;
+      ticketUrl?: string;
       attendees?: Array<{
         registrationId: string;
         fullName: string;
@@ -838,6 +644,8 @@ export function EventBookingFlow({
     if (result.attendees && result.attendees.length > 0) {
       setCompletedRegistration({
         email: result.email ?? form.email,
+        ticketToken: result.ticketToken,
+        ticketUrl: result.ticketUrl,
         attendees: result.attendees.map((attendee) => ({
           registrationId: attendee.registrationId,
           fullName: attendee.fullName,
@@ -851,19 +659,21 @@ export function EventBookingFlow({
     } else {
       setCompletedRegistration({
         email: result.email ?? form.email,
+        ticketToken: result.ticketToken,
+        ticketUrl: result.ticketUrl,
         attendees: [{
-          registrationId: result.registrationId,
+          registrationId: result.registrationId ?? "ticket-1",
           fullName,
           categoryTitle: selectedCategory.title,
           ticketTitle: selectedAdditionalCategory?.title ?? null,
           qrToken: result.qrToken ?? "demo",
-          manualCheckinCode: result.manualCheckinCode ?? null,
+          manualCheckinCode: result.manualCheckinCode ?? "",
           email: form.email
         }]
       });
     }
 
-    setMessage(result.message ?? "Your ticket QR code has been emailed.");
+    setMessage(result.message ?? "Your tickets are ready and we are emailing a copy.");
   }
 
   function handleBookAgain() {
@@ -897,7 +707,6 @@ export function EventBookingFlow({
     }
   }
 
-  const confirmedAttendee = completedRegistration?.attendees[0] ?? null;
   const canContinueFromTickets = canProceed;
   const categorySectionTitle = config.categoriesLabel || "Category";
   const additionalSectionTitle = config.ticketOptionsLabel || "Additional category";
@@ -940,7 +749,7 @@ export function EventBookingFlow({
 
         <div className={contentLayoutClass}>
           <div className="px-3.5 py-4 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
-            {completedRegistration && confirmedAttendee ? (
+            {completedRegistration && completedRegistration.attendees.length > 0 ? (
               <div className="mx-auto max-w-5xl">
                 <div className="flex flex-col items-center pb-6 pt-1 text-center sm:pb-8 sm:pt-2">
                   <CheckCircle2 className="h-10 w-10 text-[#2c7a86] sm:h-12 sm:w-12" />
@@ -959,12 +768,13 @@ export function EventBookingFlow({
                   </p>
                   {message ? <p className="mt-2 text-[13px] text-slate sm:mt-3 sm:text-sm">{message}</p> : null}
                 </div>
-                <EventTicketCard
+                <TicketWallet
                   event={event}
-                  attendee={confirmedAttendee}
-                  qrSrc={`/api/qr?token=${encodeURIComponent(confirmedAttendee.qrToken)}`}
+                  attendees={completedRegistration.attendees}
+                  ticketToken={completedRegistration.ticketToken}
+                  ticketUrl={completedRegistration.ticketUrl}
                   mapLink={mapLink}
-                  onDownload={() => downloadTicketForAttendee(confirmedAttendee)}
+                  showHeader={false}
                 />
               </div>
             ) : step === "tickets" ? (

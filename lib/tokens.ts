@@ -1,5 +1,5 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { CheckoutSignedTokenPayload } from "@/lib/types";
+import type { CheckoutSignedTokenPayload, TicketAccessTokenPayload } from "@/lib/types";
 
 export function generateOpaqueToken(size = 32) {
   return randomBytes(size).toString("base64url");
@@ -59,6 +59,51 @@ export function verifyCheckoutToken(token: string): CheckoutSignedTokenPayload |
       return null;
     }
     if (payload.email !== undefined && typeof payload.email !== "string") {
+      return null;
+    }
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+export function signTicketAccessToken(input: { bookingIntentId: string; nonce: string }) {
+  const secret = requireCheckoutTokenSecret();
+  const payload: TicketAccessTokenPayload = {
+    kind: "ticket_access",
+    bookingIntentId: input.bookingIntentId,
+    nonce: input.nonce
+  };
+  const encodedPayload = base64UrlJson(payload);
+  const signature = hmacSha256(encodedPayload, secret);
+  return `${encodedPayload}.${signature}`;
+}
+
+export function verifyTicketAccessToken(token: string): TicketAccessTokenPayload | null {
+  const secret = requireCheckoutTokenSecret();
+  const [encodedPayload, signature] = token.split(".");
+
+  if (!encodedPayload || !signature) {
+    return null;
+  }
+
+  const expected = hmacSha256(encodedPayload, secret);
+  const expectedBuffer = Buffer.from(expected);
+  const signatureBuffer = Buffer.from(signature);
+
+  if (expectedBuffer.length !== signatureBuffer.length || !timingSafeEqual(expectedBuffer, signatureBuffer)) {
+    return null;
+  }
+
+  try {
+    const payload = JSON.parse(Buffer.from(encodedPayload, "base64url").toString("utf8")) as TicketAccessTokenPayload;
+    if (
+      payload.kind !== "ticket_access" ||
+      typeof payload.bookingIntentId !== "string" ||
+      typeof payload.nonce !== "string" ||
+      !payload.bookingIntentId ||
+      !payload.nonce
+    ) {
       return null;
     }
     return payload;

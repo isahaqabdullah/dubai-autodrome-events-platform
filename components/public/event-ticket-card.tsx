@@ -51,6 +51,7 @@ export function EventTicketCard({
             <img
               src={posterImage}
               alt={event.title}
+              referrerPolicy="no-referrer"
               className="absolute inset-0 h-full w-full object-cover object-center"
               onError={() => setHidePoster(true)}
             />
@@ -63,6 +64,7 @@ export function EventTicketCard({
               <img
                 src="/autodrome-header-logo.svg"
                 alt="Dubai Autodrome"
+                referrerPolicy="no-referrer"
                 className="h-9 w-auto shrink-0 sm:h-10 lg:h-11"
               />
 
@@ -159,6 +161,7 @@ export function EventTicketCard({
               <img
                 src={qrSrc}
                 alt={`Ticket QR code for ${presentation.attendeeName}`}
+                referrerPolicy="no-referrer"
                 className="mx-auto block h-auto w-full max-w-[138px] xl:max-w-[146px]"
               />
               {manualCheckinCode ? (

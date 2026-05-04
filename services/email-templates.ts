@@ -50,6 +50,31 @@ interface GroupConfirmationEmailInput {
   detailParagraphs?: string[];
 }
 
+interface TicketDeliveryEmailInput {
+  payerFullName: string;
+  eventTitle: string;
+  eventStartAt: string;
+  eventEndAt: string;
+  eventTimezone: string;
+  venue: string | null;
+  mapLink?: string | null;
+  ticketUrl: string;
+  attendees: Array<{
+    fullName: string;
+    categoryTitle: string;
+    ticketTitle: string | null;
+    manualCheckinCode: string;
+  }>;
+}
+
+function escapeHtml(input: string) {
+  return input
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function buildEmailShell(content: string) {
   return `
     <style>
@@ -247,7 +272,7 @@ export function buildGroupConfirmationEmail(input: GroupConfirmationEmailInput) 
     const ticketLabel = attendee.ticketTitle
       ? `${attendee.categoryTitle} + ${attendee.ticketTitle}`
       : attendee.categoryTitle;
-    return `Attendee ${i + 1}: ${attendee.fullName} — ${ticketLabel} — Code ${attendee.manualCheckinCode}`;
+    return `Attendee ${i + 1}: ${attendee.fullName} - ${ticketLabel} - Code ${attendee.manualCheckinCode}`;
   });
 
   const text = [
@@ -262,6 +287,74 @@ export function buildGroupConfirmationEmail(input: GroupConfirmationEmailInput) 
     "",
     "Present each attendee's QR code at check-in. Each QR code is single-use.",
     "If the QR previews do not appear in your email client, download the attached QR images.",
+    `Support: ${env.MAIL_REPLY_TO_EMAIL}`
+  ]
+    .filter(Boolean)
+    .join("\n");
+
+  return { subject, html, text };
+}
+
+export function buildTicketDeliveryEmail(input: TicketDeliveryEmailInput) {
+  const subject = `Your tickets for ${input.eventTitle}`;
+  const schedule = formatEventDateRange(input.eventStartAt, input.eventEndAt, input.eventTimezone);
+  const ticketUrl = escapeHtml(input.ticketUrl);
+  const mapLink = input.mapLink ? escapeHtml(input.mapLink) : null;
+  const attendeeRows = input.attendees.map((attendee, index) => {
+    const ticketLabel = attendee.ticketTitle
+      ? `${attendee.categoryTitle} + ${attendee.ticketTitle}`
+      : attendee.categoryTitle;
+    return {
+      number: index + 1,
+      fullName: attendee.fullName,
+      ticketLabel,
+      manualCheckinCode: attendee.manualCheckinCode.trim().toUpperCase()
+    };
+  });
+
+  const attendeeHtml = attendeeRows.map((attendee) => `
+    <tr>
+      <td style="padding:10px 0;border-bottom:1px solid rgba(183,195,207,0.18)">
+        <p style="margin:0;color:#ffffff;font-weight:700">${attendee.number}. ${escapeHtml(attendee.fullName)}</p>
+        <p style="margin:3px 0 0;color:#b7c3cf">${escapeHtml(attendee.ticketLabel)}</p>
+      </td>
+      <td align="right" style="padding:10px 0;border-bottom:1px solid rgba(183,195,207,0.18)">
+        <p style="margin:0;font-size:10px;font-weight:700;letter-spacing:0.18em;text-transform:uppercase;color:#8fa1b2">Manual code</p>
+        <p style="margin:3px 0 0;color:#ffffff;font-size:18px;font-weight:800;letter-spacing:0.18em">${escapeHtml(attendee.manualCheckinCode)}</p>
+      </td>
+    </tr>
+  `).join("");
+
+  const html = buildEmailShell(`
+    <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:0.26em;text-transform:uppercase;color:#8fb6a3">Tickets ready</p>
+    <h1 style="margin:0 0 14px;font-size:28px;line-height:1.1;color:#ffffff">${escapeHtml(input.eventTitle)}</h1>
+    <p style="margin:0 0 12px;font-size:16px;color:#d5dde5">Your booking is confirmed. Use the secure ticket link below to view all QR codes.</p>
+    <p style="margin:0 0 16px;color:#9fb0be"><strong>Date and time:</strong> ${escapeHtml(schedule)}</p>
+    ${input.venue ? `<p style="margin:0 0 16px;color:#9fb0be"><strong>Venue:</strong> ${escapeHtml(input.venue)}</p>` : ""}
+    <p style="margin:22px 0">
+      <a href="${ticketUrl}" target="_blank" style="display:inline-block;border-radius:14px;background:#ffffff;color:#0c1723;padding:12px 18px;font-weight:800;text-decoration:none">View all tickets</a>
+    </p>
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border-collapse:collapse;margin-top:8px">
+      ${attendeeHtml}
+    </table>
+    <p style="margin:18px 0 0;color:#b7c3cf">If QR scanning fails at check-in, staff can use the manual code next to each attendee.</p>
+    ${mapLink ? `<p style="margin:12px 0 0;color:#b7c3cf"><a href="${mapLink}" target="_blank" style="color:#ffffff">View venue map</a></p>` : ""}
+    <p style="margin:18px 0 0;color:#b7c3cf">Support: ${env.MAIL_REPLY_TO_EMAIL}</p>
+  `);
+
+  const text = [
+    `Hello ${input.payerFullName},`,
+    "",
+    `Your tickets are ready for ${input.eventTitle}.`,
+    `View all tickets: ${input.ticketUrl}`,
+    "",
+    `Date and time: ${schedule}`,
+    input.venue ? `Venue: ${input.venue}` : "",
+    input.mapLink ? `View on map: ${input.mapLink}` : "",
+    "",
+    ...attendeeRows.map((attendee) => `${attendee.number}. ${attendee.fullName} - ${attendee.ticketLabel} - Manual code ${attendee.manualCheckinCode}`),
+    "",
+    "If QR scanning fails at check-in, staff can use the manual code next to each attendee.",
     `Support: ${env.MAIL_REPLY_TO_EMAIL}`
   ]
     .filter(Boolean)

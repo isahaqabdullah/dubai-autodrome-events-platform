@@ -97,7 +97,8 @@ export async function sendMail(payload: MailPayload) {
 
     return {
       ok: true,
-      mode: "mock" as const
+      mode: "mock" as const,
+      providerMessageId: null
     };
   }
 
@@ -139,7 +140,7 @@ export async function sendMail(payload: MailPayload) {
 
     const { error } = result;
     if (!error) {
-      return { ok: true, mode: "resend" as const };
+      return { ok: true, mode: "resend" as const, providerMessageId: result.data?.id ?? null };
     }
 
     const message = error.message ?? "Resend returned an unknown error";

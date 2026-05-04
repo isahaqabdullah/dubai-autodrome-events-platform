@@ -21,10 +21,16 @@ import type {
 import { normalizeEmail, normalizePhone, getRegistrationWindowState, isSyntheticEmail } from "@/lib/utils";
 import type { CheckoutStartInput } from "@/lib/validation/checkout";
 import { buildVerificationEmail } from "@/services/email-templates";
-import { enqueueEmailJob, executeEmailJob } from "@/services/email-jobs";
+import { executeEmailJob } from "@/services/email-jobs";
 import { getEventById } from "@/services/events";
 import { sendMail } from "@/services/mailer";
 import { getEventCatalog } from "@/services/catalog";
+import {
+  buildTicketAccessToken,
+  buildTicketUrl,
+  ensureAutomaticTicketDelivery,
+  loadFulfilledTicketAttendees
+} from "@/services/tickets";
 import {
   createNgeniusOrder,
   getNgeniusOrder,
@@ -59,6 +65,7 @@ type BookingRow = {
   verification_expires_at: string | null;
   email_verified_at: string | null;
   manual_action_reason: string | null;
+  ticket_access_nonce: string;
 };
 
 type AttendeeDraft = {
@@ -454,29 +461,6 @@ async function loadBookingAttendees(supabase: Supabase, bookingIntentId: string)
   return data ?? [];
 }
 
-async function queueFulfillmentEmails(input: {
-  eventId: string;
-  booking: BookingRow;
-  attendees: ConfirmedCheckoutAttendee[];
-}) {
-  const primary = input.attendees[0];
-  if (!primary) {
-    return;
-  }
-
-  await enqueueEmailJob("registration_confirmed", {
-    registrationId: primary.registrationId,
-    eventId: input.eventId,
-    email: input.booking.payer_email_raw,
-    fullName: input.booking.payer_full_name,
-    qrToken: primary.qrToken,
-    manualCheckinCode: primary.manualCheckinCode,
-    ticketTitle: primary.ticketTitle ? `${primary.categoryTitle} + ${primary.ticketTitle}` : primary.categoryTitle,
-    bookingId: input.booking.id,
-    attendees: input.attendees
-  });
-}
-
 async function fulfillBooking(input: {
   supabase: Supabase;
   booking: BookingRow;
@@ -515,6 +499,18 @@ async function fulfillBooking(input: {
     };
   }
 
+  if (firstOutcome === "already_fulfilled") {
+    const attendees = await loadFulfilledTicketAttendees(input.supabase, input.booking);
+    if (attendees.length > 0) {
+      await ensureAutomaticTicketDelivery(input.supabase, input.booking.id);
+    }
+    return {
+      outcome: firstOutcome,
+      attendees,
+      message: "Registration confirmed. Your tickets are ready and we are emailing a copy."
+    };
+  }
+
   const attendees: ConfirmedCheckoutAttendee[] = rows
     .filter((row: Record<string, unknown>) => row.registration_id)
     .map((row: Record<string, unknown>) => {
@@ -534,14 +530,26 @@ async function fulfillBooking(input: {
       };
     });
 
-  if (firstOutcome === "fulfilled" && attendees.length > 0) {
-    await queueFulfillmentEmails({ eventId: input.booking.event_id, booking: input.booking, attendees });
+  if (["fulfilled", "already_fulfilled"].includes(firstOutcome) && attendees.length > 0) {
+    await ensureAutomaticTicketDelivery(input.supabase, input.booking.id);
   }
 
   return {
     outcome: firstOutcome,
     attendees,
-    message: "Registration confirmed. Your ticket QR code has been sent by email."
+    message: "Registration confirmed. Your tickets are ready and we are emailing a copy."
+  };
+}
+
+function ticketLinkForBooking(booking: Pick<BookingRow, "id"> & { ticket_access_nonce?: string | null }) {
+  const nonce = booking.ticket_access_nonce;
+  if (!nonce) {
+    return {};
+  }
+  const ticketToken = buildTicketAccessToken({ id: booking.id, ticket_access_nonce: nonce });
+  return {
+    ticketToken,
+    ticketUrl: buildTicketUrl(ticketToken)
   };
 }
 
@@ -568,6 +576,8 @@ export async function verifyCheckoutOtp(input: {
       attendees: status.attendees,
       bookingIntentId: booking.id,
       checkoutToken: signForBooking(booking),
+      ticketToken: status.ticketToken,
+      ticketUrl: status.ticketUrl,
       totalMinor: booking.total_minor,
       currencyCode: booking.currency_code
     };
@@ -650,7 +660,9 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
       message: status.message,
       attendees: status.attendees,
       bookingIntentId: booking.id,
-      checkoutToken: signForBooking(booking)
+      checkoutToken: signForBooking(booking),
+      ticketToken: status.ticketToken,
+      ticketUrl: status.ticketUrl
     };
   }
 
@@ -687,7 +699,8 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
       attendees: fulfilled.attendees,
       bookingIntentId: booking.id,
       paymentAttemptId: latestAttempt.id as string,
-      checkoutToken: signForBooking(booking)
+      checkoutToken: signForBooking(booking),
+      ...(fulfilled.attendees.length > 0 ? ticketLinkForBooking(booking) : {})
     };
   }
 
@@ -726,7 +739,8 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
       message: fulfilled.message,
       attendees: fulfilled.attendees,
       bookingIntentId: booking.id,
-      checkoutToken: signForBooking(booking)
+      checkoutToken: signForBooking(booking),
+      ...ticketLinkForBooking(booking)
     };
   }
 
@@ -869,6 +883,7 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
   const currentAttempt = refreshed.attempt;
 
   if (currentBooking.status === "fulfilled") {
+    await ensureAutomaticTicketDelivery(supabase, currentBooking.id);
     return buildFulfilledCheckoutStatus(supabase, currentBooking, currentAttempt);
   }
 
@@ -879,7 +894,7 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
       currentBooking.manual_action_reason === HOLD_EXPIRED_AFTER_PAYMENT_REASON);
 
   if (canRecoverIssuedTickets) {
-    const attendees = await loadFulfilledAttendees(supabase, currentBooking);
+    const attendees = await loadFulfilledTicketAttendees(supabase, currentBooking);
     if (attendees.length > 0) {
       await markBookingFulfilledAfterTicketIssue({
         supabase,
@@ -887,6 +902,7 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
         paymentAttemptId: currentAttempt?.id,
         recoverManualHoldExpired: currentBooking.status === "manual_action_required"
       });
+      await ensureAutomaticTicketDelivery(supabase, currentBooking.id);
       return buildFulfilledCheckoutStatus(supabase, { ...currentBooking, status: "fulfilled" }, currentAttempt, attendees);
     }
   }
@@ -927,7 +943,7 @@ async function buildFulfilledCheckoutStatus(
   knownAttendees?: ConfirmedCheckoutAttendee[]
 ): Promise<CheckoutStatusResult> {
   const [attendees, event] = await Promise.all([
-    knownAttendees ? Promise.resolve(knownAttendees) : loadFulfilledAttendees(supabase, booking),
+    knownAttendees ? Promise.resolve(knownAttendees) : loadFulfilledTicketAttendees(supabase, booking),
     getEventById(booking.event_id)
   ]);
 
@@ -947,7 +963,8 @@ async function buildFulfilledCheckoutStatus(
           form_config: event.form_config
         }
       : undefined,
-    attendees
+    attendees,
+    ...ticketLinkForBooking(booking)
   };
 }
 
@@ -1250,35 +1267,6 @@ async function reloadCheckoutStatusRows(
   };
 }
 
-async function loadFulfilledAttendees(supabase: Supabase, booking: BookingRow) {
-  const [registrationsResult, attendeesResult] = await Promise.all([
-    supabase
-      .from("registrations")
-      .select("id, full_name, email_raw, category_title, ticket_option_title, manual_checkin_code, payment_attempt_id")
-      .eq("booking_intent_id", booking.id)
-      .order("created_at", { ascending: true }),
-    loadBookingAttendees(supabase, booking.id)
-  ]);
-
-  if (registrationsResult.error) {
-    throw registrationsResult.error;
-  }
-
-  return (registrationsResult.data ?? []).map((row: Record<string, unknown>, index: number) => ({
-    registrationId: row.id as string,
-    fullName: row.full_name as string,
-    qrToken: deriveCheckoutQrToken({
-      bookingIntentId: booking.id,
-      paymentAttemptId: (row.payment_attempt_id as string | null) ?? null,
-      attendeeIndex: (attendeesResult[index]?.attendee_index as number | undefined) ?? index
-    }),
-    manualCheckinCode: row.manual_checkin_code as string,
-    categoryTitle: row.category_title as string,
-    ticketTitle: (row.ticket_option_title as string | null) ?? null,
-    email: isSyntheticEmail(row.email_raw as string) ? undefined : row.email_raw as string
-  }));
-}
-
 export async function fulfillPaidBookingFromWorker(input: {
   bookingIntentId: string;
   paymentAttemptId: string;
@@ -1294,8 +1282,9 @@ export async function fulfillPaidBookingFromWorker(input: {
     throw error ?? new Error("Booking not found.");
   }
 
-  const existingAttendees = await loadFulfilledAttendees(supabase, booking as BookingRow);
+  const existingAttendees = await loadFulfilledTicketAttendees(supabase, booking as BookingRow);
   if (existingAttendees.length > 0) {
+    await ensureAutomaticTicketDelivery(supabase, input.bookingIntentId);
     await markBookingFulfilledAfterTicketIssue({
       supabase,
       bookingIntentId: input.bookingIntentId,
@@ -1307,8 +1296,9 @@ export async function fulfillPaidBookingFromWorker(input: {
     return {
       outcome: "already_fulfilled",
       attendees: existingAttendees,
-      message: "Registration confirmed. Your ticket QR code has been sent by email.",
-      bookingIntentId: input.bookingIntentId
+      message: "Registration confirmed. Your tickets are ready and we are emailing a copy.",
+      bookingIntentId: input.bookingIntentId,
+      ...ticketLinkForBooking(booking as BookingRow)
     };
   }
 
@@ -1320,5 +1310,5 @@ export async function fulfillPaidBookingFromWorker(input: {
       paymentAttemptId: input.paymentAttemptId
     });
   }
-  return { ...result, bookingIntentId: input.bookingIntentId };
+  return { ...result, bookingIntentId: input.bookingIntentId, ...ticketLinkForBooking(booking as BookingRow) };
 }

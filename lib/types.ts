@@ -104,6 +104,7 @@ export interface RegistrationRecord {
   confirmation_email_sent_at: string | null;
   checked_in_at: string | null;
   booking_id: string | null;
+  booking_attendee_id: string | null;
   is_primary: boolean;
   registered_by_email: string | null;
   booking_intent_id: string | null;
@@ -142,6 +143,12 @@ export interface CheckoutSignedTokenPayload {
   exp: number;
 }
 
+export interface TicketAccessTokenPayload {
+  kind: "ticket_access";
+  bookingIntentId: string;
+  nonce: string;
+}
+
 export interface CheckoutStartResult {
   outcome: "otp_sent" | "rate_limited" | "registration_closed" | "invalid_selection" | "capacity_exceeded";
   message: string;
@@ -166,6 +173,8 @@ export interface CheckoutOtpResult {
   checkoutToken?: string;
   totalMinor?: number;
   currencyCode?: string;
+  ticketToken?: string;
+  ticketUrl?: string;
   attendees?: ConfirmedCheckoutAttendee[];
 }
 
@@ -185,6 +194,8 @@ export interface CheckoutPaymentResult {
   paymentAttemptId?: string;
   paymentUrl?: string;
   checkoutToken?: string;
+  ticketToken?: string;
+  ticketUrl?: string;
   attendees?: ConfirmedCheckoutAttendee[];
 }
 
@@ -194,6 +205,8 @@ export interface CheckoutStatusResult {
   bookingIntentId?: string;
   paymentAttemptId?: string;
   paymentAttemptStatus?: PaymentAttemptStatus;
+  ticketToken?: string;
+  ticketUrl?: string;
   event?: CheckoutTicketEvent;
   attendees?: ConfirmedCheckoutAttendee[];
 }

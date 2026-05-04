@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { CheckCircle2, Clock3, XCircle } from "lucide-react";
-import { EventTicketCard } from "@/components/public/event-ticket-card";
+import { TicketWallet } from "@/components/public/ticket-wallet";
 import type { CheckoutStatusResult } from "@/lib/types";
 
 const CHECKOUT_DRAFT_CLEAR_KEY = "checkout-drafts-clear-at";
@@ -131,17 +131,15 @@ export function CheckoutReturnClient({
       <h1 className="mt-4 font-title text-3xl font-black italic text-ink">{title}</h1>
       <p className="mt-3 text-sm leading-relaxed text-slate">{message}</p>
       {canShowTickets ? (
-        <div className="mt-8 grid w-full gap-5 text-left">
-          {ticketAttendees.map((attendee) => (
-            <EventTicketCard
-              key={attendee.registrationId}
-              event={ticketEvent!}
-              attendee={attendee}
-              qrSrc={`/api/qr?token=${encodeURIComponent(attendee.qrToken)}`}
-              mapLink={mapLink}
-            />
-          ))}
-        </div>
+        <TicketWallet
+          className="mt-8 text-left"
+          event={ticketEvent!}
+          attendees={ticketAttendees}
+          ticketToken={status?.ticketToken}
+          ticketUrl={status?.ticketUrl}
+          mapLink={mapLink}
+          showHeader={false}
+        />
       ) : status?.attendees?.length ? (
         <div className="mt-6 w-full rounded-2xl border border-slate/10 bg-white p-4 text-left">
           {status.attendees.map((attendee) => (

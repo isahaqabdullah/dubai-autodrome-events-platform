@@ -6,12 +6,14 @@ import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { EmailJobKind } from "@/lib/types";
 import { buildAbsoluteUrl } from "@/lib/utils";
 import { formatErrorMessage, getErrorInfo } from "@/lib/errors";
-import { buildConfirmationEmail, buildGroupConfirmationEmail } from "@/services/email-templates";
+import { buildConfirmationEmail, buildGroupConfirmationEmail, buildTicketDeliveryEmail } from "@/services/email-templates";
 import { getEventById } from "@/services/events";
 import { sendMail } from "@/services/mailer";
+import { getTicketWalletByBookingId } from "@/services/tickets";
 
 const CLAIM_BATCH_SIZE = 5;
 const LOCK_TTL_SECONDS = 120;
+const MAX_TICKET_DELIVERY_ATTEMPTS = 14;
 
 interface ClaimedJob {
   id: string;
@@ -19,6 +21,15 @@ interface ClaimedJob {
   payload: Record<string, unknown>;
   attempts: number;
   attempts_max: number;
+}
+
+interface ClaimedTicketDeliveryJob {
+  id: string;
+  booking_intent_id: string;
+  delivery_kind: "automatic" | "user_resend";
+  delivery_version: number;
+  recipient_email: string;
+  attempts: number;
 }
 
 interface GroupAttendeePayload {
@@ -114,7 +125,7 @@ async function handleRegistrationConfirmed(job: ClaimedJob) {
   const emailIntroLine = fc?.emailIntroLine ?? fc?.introLine ?? undefined;
   const emailDescriptionParagraphs = fc?.emailDescriptionParagraphs ?? fc?.descriptionParagraphs ?? undefined;
 
-  // Group booking — primary registrant gets all attendees' tickets
+  // Group booking: primary registrant gets all attendees' tickets.
   if (payload.attendees && payload.attendees.length > 1) {
     const attendeeWithoutCode = payload.attendees.find((attendee) => !attendee.manualCheckinCode);
     if (attendeeWithoutCode) {
@@ -210,7 +221,7 @@ async function dispatch(job: ClaimedJob) {
       return;
     case "verify_email":
     case "resend_qr":
-      // These only ever enter the queue via a stale-lock reclaim — i.e. the
+      // These only ever enter the queue via a stale-lock reclaim, i.e. the
       // original in-request send was killed mid-flight. The plaintext token
       // isn't in the payload (by design), so we can't safely re-send. Mark
       // failed so operators can follow up with the user.
@@ -257,12 +268,121 @@ async function finalizeFailure(job: ClaimedJob, error: unknown) {
     .eq("id", job.id);
 }
 
+function getNextTicketDeliveryAttempt(attempts: number) {
+  const retryDelaysSeconds = [
+    0,
+    60,
+    5 * 60,
+    15 * 60,
+    60 * 60,
+    6 * 60 * 60,
+    24 * 60 * 60
+  ];
+  const delaySeconds = retryDelaysSeconds[Math.min(Math.max(attempts - 1, 0), retryDelaysSeconds.length - 1)];
+  return new Date(Date.now() + delaySeconds * 1000).toISOString();
+}
+
+async function handleTicketDelivery(job: ClaimedTicketDeliveryJob) {
+  const supabase = createAdminSupabaseClient();
+  const wallet = await getTicketWalletByBookingId(job.booking_intent_id);
+
+  if (!wallet) {
+    throw new Error(`Ticket wallet not available for booking ${job.booking_intent_id}`);
+  }
+
+  const mail = buildTicketDeliveryEmail({
+    payerFullName: wallet.booking.payerFullName,
+    eventTitle: wallet.event.title,
+    eventStartAt: wallet.event.start_at,
+    eventEndAt: wallet.event.end_at,
+    eventTimezone: wallet.event.timezone,
+    venue: wallet.event.venue,
+    mapLink: wallet.event.form_config?.mapLink,
+    ticketUrl: wallet.ticketUrl,
+    attendees: wallet.attendees.map((attendee) => ({
+      fullName: attendee.fullName,
+      categoryTitle: attendee.categoryTitle,
+      ticketTitle: attendee.ticketTitle,
+      manualCheckinCode: attendee.manualCheckinCode
+    }))
+  });
+
+  const result = await sendMail({
+    to: job.recipient_email,
+    subject: mail.subject,
+    html: mail.html,
+    text: mail.text,
+    idempotencyKey: job.id
+  });
+
+  if (result.mode !== "resend") {
+    throw new Error("Ticket email provider is not configured; delivery was not accepted by an email provider.");
+  }
+
+  const acceptedAt = new Date().toISOString();
+  const { error: updateJobError } = await supabase
+    .from("ticket_delivery_jobs")
+    .update({
+      status: "accepted",
+      accepted_at: acceptedAt,
+      provider_message_id: result.providerMessageId,
+      last_error: null,
+      locked_at: null
+    })
+    .eq("id", job.id);
+
+  if (updateJobError) {
+    throw updateJobError;
+  }
+
+  const { error: updateRegistrationsError } = await supabase
+    .from("registrations")
+    .update({ confirmation_email_sent_at: acceptedAt })
+    .eq("booking_intent_id", job.booking_intent_id);
+
+  if (updateRegistrationsError) {
+    console.error("[ticket-delivery] accepted email but audit update failed", {
+      jobId: job.id,
+      bookingIntentId: job.booking_intent_id,
+      error: updateRegistrationsError.message
+    });
+  }
+}
+
+async function finalizeTicketDeliveryFailure(job: ClaimedTicketDeliveryJob, error: unknown) {
+  const exhausted = job.attempts >= MAX_TICKET_DELIVERY_ATTEMPTS;
+  const message = formatErrorMessage(error);
+  const errorInfo = getErrorInfo(error);
+
+  console.error("[ticket-delivery] job failed", {
+    jobId: job.id,
+    bookingIntentId: job.booking_intent_id,
+    attempts: job.attempts,
+    exhausted,
+    error: errorInfo
+  });
+
+  await createAdminSupabaseClient()
+    .from("ticket_delivery_jobs")
+    .update({
+      status: exhausted ? "failed" : "pending",
+      next_attempt_at: exhausted ? new Date().toISOString() : getNextTicketDeliveryAttempt(job.attempts),
+      last_error: message,
+      locked_at: null
+    })
+    .eq("id", job.id);
+}
+
 export interface EmailWorkerRunResult {
   claimed: number;
   sent: number;
   requeued: number;
   failed: number;
   swept: number;
+  ticketClaimed?: number;
+  ticketAccepted?: number;
+  ticketRequeued?: number;
+  ticketFailed?: number;
 }
 
 export async function runEmailWorker(): Promise<EmailWorkerRunResult> {
@@ -306,11 +426,43 @@ export async function runEmailWorker(): Promise<EmailWorkerRunResult> {
     console.error("[email-worker] sweeper failed", { error: sweepError.message });
   }
 
+  const { data: claimedTicketDeliveries, error: claimTicketError } = await supabase.rpc("claim_ticket_delivery_jobs", {
+    p_limit: CLAIM_BATCH_SIZE,
+    p_lock_ttl_seconds: LOCK_TTL_SECONDS
+  });
+
+  if (claimTicketError) {
+    throw claimTicketError;
+  }
+
+  const ticketJobs = (claimedTicketDeliveries ?? []) as ClaimedTicketDeliveryJob[];
+  let ticketAccepted = 0;
+  let ticketRequeued = 0;
+  let ticketFailed = 0;
+
+  for (const job of ticketJobs) {
+    try {
+      await handleTicketDelivery(job);
+      ticketAccepted += 1;
+    } catch (error) {
+      await finalizeTicketDeliveryFailure(job, error);
+      if (job.attempts >= MAX_TICKET_DELIVERY_ATTEMPTS) {
+        ticketFailed += 1;
+      } else {
+        ticketRequeued += 1;
+      }
+    }
+  }
+
   return {
     claimed: jobs.length,
     sent,
     requeued,
     failed,
-    swept: typeof sweptCount === "number" ? sweptCount : 0
+    swept: typeof sweptCount === "number" ? sweptCount : 0,
+    ticketClaimed: ticketJobs.length,
+    ticketAccepted,
+    ticketRequeued,
+    ticketFailed
   };
 }
