@@ -14,6 +14,14 @@ import { getTicketWalletByBookingId } from "@/services/tickets";
 const CLAIM_BATCH_SIZE = 5;
 const LOCK_TTL_SECONDS = 120;
 const MAX_TICKET_DELIVERY_ATTEMPTS = 14;
+const TICKET_WALLET_PENDING_RETRY_SECONDS = 15;
+
+class TicketWalletPendingError extends Error {
+  constructor(bookingIntentId: string) {
+    super(`Ticket wallet not available for booking ${bookingIntentId}`);
+    this.name = "TicketWalletPendingError";
+  }
+}
 
 interface ClaimedJob {
   id: string;
@@ -85,7 +93,7 @@ async function hydrateManualCheckinCodes(payload: RegistrationConfirmedPayload) 
     return payload;
   }
 
-  const { data, error } = await createAdminSupabaseClient()
+  const { data, error } = await createAdminSupabaseClient({ noStore: true })
     .from("registrations")
     .select("id, manual_checkin_code")
     .in("id", Array.from(registrationIds));
@@ -200,7 +208,7 @@ async function handleRegistrationConfirmed(job: ClaimedJob) {
     });
   }
 
-  const { error } = await createAdminSupabaseClient()
+  const { error } = await createAdminSupabaseClient({ noStore: true })
     .from("registrations")
     .update({ confirmation_email_sent_at: new Date().toISOString() })
     .eq("id", payload.registrationId);
@@ -236,7 +244,7 @@ async function dispatch(job: ClaimedJob) {
 }
 
 async function finalizeSuccess(jobId: string) {
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   await supabase
     .from("email_jobs")
     .update({ status: "sent", last_error: null, locked_at: null })
@@ -244,7 +252,7 @@ async function finalizeSuccess(jobId: string) {
 }
 
 async function finalizeFailure(job: ClaimedJob, error: unknown) {
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const message = formatErrorMessage(error);
   const errorInfo = getErrorInfo(error);
   const exhausted = job.attempts >= job.attempts_max;
@@ -283,11 +291,11 @@ function getNextTicketDeliveryAttempt(attempts: number) {
 }
 
 async function handleTicketDelivery(job: ClaimedTicketDeliveryJob) {
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const wallet = await getTicketWalletByBookingId(job.booking_intent_id);
 
   if (!wallet) {
-    throw new Error(`Ticket wallet not available for booking ${job.booking_intent_id}`);
+    throw new TicketWalletPendingError(job.booking_intent_id);
   }
 
   const mail = buildTicketDeliveryEmail({
@@ -353,8 +361,10 @@ async function finalizeTicketDeliveryFailure(job: ClaimedTicketDeliveryJob, erro
   const exhausted = job.attempts >= MAX_TICKET_DELIVERY_ATTEMPTS;
   const message = formatErrorMessage(error);
   const errorInfo = getErrorInfo(error);
+  const walletPending = error instanceof TicketWalletPendingError;
 
-  console.error("[ticket-delivery] job failed", {
+  const log = walletPending ? console.info : console.error;
+  log(walletPending ? "[ticket-delivery] wallet pending; retry scheduled" : "[ticket-delivery] job failed", {
     jobId: job.id,
     bookingIntentId: job.booking_intent_id,
     attempts: job.attempts,
@@ -362,11 +372,15 @@ async function finalizeTicketDeliveryFailure(job: ClaimedTicketDeliveryJob, erro
     error: errorInfo
   });
 
-  await createAdminSupabaseClient()
+  await createAdminSupabaseClient({ noStore: true })
     .from("ticket_delivery_jobs")
     .update({
       status: exhausted ? "failed" : "pending",
-      next_attempt_at: exhausted ? new Date().toISOString() : getNextTicketDeliveryAttempt(job.attempts),
+      next_attempt_at: exhausted
+        ? new Date().toISOString()
+        : walletPending
+          ? new Date(Date.now() + TICKET_WALLET_PENDING_RETRY_SECONDS * 1000).toISOString()
+          : getNextTicketDeliveryAttempt(job.attempts),
       last_error: message,
       locked_at: null
     })
@@ -386,7 +400,7 @@ export interface EmailWorkerRunResult {
 }
 
 export async function runEmailWorker(): Promise<EmailWorkerRunResult> {
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
 
   const { data: claimed, error: claimError } = await supabase.rpc("claim_email_jobs", {
     p_limit: CLAIM_BATCH_SIZE,

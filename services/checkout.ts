@@ -19,7 +19,7 @@ import type {
   EventCatalogOption
 } from "@/lib/types";
 import { normalizeEmail, normalizePhone, getRegistrationWindowState, isSyntheticEmail } from "@/lib/utils";
-import type { CheckoutStartInput } from "@/lib/validation/checkout";
+import type { CheckoutCreatePaymentInput, CheckoutStartInput } from "@/lib/validation/checkout";
 import { buildVerificationEmail } from "@/services/email-templates";
 import { executeEmailJob } from "@/services/email-jobs";
 import { getEventById } from "@/services/events";
@@ -35,12 +35,16 @@ import {
   createNgeniusOrder,
   getNgeniusOrder,
   getNgeniusOrderAmount,
-  interpretNgeniusOrder
+  interpretNgeniusOrder,
+  NgeniusApiError,
+  prefetchNgeniusAccessToken
 } from "@/services/ngenius";
+import type { NgeniusOrderItem } from "@/services/ngenius";
 
 const CHECKOUT_HOLD_MINUTES = 25;
 const MAX_PAYMENT_ATTEMPTS = 5;
 export const HOLD_EXPIRED_AFTER_PAYMENT_REASON = "Payment succeeded after the capacity hold expired.";
+const NGENIUS_RECONCILE_AUTH_REASON = "N-Genius authorization failed during payment status reconciliation.";
 
 export interface CheckoutRequestMetadata {
   ipAddress: string | null;
@@ -58,12 +62,14 @@ type BookingRow = {
   payer_email_normalized: string;
   payer_full_name: string;
   payer_phone: string | null;
+  payer_uae_resident: boolean;
   total_minor: number;
   currency_code: string;
   attempt_count: number;
   verification_token_hash: string | null;
   verification_expires_at: string | null;
   email_verified_at: string | null;
+  held_until: string | null;
   manual_action_reason: string | null;
   ticket_access_nonce: string;
 };
@@ -105,6 +111,30 @@ type CheckoutStatusPaymentAttempt = {
   currency_code: string;
 };
 
+function checkoutTimingEnabled() {
+  return process.env.CHECKOUT_TIMING_LOGS === "1" || process.env.CHECKOUT_TIMING_LOGS === "true";
+}
+
+function createCheckoutTimer(label: string) {
+  const enabled = checkoutTimingEnabled();
+  const startedAt = Date.now();
+  let previousAt = startedAt;
+
+  return function mark(step: string, metadata: Record<string, unknown> = {}) {
+    if (!enabled) return;
+
+    const now = Date.now();
+    console.info("[checkout-timing]", {
+      label,
+      step,
+      stepMs: now - previousAt,
+      totalMs: now - startedAt,
+      ...metadata
+    });
+    previousAt = now;
+  };
+}
+
 function generateVerificationCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -118,6 +148,10 @@ function splitName(fullName: string) {
   const firstName = parts[0] ?? fullName;
   const lastName = parts.length > 1 ? parts.slice(1).join(" ") : firstName;
   return { firstName, lastName };
+}
+
+function displayNameForVerification(fullName: string) {
+  return /^Attendee \d+$/.test(fullName.trim()) ? "there" : fullName;
 }
 
 function signForBooking(booking: Pick<BookingRow, "id" | "payer_email_normalized">) {
@@ -161,13 +195,15 @@ function findCatalogOption(options: EventCatalogOption[], publicId: string) {
   return options.find((option) => option.publicId === publicId && option.active && !option.soldOut) ?? null;
 }
 
-function normalizeAttendeeDrafts(input: CheckoutStartInput, categories: EventCatalogOption[], addons: EventCatalogOption[]) {
-  const primaryFullName = `${input.firstName} ${input.lastName}`.trim();
+function normalizeAttendeeDrafts(input: CheckoutStartInput, categories: EventCatalogOption[]) {
+  const primaryInputFirstName = input.firstName?.trim() ?? "";
+  const primaryInputLastName = input.lastName?.trim() ?? "";
+  const primaryFullName = `${primaryInputFirstName} ${primaryInputLastName}`.trim();
   const sourceAttendees = input.attendees?.length
     ? input.attendees
     : [{
-      firstName: input.firstName,
-      lastName: input.lastName,
+      firstName: primaryInputFirstName,
+      lastName: primaryInputLastName,
       email: input.email,
       age: input.age,
       categoryId: input.categoryId,
@@ -179,28 +215,26 @@ function normalizeAttendeeDrafts(input: CheckoutStartInput, categories: EventCat
   for (let index = 0; index < sourceAttendees.length; index++) {
     const attendee = sourceAttendees[index];
     const category = findCatalogOption(categories, attendee.categoryId);
-    const addonId = attendee.addonId?.trim();
-    const addon = addonId ? findCatalogOption(addons, addonId) : null;
 
-    if (!category || (addonId && !addon)) {
-      throw new Error("The selected category or add-on is no longer available.");
+    if (!category) {
+      throw new Error("The selected ticket type is no longer available.");
     }
 
     const isPrimary = index === 0;
-    const firstName = isPrimary ? input.firstName : attendee.firstName || "";
-    const lastName = isPrimary ? input.lastName : attendee.lastName || "";
+    const firstName = isPrimary ? primaryInputFirstName : attendee.firstName?.trim() || "";
+    const lastName = isPrimary ? primaryInputLastName : attendee.lastName?.trim() || "";
     const fullName = isPrimary ? primaryFullName : `${firstName} ${lastName}`.trim();
     const email = isPrimary ? input.email : attendee.email?.trim() || null;
 
     attendees.push({
       firstName,
       lastName,
-      fullName: fullName || primaryFullName,
+      fullName: fullName || `Attendee ${index + 1}`,
       email,
       emailNormalized: email ? normalizeEmail(email) : null,
       age: isPrimary ? input.age ?? null : attendee.age ?? null,
       category,
-      addon,
+      addon: null,
       isPrimary
     });
   }
@@ -218,7 +252,7 @@ async function insertBooking(input: {
 }) {
   const verificationExpiresAt = new Date(Date.now() + VERIFICATION_TOKEN_TTL_MINUTES * 60 * 1000).toISOString();
   const totalMinor = input.attendees.reduce((sum, attendee) => {
-    return sum + attendee.category.priceMinor + (attendee.addon?.priceMinor ?? 0);
+    return sum + attendee.category.priceMinor;
   }, 0);
   const currencyCode = input.attendees.find((attendee) => attendee.category.currencyCode)?.category.currencyCode ?? "AED";
   const primary = input.attendees[0];
@@ -289,23 +323,6 @@ async function insertBooking(input: {
       sort_order: index * 2
     }];
 
-    if (attendee.addon) {
-      rows.push({
-        booking_intent_id: booking.id,
-        attendee_id: attendeeId,
-        item_type: "addon",
-        event_addon_id: attendee.addon.id,
-        public_id: attendee.addon.publicId,
-        title: attendee.addon.title,
-        description: attendee.addon.description,
-        quantity: 1,
-        unit_price_minor: attendee.addon.priceMinor,
-        total_price_minor: attendee.addon.priceMinor,
-        currency_code: attendee.addon.currencyCode,
-        sort_order: index * 2 + 1
-      } as typeof rows[number] & { event_addon_id: string });
-    }
-
     return rows;
   });
 
@@ -315,6 +332,34 @@ async function insertBooking(input: {
   }
 
   return booking as BookingRow;
+}
+
+async function sendCheckoutVerificationEmail(input: {
+  booking: Pick<BookingRow, "id" | "payer_full_name">;
+  event: Pick<NonNullable<Awaited<ReturnType<typeof getEventById>>>, "id" | "title">;
+  email: string;
+  verificationCode: string;
+}) {
+  await executeEmailJob("verify_email", {
+    bookingIntentId: input.booking.id,
+    eventId: input.event.id,
+    email: input.email.trim(),
+    fullName: input.booking.payer_full_name
+  }, async (job) => {
+    const mail = buildVerificationEmail({
+      fullName: displayNameForVerification(input.booking.payer_full_name),
+      eventTitle: input.event.title,
+      otpCode: input.verificationCode
+    });
+
+    await sendMail({
+      to: input.email.trim(),
+      subject: mail.subject,
+      html: mail.html,
+      text: mail.text,
+      idempotencyKey: job.id
+    });
+  });
 }
 
 export async function startCheckout(
@@ -330,7 +375,7 @@ export async function startCheckout(
     };
   }
 
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const rateLimit = await checkCheckoutRateLimit({
     supabase,
     key: `${metadata.ipAddress ?? "unknown"}:${input.eventId}`,
@@ -356,36 +401,135 @@ export async function startCheckout(
   const catalog = await getEventCatalog(event);
   let attendees: AttendeeDraft[];
   try {
-    attendees = normalizeAttendeeDrafts(input, catalog.categories, catalog.addons);
+    attendees = normalizeAttendeeDrafts(input, catalog.categories);
   } catch (error) {
     return {
       outcome: "invalid_selection",
-      message: error instanceof Error ? error.message : "The selected category or add-on is no longer available."
+      message: error instanceof Error ? error.message : "The selected ticket type or activity category is no longer available."
     };
   }
 
   const verificationCode = generateVerificationCode();
   const booking = await insertBooking({ supabase, checkoutInput: input, attendees, event, verificationCode, metadata });
+  const reservation = await reserveCapacity(supabase, booking.id, { advancePaymentPending: false });
 
-  await executeEmailJob("verify_email", {
+  if (!reservation || reservation.outcome !== "reserved") {
+    const message = reservation?.message ?? "Unable to reserve capacity.";
+    await supabase.from("booking_intents").update({
+      status: "expired",
+      manual_action_reason: message
+    }).eq("id", booking.id);
+
+    return {
+      outcome: reservation?.outcome === "capacity_exceeded" ? "capacity_exceeded" : "invalid_selection",
+      message
+    };
+  }
+
+  await sendCheckoutVerificationEmail({
+    booking,
+    event,
+    email: input.email,
+    verificationCode
+  });
+
+  return {
+    outcome: "otp_sent",
+    message: "Verification code sent. Enter the 6-digit OTP to continue.",
     bookingIntentId: booking.id,
-    eventId: event.id,
-    email: input.email.trim(),
-    fullName: booking.payer_full_name
-  }, async (job) => {
-    const mail = buildVerificationEmail({
-      fullName: booking.payer_full_name,
-      eventTitle: event.title,
-      otpCode: verificationCode
-    });
+    checkoutToken: signForBooking(booking),
+    totalMinor: booking.total_minor,
+    currencyCode: booking.currency_code
+  };
+}
 
-    await sendMail({
-      to: input.email.trim(),
-      subject: mail.subject,
-      html: mail.html,
-      text: mail.text,
-      idempotencyKey: job.id
-    });
+export async function resendCheckoutOtp(input: {
+  checkoutToken: string;
+  metadata?: CheckoutRequestMetadata;
+}): Promise<CheckoutStartResult> {
+  if (isDemoMode()) {
+    return {
+      outcome: "otp_sent",
+      message: "Verification code sent. Enter the 6-digit OTP to continue.",
+      totalMinor: 0,
+      currencyCode: "AED"
+    };
+  }
+
+  const supabase = createAdminSupabaseClient({ noStore: true });
+  const booking = await getBookingByToken(supabase, input.checkoutToken);
+
+  if (booking.status === "email_verified") {
+    return {
+      outcome: "invalid_selection",
+      message: "This email is already verified. Continue to payment."
+    };
+  }
+
+  if (booking.status !== "otp_sent") {
+    return {
+      outcome: "invalid_selection",
+      message: "This booking can no longer receive a new verification code. Select tickets again to restart."
+    };
+  }
+
+  if (booking.held_until && new Date(booking.held_until).getTime() < Date.now()) {
+    return {
+      outcome: "capacity_exceeded",
+      message: "This ticket hold has expired. Select tickets again to restart."
+    };
+  }
+
+  const bookingLimit = await checkCheckoutRateLimit({
+    supabase,
+    key: booking.id,
+    action: "checkout_resend_otp_booking",
+    maxRequests: 3,
+    windowSeconds: VERIFICATION_TOKEN_TTL_MINUTES * 60
+  });
+  const ipLimit = await checkCheckoutRateLimit({
+    supabase,
+    key: `${input.metadata?.ipAddress ?? "unknown"}:${booking.id}`,
+    action: "checkout_resend_otp_ip",
+    maxRequests: 3,
+    windowSeconds: RATE_LIMIT_WINDOW_SECONDS
+  });
+
+  if (!bookingLimit?.allowed || !ipLimit?.allowed) {
+    return {
+      outcome: "rate_limited",
+      message: `Too many resend attempts. Please wait ${Math.max(
+        bookingLimit?.retry_after_seconds ?? 0,
+        ipLimit?.retry_after_seconds ?? 0,
+        60
+      )} seconds before trying again.`
+    };
+  }
+
+  const event = await getEventById(booking.event_id);
+  if (!event) {
+    throw new Error("Event not found.");
+  }
+
+  const verificationCode = generateVerificationCode();
+  const verificationExpiresAt = new Date(Date.now() + VERIFICATION_TOKEN_TTL_MINUTES * 60 * 1000).toISOString();
+  const { error } = await supabase
+    .from("booking_intents")
+    .update({
+      verification_token_hash: hashOpaqueToken(verificationCode),
+      verification_expires_at: verificationExpiresAt
+    })
+    .eq("id", booking.id);
+
+  if (error) {
+    throw error;
+  }
+
+  await sendCheckoutVerificationEmail({
+    booking,
+    event,
+    email: booking.payer_email_raw,
+    verificationCode
   });
 
   return {
@@ -418,10 +562,15 @@ async function getBookingByToken(supabase: Supabase, token: string) {
   return data as BookingRow;
 }
 
-async function reserveCapacity(supabase: Supabase, bookingIntentId: string) {
+async function reserveCapacity(
+  supabase: Supabase,
+  bookingIntentId: string,
+  options?: { advancePaymentPending?: boolean }
+) {
   const { data, error } = await supabase.rpc("reserve_booking_capacity", {
     p_booking_intent_id: bookingIntentId,
-    p_hold_minutes: CHECKOUT_HOLD_MINUTES
+    p_hold_minutes: CHECKOUT_HOLD_MINUTES,
+    p_advance_payment_pending: options?.advancePaymentPending ?? true
   });
 
   if (error) {
@@ -459,6 +608,306 @@ async function loadBookingAttendees(supabase: Supabase, bookingIntentId: string)
   }
 
   return data ?? [];
+}
+
+async function loadBookingItemsByAttendee(supabase: Supabase, bookingIntentId: string) {
+  const { data, error } = await supabase
+    .from("booking_intent_items")
+    .select("attendee_id, item_type, public_id")
+    .eq("booking_intent_id", bookingIntentId);
+
+  if (error) {
+    throw error;
+  }
+
+  const byAttendee = new Map<string, { categoryId: string | null; addonId: string | null }>();
+
+  for (const row of data ?? []) {
+    const attendeeId = row.attendee_id as string | null;
+    if (!attendeeId) continue;
+    const current = byAttendee.get(attendeeId) ?? { categoryId: null, addonId: null };
+    if (row.item_type === "category") {
+      current.categoryId = row.public_id as string;
+    }
+    if (row.item_type === "addon") {
+      current.addonId = row.public_id as string;
+    }
+    byAttendee.set(attendeeId, current);
+  }
+
+  return byAttendee;
+}
+
+async function loadCategoryItemIdsByAttendee(supabase: Supabase, bookingIntentId: string) {
+  const { data, error } = await supabase
+    .from("booking_intent_items")
+    .select("id, attendee_id")
+    .eq("booking_intent_id", bookingIntentId)
+    .eq("item_type", "category");
+
+  if (error) {
+    throw error;
+  }
+
+  return new Map(
+    (data ?? [])
+      .filter((row) => row.attendee_id)
+      .map((row) => [row.attendee_id as string, row.id as string])
+  );
+}
+
+function incrementCount(counts: Map<string, number>, key: string | null | undefined) {
+  if (!key) return;
+  counts.set(key, (counts.get(key) ?? 0) + 1);
+}
+
+function countMapsEqual(left: Map<string, number>, right: Map<string, number>) {
+  if (left.size !== right.size) return false;
+  for (const [key, value] of left) {
+    if (right.get(key) !== value) return false;
+  }
+  return true;
+}
+
+async function updateBookingContactDetails(
+  supabase: Supabase,
+  bookingIntentId: string,
+  contact: Pick<CheckoutCreatePaymentInput, "phone" | "uaeResident">
+) {
+  const normalizedPhone = normalizePhone(contact.phone);
+
+  const [bookingResult, attendeeResult] = await Promise.all([
+    supabase
+      .from("booking_intents")
+      .update({
+        payer_phone: normalizedPhone,
+        payer_uae_resident: contact.uaeResident
+      })
+      .eq("id", bookingIntentId),
+    supabase
+      .from("booking_attendees")
+      .update({
+        phone: normalizedPhone,
+        uae_resident: contact.uaeResident
+      })
+      .eq("booking_intent_id", bookingIntentId)
+      .eq("attendee_index", 0)
+  ]);
+
+  if (bookingResult.error) {
+    throw bookingResult.error;
+  }
+
+  if (attendeeResult.error) {
+    throw attendeeResult.error;
+  }
+}
+
+async function completeBookingAttendees(
+  supabase: Supabase,
+  booking: BookingRow,
+  categories: EventCatalogOption[],
+  addons: EventCatalogOption[],
+  attendees: NonNullable<CheckoutCreatePaymentInput["attendees"]>
+) {
+  const [existingAttendees, itemsByAttendee, categoryItemIdsByAttendee] = await Promise.all([
+    loadBookingAttendees(supabase, booking.id),
+    loadBookingItemsByAttendee(supabase, booking.id),
+    loadCategoryItemIdsByAttendee(supabase, booking.id)
+  ]);
+
+  if (existingAttendees.length !== attendees.length) {
+    return { ok: false as const, message: "Attendee details no longer match the reserved tickets. Start again to refresh the booking." };
+  }
+
+  const reservedCategoryCounts = new Map<string, number>();
+  for (const itemSelection of itemsByAttendee.values()) {
+    incrementCount(reservedCategoryCounts, itemSelection.categoryId);
+  }
+
+  const requestedCategoryCounts = new Map<string, number>();
+  const categoryUpdates: Array<{
+    id: string;
+    event_category_id: string;
+    public_id: string;
+    title: string;
+    description: string;
+    unit_price_minor: number;
+    total_price_minor: number;
+    currency_code: string;
+    sort_order: number;
+  }> = [];
+  const addonRows: Array<{
+    booking_intent_id: string;
+    attendee_id: string;
+    item_type: "addon";
+    event_addon_id: string;
+    public_id: string;
+    title: string;
+    description: string;
+    quantity: number;
+    unit_price_minor: number;
+    total_price_minor: number;
+    currency_code: string;
+    sort_order: number;
+  }> = [];
+  const attendeeRows = existingAttendees.map((row, index) => {
+    const attendee = attendees[index];
+    const categoryItemId = categoryItemIdsByAttendee.get(row.id as string);
+    const category = findCatalogOption(categories, attendee.categoryId);
+    const addon = findCatalogOption(addons, attendee.addonId);
+
+    if (!categoryItemId || !category || !addon) {
+      return null;
+    }
+
+    incrementCount(requestedCategoryCounts, category.publicId);
+    categoryUpdates.push({
+      id: categoryItemId,
+      event_category_id: category.id,
+      public_id: category.publicId,
+      title: category.title,
+      description: category.description,
+      unit_price_minor: category.priceMinor,
+      total_price_minor: category.priceMinor,
+      currency_code: category.currencyCode,
+      sort_order: index * 2
+    });
+
+    const attendeeEmail = attendee.email?.trim() || null;
+    addonRows.push({
+      booking_intent_id: booking.id,
+      attendee_id: row.id as string,
+      item_type: "addon",
+      event_addon_id: addon.id,
+      public_id: addon.publicId,
+      title: addon.title,
+      description: addon.description,
+      quantity: 1,
+      unit_price_minor: 0,
+      total_price_minor: 0,
+      currency_code: category.currencyCode,
+      sort_order: index * 2 + 1
+    });
+
+    return {
+      booking_intent_id: booking.id,
+      attendee_index: index,
+      full_name: `${attendee.firstName} ${attendee.lastName}`.replace(/\s+/g, " ").trim(),
+      email_raw: index === 0 ? booking.payer_email_raw : attendeeEmail,
+      email_normalized: index === 0 ? booking.payer_email_normalized : attendeeEmail ? normalizeEmail(attendeeEmail) : null,
+      age: attendee.age
+    };
+  });
+
+  if (attendeeRows.some((row) => row === null)) {
+    return { ok: false as const, message: "Attendee ticket assignments or activity preferences are no longer available." };
+  }
+
+  if (!countMapsEqual(reservedCategoryCounts, requestedCategoryCounts)) {
+    return { ok: false as const, message: "Attendee ticket assignments no longer match the reserved ticket quantities." };
+  }
+
+  const completeRows = attendeeRows.filter((row): row is Exclude<(typeof attendeeRows)[number], null> => row !== null);
+  const primary = attendeeRows[0];
+  const writeOperations: Array<Promise<unknown>> = [
+    (async () => {
+      const { error: attendeeError } = await supabase
+        .from("booking_attendees")
+        .upsert(completeRows, { onConflict: "booking_intent_id,attendee_index" });
+
+      if (attendeeError) {
+        throw attendeeError;
+      }
+    })(),
+    Promise.all(categoryUpdates.map(async (categoryUpdate) => {
+      const { id, ...values } = categoryUpdate;
+      const { error: categoryUpdateError } = await supabase
+        .from("booking_intent_items")
+        .update(values)
+        .eq("id", id);
+
+      if (categoryUpdateError) {
+        throw categoryUpdateError;
+      }
+    })),
+    (async () => {
+      const { error: deleteAddonError } = await supabase
+        .from("booking_intent_items")
+        .delete()
+        .eq("booking_intent_id", booking.id)
+        .eq("item_type", "addon");
+
+      if (deleteAddonError) {
+        throw deleteAddonError;
+      }
+
+      if (addonRows.length === 0) return;
+
+      const { error: addonError } = await supabase
+        .from("booking_intent_items")
+        .insert(addonRows);
+
+      if (addonError) {
+        throw addonError;
+      }
+    })()
+  ];
+
+  if (primary) {
+    writeOperations.push((async () => {
+      const { error: bookingError } = await supabase
+        .from("booking_intents")
+        .update({
+          payer_full_name: primary.full_name,
+          payer_age: primary.age
+        })
+        .eq("id", booking.id);
+
+      if (bookingError) {
+        throw bookingError;
+      }
+    })());
+  }
+
+  await Promise.all(writeOperations);
+
+  return { ok: true as const };
+}
+
+async function ensureBookingAttendeesComplete(supabase: Supabase, bookingIntentId: string) {
+  const attendees = await loadBookingAttendees(supabase, bookingIntentId);
+  const itemsByAttendee = await loadBookingItemsByAttendee(supabase, bookingIntentId);
+  const incomplete = attendees.some((row) => {
+    const fullName = typeof row.full_name === "string" ? row.full_name.trim() : "";
+    const itemSelection = itemsByAttendee.get(row.id as string);
+    return !fullName || row.age === null || row.age === undefined || !itemSelection?.addonId;
+  });
+
+  if (incomplete) {
+    return { ok: false as const, message: "Complete attendee names, ages, and activity preferences before continuing to payment." };
+  }
+
+  return { ok: true as const };
+}
+
+function buildPaidOrderItemsFromAttendees(
+  attendees: NonNullable<CheckoutCreatePaymentInput["attendees"]>,
+  categories: EventCatalogOption[]
+): NgeniusOrderItem[] {
+  return attendees.flatMap((attendee) => {
+    const category = findCatalogOption(categories, attendee.categoryId);
+
+    if (!category || category.priceMinor <= 0) {
+      return [];
+    }
+
+    return [{
+      name: category.title,
+      quantity: 1,
+      amountMinor: category.priceMinor
+    }];
+  });
 }
 
 async function fulfillBooking(input: {
@@ -565,7 +1014,7 @@ export async function verifyCheckoutOtp(input: {
     };
   }
 
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const booking = await getBookingByToken(supabase, input.checkoutToken);
 
   if (booking.status === "fulfilled") {
@@ -639,10 +1088,25 @@ export async function verifyCheckoutOtp(input: {
   };
 }
 
-export async function createCheckoutPayment(checkoutToken: string): Promise<CheckoutPaymentResult> {
-  const supabase = createAdminSupabaseClient();
+export async function createCheckoutPayment(
+  checkoutToken: string,
+  attendees?: CheckoutCreatePaymentInput["attendees"],
+  contact?: Pick<CheckoutCreatePaymentInput, "phone" | "uaeResident">
+): Promise<CheckoutPaymentResult> {
+  const markTiming = createCheckoutTimer("create-payment");
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const booking = await getBookingByToken(supabase, checkoutToken);
+  markTiming("load_booking", {
+    bookingIntentId: booking.id,
+    status: booking.status,
+    totalMinor: booking.total_minor
+  });
   const event = await getEventById(booking.event_id);
+  markTiming("load_event", {
+    bookingIntentId: booking.id,
+    eventId: booking.event_id,
+    found: Boolean(event)
+  });
 
   if (!event) {
     throw new Error("Event not found.");
@@ -710,6 +1174,10 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
     action: "checkout_create_payment",
     maxRequests: 10
   });
+  markTiming("rate_limit", {
+    bookingIntentId: booking.id,
+    allowed: Boolean(rateLimit?.allowed)
+  });
 
   if (!rateLimit?.allowed) {
     return {
@@ -722,11 +1190,73 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
     return { outcome: "invalid", message: "This booking is not ready for payment." };
   }
 
+  if (booking.total_minor > 0) {
+    void prefetchNgeniusAccessToken().catch((error) => {
+      markTiming("prefetch_ngenius_token_failed", {
+        bookingIntentId: booking.id,
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    });
+  }
+
+  let attendeeDetailsCompleted = false;
+  let paidOrderItems: NgeniusOrderItem[] | null = null;
+  if (attendees?.length) {
+    const catalog = await getEventCatalog(event);
+    markTiming("load_catalog", {
+      bookingIntentId: booking.id,
+      categoryCount: catalog.categories.length,
+      addonCount: catalog.addons.length
+    });
+    const completed = await completeBookingAttendees(supabase, booking, catalog.categories, catalog.addons, attendees);
+    markTiming("complete_attendees", {
+      bookingIntentId: booking.id,
+      attendeeCount: attendees.length,
+      ok: completed.ok
+    });
+    if (!completed.ok) {
+      return { outcome: "invalid", message: completed.message };
+    }
+    attendeeDetailsCompleted = true;
+    paidOrderItems = buildPaidOrderItemsFromAttendees(attendees, catalog.categories);
+    const primary = attendees[0];
+    if (primary) {
+      booking.payer_full_name = `${primary.firstName} ${primary.lastName}`.replace(/\s+/g, " ").trim();
+    }
+  }
+
+  if (contact) {
+    await updateBookingContactDetails(supabase, booking.id, contact);
+    markTiming("update_contact", {
+      bookingIntentId: booking.id
+    });
+    booking.payer_phone = normalizePhone(contact.phone);
+    booking.payer_uae_resident = contact.uaeResident;
+  }
+
+  if (!attendeeDetailsCompleted) {
+    const attendeeCompletion = await ensureBookingAttendeesComplete(supabase, booking.id);
+    markTiming("ensure_attendees_complete", {
+      bookingIntentId: booking.id,
+      ok: attendeeCompletion.ok
+    });
+    if (!attendeeCompletion.ok) {
+      return { outcome: "invalid", message: attendeeCompletion.message };
+    }
+  }
+
   if (booking.total_minor === 0) {
     await supabase.from("booking_intents").update({
       declaration_accepted_at: new Date().toISOString()
     }).eq("id", booking.id);
+    markTiming("accept_declaration", {
+      bookingIntentId: booking.id
+    });
     const reservation = await reserveCapacity(supabase, booking.id);
+    markTiming("reserve_free_capacity", {
+      bookingIntentId: booking.id,
+      outcome: reservation?.outcome
+    });
     if (!reservation || reservation.outcome !== "reserved") {
       return {
         outcome: reservation?.outcome === "capacity_exceeded" ? "capacity_exceeded" : "manual_action_required",
@@ -745,6 +1275,11 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
   }
 
   const preparedAttempt = await preparePaymentAttempt(supabase, booking.id);
+  markTiming("prepare_payment_attempt", {
+    bookingIntentId: booking.id,
+    outcome: preparedAttempt?.outcome,
+    paymentAttemptId: preparedAttempt?.payment_attempt_id
+  });
   if (!preparedAttempt) {
     return { outcome: "manual_action_required", message: "Unable to prepare payment attempt." };
   }
@@ -786,14 +1321,33 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
     return { outcome: "manual_action_required", message: "Payment attempt was not prepared correctly." };
   }
 
-  const { data: itemRows, error: itemError } = await supabase
-    .from("booking_intent_items")
-    .select("title, quantity, total_price_minor")
-    .eq("booking_intent_id", booking.id)
-    .order("sort_order", { ascending: true });
+  if (!paidOrderItems) {
+    const { data: itemRows, error: itemError } = await supabase
+      .from("booking_intent_items")
+      .select("title, quantity, total_price_minor")
+      .eq("booking_intent_id", booking.id)
+      .order("sort_order", { ascending: true });
+    markTiming("load_order_items", {
+      bookingIntentId: booking.id,
+      itemCount: itemRows?.length ?? 0
+    });
 
-  if (itemError) {
-    throw itemError;
+    if (itemError) {
+      throw itemError;
+    }
+
+    paidOrderItems = (itemRows ?? [])
+      .filter((item: Record<string, unknown>) => (item.total_price_minor as number) > 0)
+      .map((item: Record<string, unknown>) => ({
+        name: item.title as string,
+        quantity: item.quantity as number,
+        amountMinor: item.total_price_minor as number
+      }));
+  } else {
+    markTiming("build_order_items_from_attendees", {
+      bookingIntentId: booking.id,
+      itemCount: paidOrderItems.length
+    });
   }
 
   const { firstName, lastName } = splitName(booking.payer_full_name);
@@ -810,11 +1364,11 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
       firstName,
       lastName,
       checkoutToken,
-      items: (itemRows ?? []).map((item: Record<string, unknown>) => ({
-        name: item.title as string,
-        quantity: item.quantity as number,
-        amountMinor: item.total_price_minor as number
-      }))
+      items: paidOrderItems
+    });
+    markTiming("create_ngenius_order", {
+      bookingIntentId: booking.id,
+      paymentAttemptId: preparedAttempt.payment_attempt_id
     });
 
     const { error: updateAttemptError } = await supabase.from("payment_attempts").update({
@@ -823,6 +1377,10 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
       payment_href: order.paymentHref,
       raw_order_response: order.raw
     }).eq("id", preparedAttempt.payment_attempt_id);
+    markTiming("store_ngenius_order", {
+      bookingIntentId: booking.id,
+      paymentAttemptId: preparedAttempt.payment_attempt_id
+    });
 
     if (updateAttemptError) {
       throw updateAttemptError;
@@ -838,6 +1396,11 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unable to create N-Genius order.";
+    markTiming("create_ngenius_order_failed", {
+      bookingIntentId: booking.id,
+      paymentAttemptId: preparedAttempt.payment_attempt_id,
+      error: message
+    });
     await supabase.from("payment_attempts").update({
       status: "manual_action_required",
       last_error: message
@@ -851,8 +1414,13 @@ export async function createCheckoutPayment(checkoutToken: string): Promise<Chec
 }
 
 export async function getCheckoutStatus(checkoutToken: string): Promise<CheckoutStatusResult> {
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const booking = await getBookingByToken(supabase, checkoutToken);
+  if (booking.status === "fulfilled") {
+    await ensureAutomaticTicketDelivery(supabase, booking.id);
+    return buildFulfilledCheckoutStatus(supabase, booking, null);
+  }
+
   const { data: attempt } = await supabase
     .from("payment_attempts")
     .select("id, booking_intent_id, status, ni_order_reference, amount_minor, currency_code")
@@ -860,6 +1428,15 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
     .order("attempt_number", { ascending: false })
     .limit(1)
     .maybeSingle();
+
+  const recoveredIssuedTickets = await recoverIssuedTicketsForStatus(
+    supabase,
+    booking,
+    attempt as CheckoutStatusPaymentAttempt | null
+  );
+  if (recoveredIssuedTickets) {
+    return recoveredIssuedTickets;
+  }
 
   const statusReconcileLimit = await checkCheckoutRateLimit({
     supabase,
@@ -887,24 +1464,9 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
     return buildFulfilledCheckoutStatus(supabase, currentBooking, currentAttempt);
   }
 
-  const canRecoverIssuedTickets =
-    currentBooking.status === "paid" ||
-    currentAttempt?.status === "paid" ||
-    (currentBooking.status === "manual_action_required" &&
-      currentBooking.manual_action_reason === HOLD_EXPIRED_AFTER_PAYMENT_REASON);
-
-  if (canRecoverIssuedTickets) {
-    const attendees = await loadFulfilledTicketAttendees(supabase, currentBooking);
-    if (attendees.length > 0) {
-      await markBookingFulfilledAfterTicketIssue({
-        supabase,
-        bookingIntentId: currentBooking.id,
-        paymentAttemptId: currentAttempt?.id,
-        recoverManualHoldExpired: currentBooking.status === "manual_action_required"
-      });
-      await ensureAutomaticTicketDelivery(supabase, currentBooking.id);
-      return buildFulfilledCheckoutStatus(supabase, { ...currentBooking, status: "fulfilled" }, currentAttempt, attendees);
-    }
+  const recoveredRefreshedTickets = await recoverIssuedTicketsForStatus(supabase, currentBooking, currentAttempt);
+  if (recoveredRefreshedTickets) {
+    return recoveredRefreshedTickets;
   }
 
   if (currentAttempt?.status === "paid" && currentBooking.total_minor > 0) {
@@ -922,18 +1484,83 @@ export async function getCheckoutStatus(checkoutToken: string): Promise<Checkout
     };
   }
 
+  const effectiveStatus = getEffectiveCheckoutStatus(currentBooking.status, currentAttempt?.status ?? null);
+
   return {
-    status: currentBooking.status as CheckoutStatusResult["status"],
-    message:
-      currentBooking.status === "manual_action_required"
-        ? "Payment needs manual review before ticket issuance."
-        : currentBooking.status === "payment_failed"
-          ? "Payment failed. You can try again."
-          : "Payment is still processing.",
+    status: effectiveStatus as CheckoutStatusResult["status"],
+    message: getCheckoutStatusMessage(effectiveStatus),
     bookingIntentId: currentBooking.id,
     paymentAttemptId: currentAttempt?.id,
     paymentAttemptStatus: currentAttempt?.status as CheckoutStatusResult["paymentAttemptStatus"]
   };
+}
+
+function getEffectiveCheckoutStatus(bookingStatus: string, attemptStatus: string | null) {
+  if (
+    ["payment_pending", "expired"].includes(bookingStatus) &&
+    (attemptStatus === "failed" || attemptStatus === "cancelled")
+  ) {
+    return "payment_failed";
+  }
+
+  if (
+    bookingStatus === "payment_pending" &&
+    attemptStatus === "manual_action_required"
+  ) {
+    return "manual_action_required";
+  }
+
+  return bookingStatus;
+}
+
+function getCheckoutStatusMessage(status: string) {
+  if (status === "manual_action_required") {
+    return "Payment needs manual review before ticket issuance.";
+  }
+
+  if (status === "payment_failed") {
+    return "Payment failed. You can try again.";
+  }
+
+  if (status === "expired") {
+    return "Payment session expired. No ticket was issued.";
+  }
+
+  if (status === "cancelled") {
+    return "Payment was cancelled. No ticket was issued.";
+  }
+
+  return "Payment is still processing.";
+}
+
+async function recoverIssuedTicketsForStatus(
+  supabase: Supabase,
+  booking: BookingRow,
+  attempt: CheckoutStatusPaymentAttempt | null
+) {
+  const canRecoverIssuedTickets =
+    booking.status === "paid" ||
+    attempt?.status === "paid" ||
+    (booking.status === "manual_action_required" &&
+      booking.manual_action_reason === HOLD_EXPIRED_AFTER_PAYMENT_REASON);
+
+  if (!canRecoverIssuedTickets) {
+    return null;
+  }
+
+  const attendees = await loadFulfilledTicketAttendees(supabase, booking);
+  if (attendees.length === 0) {
+    return null;
+  }
+
+  await markBookingFulfilledAfterTicketIssue({
+    supabase,
+    bookingIntentId: booking.id,
+    paymentAttemptId: attempt?.id,
+    recoverManualHoldExpired: booking.status === "manual_action_required"
+  });
+  await ensureAutomaticTicketDelivery(supabase, booking.id);
+  return buildFulfilledCheckoutStatus(supabase, { ...booking, status: "fulfilled" }, attempt, attendees);
 }
 
 async function buildFulfilledCheckoutStatus(
@@ -973,7 +1600,7 @@ export async function buildFulfilledCheckoutStatusForBooking(input: {
   paymentAttemptId?: string | null;
   attendees: ConfirmedCheckoutAttendee[];
 }): Promise<CheckoutStatusResult> {
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const [{ data: booking, error: bookingError }, { data: attempt, error: attemptError }] = await Promise.all([
     supabase.from("booking_intents").select("*").eq("id", input.bookingIntentId).single(),
     input.paymentAttemptId
@@ -1007,7 +1634,7 @@ export async function claimCheckoutStatusSideEffect(input: {
   maxRequests?: number;
   windowSeconds?: number;
 }) {
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const result = await checkCheckoutRateLimit({
     supabase,
     key: input.bookingIntentId,
@@ -1078,6 +1705,66 @@ async function markBookingFulfilledAfterTicketIssue(input: {
   await markPaymentJobsDone(input.supabase, input.paymentAttemptId);
 }
 
+function isNgeniusUnauthorizedError(error: unknown) {
+  return error instanceof NgeniusApiError && error.status === 401;
+}
+
+async function updateBookingUnlessFulfilled(
+  supabase: Supabase,
+  bookingIntentId: string,
+  values: Partial<BookingRow>
+) {
+  const { error } = await supabase
+    .from("booking_intents")
+    .update(values)
+    .eq("id", bookingIntentId)
+    .neq("status", "fulfilled");
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function updatePendingBookingForManualAction(
+  supabase: Supabase,
+  bookingIntentId: string,
+  values: Partial<BookingRow>
+) {
+  const { error } = await supabase
+    .from("booking_intents")
+    .update(values)
+    .eq("id", bookingIntentId)
+    .in("status", ["otp_sent", "email_verified", "payment_pending", "manual_action_required"]);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function markNgeniusReconcileAuthFailure(input: {
+  supabase: Supabase;
+  bookingIntentId: string;
+  paymentAttemptId: string;
+}) {
+  const { error: attemptError } = await input.supabase
+    .from("payment_attempts")
+    .update({
+      status: "manual_action_required",
+      last_error: NGENIUS_RECONCILE_AUTH_REASON
+    })
+    .eq("id", input.paymentAttemptId)
+    .neq("status", "paid");
+
+  if (attemptError) {
+    throw attemptError;
+  }
+
+  await updatePendingBookingForManualAction(input.supabase, input.bookingIntentId, {
+    status: "manual_action_required",
+    manual_action_reason: NGENIUS_RECONCILE_AUTH_REASON
+  });
+}
+
 async function reconcileCheckoutReturnAttempt(input: {
   supabase: Supabase;
   booking: BookingRow;
@@ -1117,10 +1804,10 @@ async function reconcileCheckoutReturnAttempt(input: {
         status: "manual_action_required",
         last_error: reason
       }).eq("id", input.attempt.id);
-      await input.supabase.from("booking_intents").update({
+      await updateBookingUnlessFulfilled(input.supabase, input.booking.id, {
         status: "manual_action_required",
         manual_action_reason: reason
-      }).eq("id", input.booking.id);
+      });
     } else if (state.kind === "paid") {
       const expiredHold = await markExpiredHoldAsManualAction({
         supabase: input.supabase,
@@ -1135,10 +1822,10 @@ async function reconcileCheckoutReturnAttempt(input: {
         status: "paid",
         last_error: null
       }).eq("id", input.attempt.id);
-      await input.supabase.from("booking_intents").update({
+      await updateBookingUnlessFulfilled(input.supabase, input.booking.id, {
         status: "paid",
         manual_action_reason: null
-      }).eq("id", input.booking.id);
+      });
       await ensurePaymentFulfillmentJob({
         supabase: input.supabase,
         bookingIntentId: input.booking.id,
@@ -1149,21 +1836,29 @@ async function reconcileCheckoutReturnAttempt(input: {
         status: state.kind === "cancelled" ? "cancelled" : "failed",
         last_error: state.state ? `N-Genius state: ${state.state}` : null
       }).eq("id", input.attempt.id);
-      await input.supabase.from("booking_intents").update({
-        status: "payment_failed"
-      }).eq("id", input.booking.id);
+      await updateBookingUnlessFulfilled(input.supabase, input.booking.id, {
+        status: "payment_failed",
+        manual_action_reason: null
+      });
     } else if (state.kind === "manual_review") {
       const reason = state.state ? `N-Genius manual review state: ${state.state}` : "N-Genius state requires manual review.";
       await input.supabase.from("payment_attempts").update({
         status: "manual_action_required",
         last_error: reason
       }).eq("id", input.attempt.id);
-      await input.supabase.from("booking_intents").update({
+      await updateBookingUnlessFulfilled(input.supabase, input.booking.id, {
         status: "manual_action_required",
         manual_action_reason: reason
-      }).eq("id", input.booking.id);
+      });
     }
   } catch (error) {
+    if (isNgeniusUnauthorizedError(error) && input.attempt?.id) {
+      await markNgeniusReconcileAuthFailure({
+        supabase: input.supabase,
+        bookingIntentId: input.booking.id,
+        paymentAttemptId: input.attempt.id
+      });
+    }
     console.error("[checkout/status] on-demand reconcile failed", error);
   }
 
@@ -1206,7 +1901,21 @@ async function markExpiredHoldAsManualAction(input: {
   bookingIntentId: string;
   paymentAttemptId: string;
 }) {
-  const { count: issuedCount, error: issuedError } = await input.supabase
+  const { count: bookingIssuedCount, error: bookingIssuedError } = await input.supabase
+    .from("registrations")
+    .select("id", { count: "exact", head: true })
+    .eq("booking_intent_id", input.bookingIntentId)
+    .not("status", "in", "(cancelled,revoked)");
+
+  if (bookingIssuedError) {
+    throw bookingIssuedError;
+  }
+
+  if ((bookingIssuedCount ?? 0) > 0) {
+    return false;
+  }
+
+  const { count: attemptIssuedCount, error: issuedError } = await input.supabase
     .from("registrations")
     .select("id", { count: "exact", head: true })
     .eq("booking_intent_id", input.bookingIntentId)
@@ -1216,7 +1925,7 @@ async function markExpiredHoldAsManualAction(input: {
     throw issuedError;
   }
 
-  if ((issuedCount ?? 0) > 0) {
+  if ((attemptIssuedCount ?? 0) > 0) {
     return false;
   }
 
@@ -1271,7 +1980,7 @@ export async function fulfillPaidBookingFromWorker(input: {
   bookingIntentId: string;
   paymentAttemptId: string;
 }) {
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const { data: booking, error } = await supabase
     .from("booking_intents")
     .select("*")

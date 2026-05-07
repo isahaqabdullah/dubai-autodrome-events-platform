@@ -16,17 +16,18 @@ export default async function EditEventPage({
   params,
   searchParams
 }: {
-  params: { id: string };
-  searchParams: { returnTo?: string };
+  params: Promise<{ id: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }) {
-  const event = await getEventById(params.id);
+  const [{ id }, { returnTo }] = await Promise.all([params, searchParams]);
+  const event = await getEventById(id);
 
   if (!event) {
     notFound();
   }
 
   const currentEvent = event;
-  const backHref = normalizeAdminReturnTo(searchParams.returnTo, "/admin");
+  const backHref = normalizeAdminReturnTo(returnTo, "/admin");
   const backLabel = getAdminBackLabel(backHref);
   const backCrumbLabel =
     backLabel === "Back to registrations"
@@ -49,7 +50,7 @@ export default async function EditEventPage({
       const updatedEvent = await updateEvent(input, actor);
       revalidatePath("/admin");
       revalidatePath("/admin/registrations");
-      revalidatePath(`/admin/events/${params.id}/edit`);
+      revalidatePath(`/admin/events/${id}/edit`);
       revalidatePath("/events");
       revalidatePath(`/events/${currentEvent.slug}`);
       revalidatePath(`/events/${updatedEvent.slug}`);

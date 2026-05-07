@@ -3,18 +3,19 @@ import { SiteHeader } from "@/components/public/site-header";
 
 export const dynamic = "force-dynamic";
 
-export default function CheckoutReturnPage({
+export default async function CheckoutReturnPage({
   searchParams
 }: {
-  searchParams: { token?: string; cancelled?: string; ref?: string };
+  searchParams: Promise<{ token?: string; cancelled?: string; ref?: string }>;
 }) {
-  const token = searchParams.token ?? "";
+  const { token: rawToken, cancelled } = await searchParams;
+  const token = rawToken ?? "";
 
   return (
     <>
       <SiteHeader />
       {token ? (
-        <CheckoutReturnClient checkoutToken={token} cancelled={searchParams.cancelled === "1"} />
+        <CheckoutReturnClient checkoutToken={token} cancelled={cancelled === "1"} />
       ) : (
         <main className="mx-auto flex min-h-[70vh] max-w-xl flex-col items-center justify-center px-4 py-12 text-center">
           <h1 className="font-title text-3xl font-black italic text-ink">Missing checkout token</h1>

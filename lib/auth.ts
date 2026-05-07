@@ -46,13 +46,13 @@ export async function getAuthenticatedAppUser() {
     } satisfies AuthenticatedAppUser;
   }
 
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
 
   if (!hasSupabaseAuthCookie(cookieStore.getAll().map((cookie) => cookie.name))) {
     return null;
   }
 
-  const supabase = createServerSupabaseClient();
+  const supabase = await createServerSupabaseClient();
   const {
     data: { user }
   } = await supabase.auth.getUser();

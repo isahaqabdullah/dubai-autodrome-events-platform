@@ -13,18 +13,19 @@ export default async function CheckinPage({
   params,
   searchParams
 }: {
-  params: { slug: string };
-  searchParams: { returnTo?: string };
+  params: Promise<{ slug: string }>;
+  searchParams: Promise<{ returnTo?: string }>;
 }) {
+  const [{ slug }, { returnTo }] = await Promise.all([params, searchParams]);
   const user = await requireAuthenticatedUser("staff");
-  const event = await getEventBySlug(params.slug);
+  const event = await getEventBySlug(slug);
 
   if (!event) {
     notFound();
   }
 
   const analytics = await getScanAnalytics(event.id, user.gateName);
-  const backHref = normalizeAdminReturnTo(searchParams.returnTo, "/admin");
+  const backHref = normalizeAdminReturnTo(returnTo, "/admin");
   const backLabel = getAdminBackLabel(backHref);
 
   const summary = analytics.summary;

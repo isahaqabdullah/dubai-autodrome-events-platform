@@ -98,7 +98,7 @@ export async function POST(request: Request) {
   const orderReference = getWebhookOrderReference(payload);
   const eventId = stableWebhookEventId({ payload, eventName, orderReference, rawBody });
 
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const { data: attempt } = orderReference
     ? await supabase
       .from("payment_attempts")

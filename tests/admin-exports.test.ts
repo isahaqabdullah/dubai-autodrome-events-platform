@@ -1,5 +1,4 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import * as XLSX from "xlsx";
 
 const testState = vi.hoisted(() => ({
   isDemoMode: false,
@@ -119,13 +118,54 @@ vi.mock("@/lib/supabase/admin", () => ({
   })
 }));
 
-import { exportAttendeesXlsx, exportRegistrationsXlsx } from "@/services/admin";
+import { exportAttendeesCsv, exportRegistrationsCsv } from "@/services/admin";
 
-function readSheet(buffer: Buffer, sheetName: string) {
-  const workbook = XLSX.read(buffer, { type: "buffer" });
-  return XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
-    defval: ""
-  });
+function parseCsv(csv: string) {
+  const rows: string[][] = [];
+  let row: string[] = [];
+  let cell = "";
+  let inQuotes = false;
+
+  for (let index = 0; index < csv.length; index++) {
+    const char = csv[index];
+    const next = csv[index + 1];
+
+    if (char === "\"") {
+      if (inQuotes && next === "\"") {
+        cell += "\"";
+        index++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+      continue;
+    }
+
+    if (char === "," && !inQuotes) {
+      row.push(cell);
+      cell = "";
+      continue;
+    }
+
+    if (char === "\n" && !inQuotes) {
+      row.push(cell);
+      rows.push(row);
+      row = [];
+      cell = "";
+      continue;
+    }
+
+    cell += char;
+  }
+
+  if (cell || row.length > 0) {
+    row.push(cell);
+    rows.push(row);
+  }
+
+  const [headers = [], ...dataRows] = rows;
+  return dataRows.map((dataRow) =>
+    Object.fromEntries(headers.map((header, index) => [header, dataRow[index] ?? ""]))
+  );
 }
 
 describe("admin exports", () => {
@@ -174,33 +214,33 @@ describe("admin exports", () => {
       }
     ];
 
-    const buffer = await exportRegistrationsXlsx("event-1");
-    const rows = readSheet(buffer, "Registrations");
+    const csv = await exportRegistrationsCsv("event-1");
+    const rows = parseCsv(csv);
 
     expect(rows).toEqual([
       {
-        "#": 1,
+        "#": "1",
         "Full Name": "Primary Booker",
         "Email": "primary@example.com",
-        "Phone Number": "+971501234567",
-        "Age": 34,
+        "Phone Number": "'+971501234567",
+        "Age": "34",
         "UAE Resident": "Yes",
-        "Category": "Adult",
-        "Add-on": "VIP Access",
+        "Ticket Type": "Adult",
+        "Activity Category": "VIP Access",
         "Status": "registered",
         "Booked By": "",
         "Registered At": "Apr 10, 2026, 12:00 PM",
         "Checked In At": ""
       },
       {
-        "#": 2,
+        "#": "2",
         "Full Name": "Guest Attendee",
         "Email": "N/A",
         "Phone Number": "",
-        "Age": 15,
+        "Age": "15",
         "UAE Resident": "",
-        "Category": "Junior",
-        "Add-on": "",
+        "Ticket Type": "Junior",
+        "Activity Category": "",
         "Status": "checked_in",
         "Booked By": "primary@example.com",
         "Registered At": "Apr 10, 2026, 12:00 PM",
@@ -246,19 +286,19 @@ describe("admin exports", () => {
       }
     ];
 
-    const buffer = await exportAttendeesXlsx("event-1");
-    const rows = readSheet(buffer, "Attendees");
+    const csv = await exportAttendeesCsv("event-1");
+    const rows = parseCsv(csv);
 
     expect(rows).toEqual([
       {
-        "#": 1,
+        "#": "1",
         "Full Name": "Checked In Guest",
         "Email": "checked-in@example.com",
         "Phone Number": "",
-        "Age": 22,
+        "Age": "22",
         "UAE Resident": "",
-        "Category": "Adult",
-        "Add-on": "Pit Walk",
+        "Ticket Type": "Adult",
+        "Activity Category": "Pit Walk",
         "Status": "checked_in",
         "Booked By": "primary@example.com",
         "Registered At": "Apr 11, 2026, 12:00 PM",
@@ -288,21 +328,47 @@ describe("admin exports", () => {
       checked_in_at: null
     }));
 
-    const buffer = await exportRegistrationsXlsx("event-1");
-    const rows = readSheet(buffer, "Registrations");
+    const csv = await exportRegistrationsCsv("event-1");
+    const rows = parseCsv(csv);
 
     expect(rows).toHaveLength(1001);
     expect(rows[0]).toMatchObject({
-      "#": 1,
+      "#": "1",
       "Full Name": "Attendee 1"
     });
     expect(rows[1000]).toMatchObject({
-      "#": 1001,
+      "#": "1001",
       "Full Name": "Attendee 1001"
     });
     expect(testState.rangeCalls).toEqual([
       { from: 0, to: 999 },
       { from: 1000, to: 1999 }
     ]);
+  });
+
+  it("guards CSV values that spreadsheet apps could interpret as formulas", async () => {
+    testState.data = [
+      {
+        event_id: "event-1",
+        full_name: "=IMPORTXML(\"https://example.com\")",
+        email_raw: "formula@example.com",
+        phone: "+971501234567",
+        age: 34,
+        uae_resident: true,
+        category_title: "+Danger",
+        ticket_option_title: "@Command",
+        status: "registered",
+        registered_by_email: null,
+        is_primary: true,
+        created_at: "2026-04-10T08:00:00.000Z",
+        checked_in_at: null
+      }
+    ];
+
+    const rows = parseCsv(await exportRegistrationsCsv("event-1"));
+
+    expect(rows[0]["Full Name"]).toBe("'=IMPORTXML(\"https://example.com\")");
+    expect(rows[0]["Ticket Type"]).toBe("'+Danger");
+    expect(rows[0]["Activity Category"]).toBe("'@Command");
   });
 });

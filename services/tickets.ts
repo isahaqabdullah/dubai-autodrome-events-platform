@@ -220,7 +220,7 @@ export async function getTicketWalletByToken(ticketToken: string) {
     return null;
   }
 
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const booking = await loadTicketBookingById(supabase, payload.bookingIntentId);
   if (!booking) {
     return null;
@@ -234,7 +234,7 @@ export async function getTicketWalletByToken(ticketToken: string) {
 }
 
 export async function getTicketWalletByBookingId(bookingIntentId: string) {
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const booking = await loadTicketBookingById(supabase, bookingIntentId);
   if (!booking) {
     throw new Error("Booking not found.");
@@ -264,7 +264,7 @@ export async function createTicketResendDelivery(input: {
     return { ok: false, message: "Invalid ticket link.", status: 400 };
   }
 
-  const supabase = createAdminSupabaseClient();
+  const supabase = createAdminSupabaseClient({ noStore: true });
   const booking = await loadTicketBookingById(supabase, payload.bookingIntentId);
   if (!booking) {
     return { ok: false, message: "Invalid ticket link.", status: 400 };

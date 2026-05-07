@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, Mail, Share2 } from "lucide-react";
+import { CheckCircle2, ChevronLeft, ChevronRight, Copy, Download, ExternalLink, Mail, Share2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { EventTicketCard } from "@/components/public/event-ticket-card";
 import type { CheckoutTicketEvent, ConfirmedCheckoutAttendee } from "@/lib/types";
@@ -39,6 +39,7 @@ export function TicketWallet({
     if (attendees.length === 1) return "1 ticket issued";
     return `${attendees.length} tickets issued`;
   }, [attendees.length]);
+  const hasMultipleTickets = attendees.length > 1;
 
   function go(delta: number) {
     setActiveIndex((current) => Math.min(Math.max(current + delta, 0), attendees.length - 1));
@@ -100,32 +101,89 @@ export function TicketWallet({
         <div className="mb-5 text-center">
           <CheckCircle2 className="mx-auto h-10 w-10 text-[#2c7a86] sm:h-12 sm:w-12" />
           <p className="mt-3 text-xs font-bold uppercase tracking-[0.22em] text-[#2c7a86]">{attendeeListLabel}</p>
-          <h1 className="mt-2 font-title text-2xl font-black italic leading-tight text-ink sm:text-4xl">
+          <h1 className="mt-2 font-title text-2xl font-black italic leading-tight text-ink sm:text-4xl">Your tickets</h1>
+          <p className="mx-auto mt-2 max-w-2xl text-sm leading-relaxed text-slate">
             {event.title}
-          </h1>
+          </p>
         </div>
       ) : null}
 
-      <div className="mb-4 flex flex-col items-center justify-between gap-3 sm:flex-row">
-        <div className="text-center sm:text-left">
-          <p className="text-sm font-semibold text-ink">Ticket {activeIndex + 1} of {attendees.length}</p>
-          <p className="text-sm text-slate">{activeAttendee.fullName}</p>
+      <div className="mb-5 rounded-[26px] border border-slate/12 bg-white p-4 shadow-[0_18px_50px_rgba(12,23,35,0.08)] sm:p-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#2c7a86]">All tickets</p>
+            <h2 className="mt-1 font-title text-2xl font-black italic leading-tight text-ink sm:text-3xl">
+              {attendeeListLabel}
+            </h2>
+            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate">
+              {hasMultipleTickets
+                ? "Select an attendee below to show the matching QR code. Each attendee has a separate ticket."
+                : "This ticket link contains the QR code and backup manual code for the attendee."}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            {ticketUrl && !showHeader ? (
+              <a
+                href={ticketUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center rounded-2xl border border-ink bg-ink px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-ink/92"
+              >
+                <ExternalLink className="mr-2 h-4 w-4" />
+                View all tickets link
+              </a>
+            ) : null}
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
+
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
           {attendees.map((attendee, index) => (
             <button
               key={attendee.registrationId}
               type="button"
-              aria-label={`Show ticket ${index + 1}`}
+              aria-label={`Show ticket ${index + 1} for ${attendee.fullName}`}
               aria-current={index === activeIndex ? "true" : undefined}
               onClick={() => setActiveIndex(index)}
               className={cn(
-                "h-2.5 w-2.5 rounded-full transition",
-                index === activeIndex ? "bg-ink" : "bg-slate/25 hover:bg-slate/45"
+                "min-h-[82px] rounded-[18px] border p-3 text-left transition",
+                index === activeIndex
+                  ? "border-ink bg-ink text-white shadow-[0_12px_30px_rgba(12,23,35,0.18)]"
+                  : "border-slate/12 bg-mist/55 text-ink hover:border-slate/28 hover:bg-white"
               )}
-            />
+            >
+              <span className={cn("text-[10px] font-bold uppercase tracking-[0.18em]", index === activeIndex ? "text-white/64" : "text-slate")}>
+                Ticket {index + 1}
+              </span>
+              <span className="mt-1 block truncate text-sm font-black">{attendee.fullName}</span>
+              <span className={cn("mt-1 block truncate text-xs", index === activeIndex ? "text-white/72" : "text-slate")}>
+                {attendee.categoryTitle}
+                {attendee.ticketTitle ? ` - ${attendee.ticketTitle}` : ""}
+              </span>
+            </button>
           ))}
         </div>
+      </div>
+
+      <div className="mb-3 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+        <div>
+          <p className="text-sm font-bold text-ink">
+            Showing ticket {activeIndex + 1} of {attendees.length}
+          </p>
+          <p className="text-sm text-slate">{activeAttendee.fullName}</p>
+        </div>
+        {hasMultipleTickets ? (
+          <div className="flex gap-2">
+            <Button type="button" variant="secondary" onClick={() => go(-1)} disabled={!canGoBack} className="px-3 py-2">
+              <ChevronLeft className="mr-1 h-4 w-4" />
+              Previous
+            </Button>
+            <Button type="button" variant="secondary" onClick={() => go(1)} disabled={!canGoNext} className="px-3 py-2">
+              Next
+              <ChevronRight className="ml-1 h-4 w-4" />
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       <div
@@ -143,19 +201,13 @@ export function TicketWallet({
           event={event}
           attendee={activeAttendee}
           qrSrc={`/api/qr?token=${encodeURIComponent(activeAttendee.qrToken)}`}
+          ticketNumber={activeIndex + 1}
+          ticketTotal={attendees.length}
           mapLink={mapLink}
         />
       </div>
 
       <div className="mt-5 flex flex-wrap items-center justify-center gap-2">
-        <Button type="button" variant="secondary" onClick={() => go(-1)} disabled={!canGoBack} className="min-w-[112px]">
-          <ChevronLeft className="mr-2 h-4 w-4" />
-          Previous
-        </Button>
-        <Button type="button" variant="secondary" onClick={() => go(1)} disabled={!canGoNext} className="min-w-[112px]">
-          Next
-          <ChevronRight className="ml-2 h-4 w-4" />
-        </Button>
         {pdfHref ? (
           <a
             href={pdfHref}

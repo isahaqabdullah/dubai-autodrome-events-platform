@@ -67,7 +67,7 @@ function buildCategoryOptions(
     for (const ticketOption of ticketOptions) {
       options.set(`ticket:${ticketOption.id}`, {
         value: `ticket:${ticketOption.id}`,
-        label: `Add-on: ${ticketOption.title}`
+        label: `Activity: ${ticketOption.title}`
       });
     }
   }
@@ -76,7 +76,7 @@ function buildCategoryOptions(
     const fallbackLabel = selectedCategory.startsWith("category:")
       ? selectedCategory.slice("category:".length)
       : selectedCategory.startsWith("ticket:")
-        ? `Add-on: ${selectedCategory.slice("ticket:".length)}`
+        ? `Activity: ${selectedCategory.slice("ticket:".length)}`
         : selectedCategory;
 
     options.set(selectedCategory, {
@@ -91,7 +91,7 @@ function buildCategoryOptions(
 export default async function RegistrationsPage({
   searchParams
 }: {
-  searchParams: {
+  searchParams: Promise<{
     eventId?: string;
     category?: string;
     status?: string;
@@ -99,12 +99,13 @@ export default async function RegistrationsPage({
     page?: string;
     pageSize?: string;
     aPage?: string;
-  };
+  }>;
 }) {
-  const selectedEventId = searchParams.eventId?.trim() || undefined;
-  const selectedCategory = searchParams.category?.trim() || undefined;
-  const requestedRegistrationsPage = parsePage(searchParams.page);
-  const registrationsPageSize = parseRegistrationsPageSize(searchParams.pageSize);
+  const resolvedSearchParams = await searchParams;
+  const selectedEventId = resolvedSearchParams.eventId?.trim() || undefined;
+  const selectedCategory = resolvedSearchParams.category?.trim() || undefined;
+  const requestedRegistrationsPage = parsePage(resolvedSearchParams.page);
+  const registrationsPageSize = parseRegistrationsPageSize(resolvedSearchParams.pageSize);
   let events: Awaited<ReturnType<typeof listAdminEvents>>;
   let registrations: Awaited<ReturnType<typeof listRegistrations>>;
   let selectedEvent: Awaited<ReturnType<typeof getEventById>>;
@@ -116,8 +117,8 @@ export default async function RegistrationsPage({
     const registrationFilters = {
       eventId: selectedEventId,
       category: selectedCategory,
-      status: searchParams.status,
-      query: searchParams.q
+      status: resolvedSearchParams.status,
+      query: resolvedSearchParams.q
     };
     const loadRegistrations = (page: number, statusOverride?: string, pageSize = registrationsPageSize) =>
       withTransientRetry(
@@ -133,8 +134,8 @@ export default async function RegistrationsPage({
 
     const [requestedRegistrations, checkedInRegistrations, revokedRegistrations] = await Promise.all([
       loadRegistrations(requestedRegistrationsPage),
-      !selectedEventId && !searchParams.status ? loadRegistrations(1, "checked_in", 1) : Promise.resolve(null),
-      !selectedEventId && !searchParams.status ? loadRegistrations(1, "revoked", 1) : Promise.resolve(null)
+      !selectedEventId && !resolvedSearchParams.status ? loadRegistrations(1, "checked_in", 1) : Promise.resolve(null),
+      !selectedEventId && !resolvedSearchParams.status ? loadRegistrations(1, "revoked", 1) : Promise.resolve(null)
     ]);
 
     const totalRegistrationPages = Math.max(1, Math.ceil(requestedRegistrations.total / registrationsPageSize));
@@ -145,9 +146,9 @@ export default async function RegistrationsPage({
 
     if (!selectedEventId) {
       checkedInCount =
-        searchParams.status === "checked_in" ? registrations.total : checkedInRegistrations?.total ?? 0;
+        resolvedSearchParams.status === "checked_in" ? registrations.total : checkedInRegistrations?.total ?? 0;
       revokedCount =
-        searchParams.status === "revoked" ? registrations.total : revokedRegistrations?.total ?? 0;
+        resolvedSearchParams.status === "revoked" ? registrations.total : revokedRegistrations?.total ?? 0;
     }
 
     [events, selectedEvent] = await Promise.all([
@@ -201,7 +202,7 @@ export default async function RegistrationsPage({
   );
   const pagedRows = registrations.rows;
   const normalizedSearchParams = {
-    ...searchParams,
+    ...resolvedSearchParams,
     pageSize:
       registrationsPageSize === DEFAULT_REGISTRATIONS_PAGE_SIZE ? undefined : String(registrationsPageSize),
     page: registrationsPage > 1 ? String(registrationsPage) : undefined
@@ -212,7 +213,7 @@ export default async function RegistrationsPage({
 
   const totalActivity = analytics?.recentActivity.length ?? 0;
   const activityPage = Math.min(
-    parsePage(searchParams.aPage),
+    parsePage(resolvedSearchParams.aPage),
     Math.max(1, Math.ceil(totalActivity / ACTIVITY_PAGE_SIZE))
   );
   const pagedActivity = analytics
@@ -333,8 +334,8 @@ export default async function RegistrationsPage({
           selectedEventId={selectedEventId}
           category={selectedCategory}
           categoryOptions={categoryOptions}
-          status={searchParams.status}
-          query={searchParams.q}
+          status={resolvedSearchParams.status}
+          query={resolvedSearchParams.q}
           pageSize={registrationsPageSize}
           pageSizeOptions={REGISTRATIONS_PAGE_SIZE_OPTIONS}
         />
@@ -399,7 +400,7 @@ export default async function RegistrationsPage({
             totalItems={totalActivity}
             pageSize={ACTIVITY_PAGE_SIZE}
             paramKey="aPage"
-            searchParams={searchParams}
+            searchParams={resolvedSearchParams}
           />
         </section>
       ) : null}

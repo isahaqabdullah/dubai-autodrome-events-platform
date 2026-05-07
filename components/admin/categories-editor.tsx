@@ -33,7 +33,7 @@ export function CategoriesEditor({ initialCategories }: CategoriesEditorProps) {
 
       {categories.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate/20 bg-slate-50 px-4 py-5 text-sm text-slate">
-          No categories defined. A default &quot;General Admission&quot; category will be used.
+          No ticket types defined yet.
         </div>
       ) : null}
 
@@ -41,9 +41,9 @@ export function CategoriesEditor({ initialCategories }: CategoriesEditorProps) {
         <section key={category.id} className="admin-card grid gap-4 p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="admin-label">Category {index + 1}</p>
+              <p className="admin-label">Ticket type {index + 1}</p>
               <p className="mt-1 text-base font-semibold tracking-tight text-ink">
-                {category.title.trim() || "Untitled category"}
+                {category.title.trim() || "Untitled ticket type"}
               </p>
             </div>
             <Button
@@ -68,7 +68,7 @@ export function CategoriesEditor({ initialCategories }: CategoriesEditorProps) {
                     )
                   )
                 }
-                placeholder="VIP"
+                placeholder="Track access"
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </label>
@@ -139,7 +139,7 @@ export function CategoriesEditor({ initialCategories }: CategoriesEditorProps) {
                   )
                 )
               }
-              placeholder="Premium experience with exclusive access"
+              placeholder="Admission level or package details"
               className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
             />
           </label>
@@ -170,7 +170,7 @@ export function CategoriesEditor({ initialCategories }: CategoriesEditorProps) {
           className="rounded-2xl"
           onClick={() => setCategories((current) => [...current, createCategory()])}
         >
-          Add category
+          Add ticket type
         </Button>
       </div>
     </div>

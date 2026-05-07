@@ -8,12 +8,13 @@ import { requireAuthenticatedUser } from "@/lib/auth";
 import { parseAdminEventFormData } from "@/lib/form-data";
 import { createEvent } from "@/services/admin";
 
-export default function NewEventPage({
+export default async function NewEventPage({
   searchParams
 }: {
-  searchParams: { returnTo?: string };
+  searchParams: Promise<{ returnTo?: string }>;
 }) {
-  const backHref = normalizeAdminReturnTo(searchParams.returnTo, "/admin");
+  const { returnTo } = await searchParams;
+  const backHref = normalizeAdminReturnTo(returnTo, "/admin");
   const backLabel = getAdminBackLabel(backHref);
 
   async function createEventAction(formData: FormData): Promise<EventFormResult> {

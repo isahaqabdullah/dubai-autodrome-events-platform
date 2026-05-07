@@ -1,23 +1,38 @@
 import { z } from "zod";
 import { isValidPhoneNumber, PHONE_NUMBER_VALIDATION_MESSAGE } from "@/lib/utils";
 
-const optionalAddonIdSchema = z.string().trim().max(80).optional().or(z.literal(""));
+const activityCategoryIdSchema = z.string().trim().min(1).max(80);
+const optionalActivityCategoryIdSchema = z.string().trim().max(80).optional().or(z.literal(""));
+const optionalAgeSchema = z.preprocess(
+  (value) => value === "" || value === null ? undefined : value,
+  z.coerce.number().int().min(1).max(120).optional()
+);
+const requiredAgeSchema = z.coerce.number().int().min(1).max(120);
 
 export const checkoutAttendeeStartSchema = z.object({
   firstName: z.string().trim().max(120).optional().or(z.literal("")),
   lastName: z.string().trim().max(120).optional().or(z.literal("")),
   email: z.string().trim().email().max(255).optional().or(z.literal("")),
-  age: z.coerce.number().int().min(1).max(120).optional(),
+  age: optionalAgeSchema,
   categoryId: z.string().trim().min(1).max(80),
-  addonId: optionalAddonIdSchema
+  addonId: optionalActivityCategoryIdSchema
+});
+
+export const checkoutAttendeePaymentSchema = z.object({
+  firstName: z.string().trim().min(1).max(120),
+  lastName: z.string().trim().min(1).max(120),
+  email: z.string().trim().email().max(255).optional().or(z.literal("")),
+  age: requiredAgeSchema,
+  categoryId: z.string().trim().min(1).max(80),
+  addonId: activityCategoryIdSchema
 });
 
 export const checkoutStartSchema = z.object({
   eventId: z.string().uuid(),
   categoryId: z.string().trim().min(1).max(80),
-  addonId: optionalAddonIdSchema,
-  firstName: z.string().trim().min(1).max(120),
-  lastName: z.string().trim().min(1).max(120),
+  addonId: optionalActivityCategoryIdSchema,
+  firstName: z.string().trim().max(120).optional().or(z.literal("")),
+  lastName: z.string().trim().max(120).optional().or(z.literal("")),
   email: z.string().trim().email().max(255),
   phone: z
     .string()
@@ -25,7 +40,7 @@ export const checkoutStartSchema = z.object({
     .max(40)
     .refine((value) => value === "" || isValidPhoneNumber(value), PHONE_NUMBER_VALIDATION_MESSAGE)
     .optional(),
-  age: z.coerce.number().int().min(1).max(120).optional(),
+  age: optionalAgeSchema,
   uaeResident: z.boolean().optional(),
   declarationAccepted: z.boolean().optional(),
   website: z.string().max(0).optional().or(z.literal("")),
@@ -37,9 +52,21 @@ export const checkoutVerifyOtpSchema = z.object({
   otp: z.string().trim().regex(/^\d{6}$/, "Enter the 6-digit code.")
 });
 
+export const checkoutResendOtpSchema = z.object({
+  checkoutToken: z.string().min(10)
+});
+
 export const checkoutCreatePaymentSchema = z.object({
   checkoutToken: z.string().min(10),
-  declarationAccepted: z.literal(true)
+  declarationAccepted: z.literal(true),
+  phone: z
+    .string()
+    .trim()
+    .min(1, "Enter your phone number.")
+    .max(40)
+    .refine(isValidPhoneNumber, PHONE_NUMBER_VALIDATION_MESSAGE),
+  uaeResident: z.boolean(),
+  attendees: z.array(checkoutAttendeePaymentSchema).min(1).max(5).optional()
 });
 
 export const checkoutStatusSchema = z.object({
@@ -53,5 +80,6 @@ export const paymentAdminActionSchema = z.object({
 });
 
 export type CheckoutStartInput = z.infer<typeof checkoutStartSchema>;
+export type CheckoutResendOtpInput = z.infer<typeof checkoutResendOtpSchema>;
 export type CheckoutVerifyOtpInput = z.infer<typeof checkoutVerifyOtpSchema>;
 export type CheckoutCreatePaymentInput = z.infer<typeof checkoutCreatePaymentSchema>;

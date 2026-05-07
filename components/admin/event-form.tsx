@@ -460,14 +460,14 @@ export function EventForm({
         </FormSection>
 
         <FormSection
-          eyebrow={config.categoriesLabel || "Categories"}
-          title="Define ticket categories"
+          eyebrow={config.categoriesLabel || "Ticket types"}
+          title="Define ticket types"
         >
-          <Field label="Section label" hint="Optional — displayed to attendees as the heading for categories">
+          <Field label="Section label" hint="Optional — displayed to attendees as the heading for ticket types">
             <Input
               name="categoriesLabel"
               defaultValue={config.categoriesLabel ?? ""}
-              placeholder="Categories"
+              placeholder="Ticket type"
               className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
             />
           </Field>
@@ -475,14 +475,14 @@ export function EventForm({
         </FormSection>
 
         <FormSection
-          eyebrow={config.ticketOptionsLabel || "Additional ticket categories"}
-          title="Define add-on options"
+          eyebrow={config.ticketOptionsLabel || "Activity categories"}
+          title="Define activity categories"
         >
-          <Field label="Section label" hint="Optional — displayed to attendees as the heading for add-ons">
+          <Field label="Section label" hint="Optional — displayed to attendees as the heading for activity categories">
             <Input
               name="ticketOptionsLabel"
               defaultValue={config.ticketOptionsLabel ?? ""}
-              placeholder="Additional ticket categories"
+              placeholder="Activity category"
               className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
             />
           </Field>

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { registrationStartSchema, registrationCompleteSchema, verifyOtpSchema } from "../lib/validation/registration";
 import { checkinScanSchema, manualCheckinByCodeSchema, manualCheckinSchema } from "../lib/validation/checkin";
 import { adminEventSchema } from "../lib/validation/admin";
+import { checkoutCreatePaymentSchema, checkoutStartSchema } from "../lib/validation/checkout";
 
 describe("registrationStartSchema", () => {
   const validBase = {
@@ -82,6 +83,94 @@ describe("registrationStartSchema", () => {
     const { categoryTitle, ...missingCategoryTitle } = validBase;
     expect(registrationStartSchema.safeParse(missingCategoryId).success).toBe(false);
     expect(registrationStartSchema.safeParse(missingCategoryTitle).success).toBe(false);
+  });
+});
+
+describe("checkoutStartSchema", () => {
+  const validCheckout = {
+    eventId: "6db7f8b7-4e20-410e-9a1d-78c7bfc2f101",
+    categoryId: "track-access",
+    addonId: "cycling",
+    firstName: "Jane",
+    lastName: "Doe",
+    age: 32,
+    email: "jane@example.com",
+    attendees: [
+      {
+        firstName: "Jane",
+        lastName: "Doe",
+        age: 32,
+        categoryId: "track-access",
+        addonId: "cycling"
+      }
+    ]
+  };
+
+  it("does not require an activity category before email verification", () => {
+    expect(checkoutStartSchema.safeParse({ ...validCheckout, addonId: "" }).success).toBe(true);
+    expect(checkoutStartSchema.safeParse({
+      ...validCheckout,
+      attendees: [{ ...validCheckout.attendees[0], addonId: "" }]
+    }).success).toBe(true);
+  });
+
+  it("does not require attendee identity fields before email verification", () => {
+    const { age: _rootAge, ...missingRootAge } = validCheckout;
+    expect(checkoutStartSchema.safeParse(missingRootAge).success).toBe(true);
+    expect(checkoutStartSchema.safeParse({
+      ...validCheckout,
+      attendees: [{ ...validCheckout.attendees[0], firstName: "" }]
+    }).success).toBe(true);
+    expect(checkoutStartSchema.safeParse({
+      ...validCheckout,
+      attendees: [{ ...validCheckout.attendees[0], lastName: "" }]
+    }).success).toBe(true);
+    expect(checkoutStartSchema.safeParse({
+      ...validCheckout,
+      attendees: [{ ...validCheckout.attendees[0], age: undefined }]
+    }).success).toBe(true);
+  });
+
+  it("requires attendee identity fields before payment creation", () => {
+    const validPayment = {
+      checkoutToken: "checkout-token-with-enough-length",
+      declarationAccepted: true,
+      phone: "050 123 4567",
+      uaeResident: true,
+      attendees: validCheckout.attendees
+    };
+
+    expect(checkoutCreatePaymentSchema.safeParse(validPayment).success).toBe(true);
+    expect(checkoutCreatePaymentSchema.safeParse({
+      ...validPayment,
+      attendees: [{ ...validCheckout.attendees[0], firstName: "" }]
+    }).success).toBe(false);
+    expect(checkoutCreatePaymentSchema.safeParse({
+      ...validPayment,
+      attendees: [{ ...validCheckout.attendees[0], lastName: "" }]
+    }).success).toBe(false);
+    expect(checkoutCreatePaymentSchema.safeParse({
+      ...validPayment,
+      attendees: [{ ...validCheckout.attendees[0], age: undefined }]
+    }).success).toBe(false);
+  });
+
+  it("accepts multi-attendee checkout with activity categories", () => {
+    const result = checkoutStartSchema.safeParse({
+      ...validCheckout,
+      attendees: [
+        validCheckout.attendees[0],
+        {
+          firstName: "John",
+          lastName: "Doe",
+          age: 34,
+          categoryId: "bootcamp-track",
+          addonId: "running"
+        }
+      ]
+    });
+
+    expect(result.success).toBe(true);
   });
 });
 
@@ -304,6 +393,8 @@ describe("adminEventSchema", () => {
     declarationVersion: 1,
     declarationText: "I confirm that my details are accurate and I will follow all safety instructions."
   };
+  const validTicketType = { id: "track-access", title: "Track access" };
+  const validActivityCategory = { id: "bootcamp-1830", title: "Bootcamp - 18:30" };
 
   it("accepts a valid minimal event", () => {
     const result = adminEventSchema.safeParse(validEvent);
@@ -350,9 +441,39 @@ describe("adminEventSchema", () => {
 
   it("accepts all valid status values", () => {
     for (const status of ["draft", "open", "closed", "live", "archived"]) {
-      const result = adminEventSchema.safeParse({ ...validEvent, status });
+      const result = adminEventSchema.safeParse({
+        ...validEvent,
+        status,
+        categories: [validTicketType],
+        ticketOptions: [validActivityCategory]
+      });
       expect(result.success).toBe(true);
     }
+  });
+
+  it("allows blank catalogs while draft", () => {
+    const result = adminEventSchema.safeParse({
+      ...validEvent,
+      status: "draft",
+      categories: [],
+      ticketOptions: []
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it("rejects opening registration without a ticket type and activity category", () => {
+    expect(adminEventSchema.safeParse({ ...validEvent, status: "open", categories: [], ticketOptions: [validActivityCategory] }).success).toBe(false);
+    expect(adminEventSchema.safeParse({ ...validEvent, status: "open", categories: [validTicketType], ticketOptions: [] }).success).toBe(false);
+  });
+
+  it("rejects opening registration when all catalog options are unavailable", () => {
+    const result = adminEventSchema.safeParse({
+      ...validEvent,
+      status: "live",
+      categories: [{ ...validTicketType, soldOut: true }],
+      ticketOptions: [{ ...validActivityCategory, soldOut: true }]
+    });
+    expect(result.success).toBe(false);
   });
 
   it("rejects non-positive capacity", () => {
@@ -369,7 +490,7 @@ describe("adminEventSchema", () => {
     const result = adminEventSchema.safeParse({
       ...validEvent,
       ticketOptions: [
-        { id: "bootcamp-1830", title: "Bootcamp - 18:30" }
+        validActivityCategory
       ]
     });
     expect(result.success).toBe(true);

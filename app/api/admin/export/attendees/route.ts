@@ -1,5 +1,5 @@
 import { exportQuerySchema } from "@/lib/validation/admin";
-import { exportAttendeesXlsx } from "@/services/admin";
+import { exportAttendeesCsv } from "@/services/admin";
 import { getAuthenticatedAppUser } from "@/lib/auth";
 
 export async function GET(request: Request) {
@@ -18,13 +18,13 @@ export async function GET(request: Request) {
     return new Response("Invalid event id", { status: 400 });
   }
 
-  const buffer = await exportAttendeesXlsx(parsed.data.eventId);
+  const csv = await exportAttendeesCsv(parsed.data.eventId);
 
-  return new Response(new Uint8Array(buffer), {
+  return new Response(csv, {
     status: 200,
     headers: {
-      "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      "Content-Disposition": `attachment; filename="attendees-${parsed.data.eventId}.xlsx"`
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="attendees-${parsed.data.eventId}.csv"`
     }
   });
 }

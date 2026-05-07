@@ -12,6 +12,10 @@ const eventTicketOptionSchema = z.object({
   soldOut: z.coerce.boolean().default(false)
 });
 
+function hasAvailableOption(options: Array<z.infer<typeof eventTicketOptionSchema>>) {
+  return options.some((option) => !option.soldOut);
+}
+
 export const adminEventSchema = z
   .object({
     id: z.string().uuid().optional(),
@@ -51,6 +55,14 @@ export const adminEventSchema = z
   .refine((input) => new Date(input.endAt).getTime() > new Date(input.startAt).getTime(), {
     path: ["endAt"],
     message: "End time must be after the start time."
+  })
+  .refine((input) => !["open", "live"].includes(input.status) || hasAvailableOption(input.categories), {
+    path: ["categories"],
+    message: "Add at least one available ticket type before opening registration."
+  })
+  .refine((input) => !["open", "live"].includes(input.status) || hasAvailableOption(input.ticketOptions), {
+    path: ["ticketOptions"],
+    message: "Add at least one available activity category before opening registration."
   });
 
 export const resendQrSchema = z.object({

@@ -1,3 +1,5 @@
+import type { Route } from "next";
+
 export function normalizeAdminReturnTo(value: string | null | undefined, fallback = "/admin") {
   const trimmed = value?.trim();
 
@@ -17,19 +19,19 @@ export function normalizeAdminReturnTo(value: string | null | undefined, fallbac
   }
 }
 
-export function appendReturnTo(path: string, returnTo: string | null | undefined) {
+export function appendReturnTo(path: string, returnTo: string | null | undefined): Route {
   const safeReturnTo = normalizeAdminReturnTo(returnTo, "");
 
   if (!safeReturnTo) {
-    return path;
+    return path as Route;
   }
 
   const url = new URL(path, "http://localhost");
   url.searchParams.set("returnTo", safeReturnTo);
-  return `${url.pathname}${url.search}${url.hash}`;
+  return `${url.pathname}${url.search}${url.hash}` as Route;
 }
 
-export function buildPathWithSearch(pathname: string, params: Record<string, string | undefined>) {
+export function buildPathWithSearch(pathname: string, params: Record<string, string | undefined>): Route {
   const search = new URLSearchParams();
 
   for (const [key, value] of Object.entries(params)) {
@@ -38,7 +40,7 @@ export function buildPathWithSearch(pathname: string, params: Record<string, str
   }
 
   const query = search.toString();
-  return query ? `${pathname}?${query}` : pathname;
+  return (query ? `${pathname}?${query}` : pathname) as Route;
 }
 
 export function getAdminBackLabel(path: string) {

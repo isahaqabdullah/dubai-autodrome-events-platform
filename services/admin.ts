@@ -64,9 +64,9 @@ function buildEventPayload(input: AdminEventInput) {
         description: ticket.description?.trim() ?? "",
         note: blankToNull(ticket.note),
         badge: blankToNull(ticket.badge),
-        capacity: ticket.capacity ?? null,
-        priceMinor: ticket.priceMinor ?? 0,
-        currencyCode: ticket.currencyCode ?? "AED",
+        capacity: null,
+        priceMinor: 0,
+        currencyCode: "AED",
         soldOut: ticket.soldOut
       })),
       posterImage: blankToNull(input.posterImage),
@@ -87,6 +87,20 @@ function mapOptionsById(options: EventTicketOption[] | undefined) {
 function describeOption(option: EventTicketOption | undefined, id: string) {
   const title = option?.title?.trim();
   return title ? `"${title}"` : `ID "${id}"`;
+}
+
+function assertCatalogReadyForPublicStatus(input: AdminEventInput) {
+  if (!["open", "live"].includes(input.status)) {
+    return;
+  }
+
+  if (!(input.categories ?? []).some((category) => !category.soldOut)) {
+    throw new Error("Add at least one available ticket type before opening registration.");
+  }
+
+  if (!input.ticketOptions.some((ticket) => !ticket.soldOut)) {
+    throw new Error("Add at least one available activity category before opening registration.");
+  }
 }
 
 function assertRegistrationLinkedOptionsAreStillValid(input: {
@@ -114,13 +128,13 @@ function assertRegistrationLinkedOptionsAreStillValid(input: {
     const nextCategory = nextCategoriesById.get(categoryId);
     if (!nextCategory) {
       throw new Error(
-        `Cannot remove category ${describeOption(beforeCategoriesById.get(categoryId), categoryId)} because ${count} registrations already use it. Edit the existing category instead of removing and recreating it.`
+        `Cannot remove ticket type ${describeOption(beforeCategoriesById.get(categoryId), categoryId)} because ${count} registrations already use it. Edit the existing ticket type instead of removing and recreating it.`
       );
     }
 
     if (nextCategory.capacity && count > nextCategory.capacity) {
       throw new Error(
-        `Category ${describeOption(nextCategory, categoryId)} capacity cannot be set below ${count} because ${count} registrations already use it.`
+        `Ticket type ${describeOption(nextCategory, categoryId)} capacity cannot be set below ${count} because ${count} registrations already use it.`
       );
     }
   }
@@ -133,15 +147,10 @@ function assertRegistrationLinkedOptionsAreStillValid(input: {
     const nextTicket = nextTicketsById.get(ticketId);
     if (!nextTicket) {
       throw new Error(
-        `Cannot remove additional category ${describeOption(beforeTicketsById.get(ticketId), ticketId)} because ${count} registrations already use it. Edit the existing additional category instead of removing and recreating it.`
+        `Cannot remove activity category ${describeOption(beforeTicketsById.get(ticketId), ticketId)} because ${count} registrations already use it. Edit the existing activity category instead of removing and recreating it.`
       );
     }
 
-    if (nextTicket.capacity && count > nextTicket.capacity) {
-      throw new Error(
-        `Additional category ${describeOption(nextTicket, ticketId)} capacity cannot be set below ${count} because ${count} registrations already use it.`
-      );
-    }
   }
 }
 
@@ -149,46 +158,39 @@ async function syncCatalogFromEventInput(eventId: string, input: AdminEventInput
   const supabase = createAdminSupabaseClient();
   const categoryIds = (input.categories ?? []).map((category) => category.id.trim()).filter(Boolean);
   const addonIds = input.ticketOptions.map((addon) => addon.id.trim()).filter(Boolean);
-  const categories = categoryIds.length > 0
-    ? input.categories
-    : [{
-      id: "general-admission",
-      title: "General Admission",
-      description: "Free general admission",
-      note: null,
-      badge: null,
-      capacity: null,
-      soldOut: false
-    }];
 
-  const { error: categoryUpsertError } = await supabase.from("event_categories").upsert(
-    categories.map((category, index) => ({
-      event_id: eventId,
-      public_id: category.id.trim(),
-      title: category.title.trim(),
-      description: category.description?.trim() ?? "",
-      note: blankToNull(category.note),
-      badge: blankToNull(category.badge),
-      capacity: category.capacity ?? null,
-      sold_out: category.soldOut,
-      active: true,
-      price_minor: category.priceMinor ?? 0,
-      currency_code: category.currencyCode ?? "AED",
-      sort_order: index
-    })),
-    { onConflict: "event_id,public_id" }
-  );
+  if (categoryIds.length > 0) {
+    const { error: categoryUpsertError } = await supabase.from("event_categories").upsert(
+      input.categories.map((category, index) => ({
+        event_id: eventId,
+        public_id: category.id.trim(),
+        title: category.title.trim(),
+        description: category.description?.trim() ?? "",
+        note: blankToNull(category.note),
+        badge: blankToNull(category.badge),
+        capacity: category.capacity ?? null,
+        sold_out: category.soldOut,
+        active: true,
+        price_minor: category.priceMinor ?? 0,
+        currency_code: category.currencyCode ?? "AED",
+        sort_order: index
+      })),
+      { onConflict: "event_id,public_id" }
+    );
 
-  if (categoryUpsertError) {
-    throw categoryUpsertError;
+    if (categoryUpsertError) {
+      throw categoryUpsertError;
+    }
   }
 
-  const activeCategoryIds = categoryIds.length > 0 ? categoryIds : ["general-admission"];
-  const { error: categoryDeactivateError } = await supabase
+  const categoryDeactivateQuery = supabase
     .from("event_categories")
     .update({ active: false })
-    .eq("event_id", eventId)
-    .not("public_id", "in", `(${activeCategoryIds.map((id) => `"${id}"`).join(",")})`);
+    .eq("event_id", eventId);
+
+  const { error: categoryDeactivateError } = categoryIds.length > 0
+    ? await categoryDeactivateQuery.not("public_id", "in", `(${categoryIds.map((id) => `"${id}"`).join(",")})`)
+    : await categoryDeactivateQuery;
 
   if (categoryDeactivateError) {
     throw categoryDeactivateError;
@@ -203,11 +205,11 @@ async function syncCatalogFromEventInput(eventId: string, input: AdminEventInput
         description: addon.description?.trim() ?? "",
         note: blankToNull(addon.note),
         badge: blankToNull(addon.badge),
-        capacity: addon.capacity ?? null,
+        capacity: null,
         sold_out: addon.soldOut,
         active: true,
-        price_minor: addon.priceMinor ?? 0,
-        currency_code: addon.currencyCode ?? "AED",
+        price_minor: 0,
+        currency_code: "AED",
         sort_order: index
       })),
       { onConflict: "event_id,public_id" }
@@ -258,6 +260,8 @@ export async function logAuditEvent(input: {
 }
 
 export async function createEvent(input: AdminEventInput, actor: AuthenticatedAppUser) {
+  assertCatalogReadyForPublicStatus(input);
+
   if (isDemoMode()) {
     const payload = buildEventPayload(input);
 
@@ -292,6 +296,8 @@ export async function createEvent(input: AdminEventInput, actor: AuthenticatedAp
 }
 
 export async function updateEvent(input: AdminEventInput, actor: AuthenticatedAppUser) {
+  assertCatalogReadyForPublicStatus(input);
+
   if (isDemoMode()) {
     const existing = demoEvents.find((event) => event.id === input.id);
 
@@ -643,7 +649,7 @@ export async function rotateQrAndResend(registrationId: string, actor: Authentic
 
   const { data: registration, error } = await supabase
     .from("registrations")
-    .select("id, event_id, full_name, email_raw, manual_checkin_code, status, ticket_option_title, events(*)")
+    .select("id, event_id, full_name, email_raw, manual_checkin_code, status, category_title, ticket_option_title, events(*)")
     .eq("id", registrationId)
     .single();
 
@@ -692,7 +698,7 @@ export async function rotateQrAndResend(registrationId: string, actor: Authentic
         venue: event.venue,
         mapLink: fc?.mapLink,
         manualCheckinCode: registration.manual_checkin_code,
-        ticketTitle: registration.ticket_option_title ?? "General Admission",
+        ticketTitle: registration.ticket_option_title ?? registration.category_title ?? "General Admission",
         posterImageUrl: buildAbsoluteUrl(env.APP_URL, fc?.posterImage ?? "/train-with-dubai-police-cover.png"),
         qrImageSrc: buildQrEmailCid(qrAttachment.contentId),
         qrLinkHref: buildAbsoluteUrl(env.APP_URL, `/api/qr?token=${encodeURIComponent(nextQrToken)}`),
@@ -739,8 +745,14 @@ function escapeCsvValue(value: unknown) {
     return "";
   }
 
-  const stringified = String(value).replace(/"/g, '""');
+  const raw = String(value);
+  const guarded = /(?:^\s*[=+\-@])|[\t\r\n]/.test(raw) ? `'${raw}` : raw;
+  const stringified = guarded.replace(/"/g, '""');
   return `"${stringified}"`;
+}
+
+function buildCsv(rows: unknown[][]) {
+  return rows.map((row) => row.map(escapeCsvValue).join(",")).join("\n");
 }
 
 type ExportRegistrationRowInput = {
@@ -762,6 +774,20 @@ const REGISTRATION_EXPORT_SELECT =
   "full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, registered_by_email, is_primary, created_at, checked_in_at";
 const EXPORT_BATCH_SIZE = 1000;
 const EXPORT_TIME_ZONE = "Asia/Dubai";
+const REGISTRATION_EXPORT_HEADERS = [
+  "#",
+  "Full Name",
+  "Email",
+  "Phone Number",
+  "Age",
+  "UAE Resident",
+  "Ticket Type",
+  "Activity Category",
+  "Status",
+  "Booked By",
+  "Registered At",
+  "Checked In At"
+];
 
 async function fetchExportRowsInBatches<T>(
   fetchPage: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: unknown }>
@@ -836,8 +862,8 @@ function buildRegistrationExportRow(row: ExportRegistrationRowInput, index: numb
     "Phone Number": row.phone ?? "",
     "Age": row.age ?? "",
     "UAE Resident": formatExportUaeResident(row.uae_resident, row.is_primary),
-    "Category": row.category_title ?? "General Admission",
-    "Add-on": row.ticket_option_title ?? "",
+    "Ticket Type": row.category_title ?? "General Admission",
+    "Activity Category": row.ticket_option_title ?? "",
     "Status": row.status ?? "",
     "Booked By": row.registered_by_email ?? "",
     "Registered At": formatExportDateTime(row.created_at),
@@ -845,9 +871,14 @@ function buildRegistrationExportRow(row: ExportRegistrationRowInput, index: numb
   };
 }
 
-export async function exportAttendeesXlsx(eventId: string) {
-  const XLSX = await import("xlsx");
+function registrationRowsToCsv(dataRows: Array<Record<string, unknown>>) {
+  return buildCsv([
+    REGISTRATION_EXPORT_HEADERS,
+    ...dataRows.map((row) => REGISTRATION_EXPORT_HEADERS.map((header) => row[header]))
+  ]);
+}
 
+export async function exportAttendeesCsv(eventId: string) {
   let dataRows: Array<Record<string, unknown>>;
 
   if (isDemoMode()) {
@@ -869,15 +900,10 @@ export async function exportAttendeesXlsx(eventId: string) {
     dataRows = data.map((row, i) => buildRegistrationExportRow(row, i));
   }
 
-  const ws = XLSX.utils.json_to_sheet(dataRows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Attendees");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  return registrationRowsToCsv(dataRows);
 }
 
-export async function exportRegistrationsXlsx(eventId: string) {
-  const XLSX = await import("xlsx");
-
+export async function exportRegistrationsCsv(eventId: string) {
   let dataRows: Array<Record<string, unknown>>;
 
   if (isDemoMode()) {
@@ -898,10 +924,7 @@ export async function exportRegistrationsXlsx(eventId: string) {
     dataRows = data.map((row, i) => buildRegistrationExportRow(row, i));
   }
 
-  const ws = XLSX.utils.json_to_sheet(dataRows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Registrations");
-  return XLSX.write(wb, { type: "buffer", bookType: "xlsx" }) as Buffer;
+  return registrationRowsToCsv(dataRows);
 }
 
 export async function exportCheckinsCsv(eventId: string) {
@@ -932,7 +955,7 @@ export async function exportCheckinsCsv(eventId: string) {
       ]
     ];
 
-    return rows.map((row) => row.map(escapeCsvValue).join(",")).join("\n");
+    return buildCsv(rows);
   }
 
   const supabase = createAdminSupabaseClient();
@@ -959,5 +982,5 @@ export async function exportCheckinsCsv(eventId: string) {
     ])
   ];
 
-  return rows.map((row) => row.map(escapeCsvValue).join(",")).join("\n");
+  return buildCsv(rows);
 }

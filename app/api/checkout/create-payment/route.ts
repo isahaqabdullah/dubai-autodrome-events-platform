@@ -15,7 +15,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const result = await createCheckoutPayment(parsed.data.checkoutToken);
+  const result = await createCheckoutPayment(parsed.data.checkoutToken, parsed.data.attendees, {
+    phone: parsed.data.phone,
+    uaeResident: parsed.data.uaeResident
+  });
 
   return NextResponse.json(result, {
     status:

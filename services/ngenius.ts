@@ -9,7 +9,19 @@ interface TokenCache {
 }
 
 let tokenCache: TokenCache | null = null;
+let tokenRequestPromise: Promise<string> | null = null;
 const NGENIUS_REQUEST_TIMEOUT_MS = 20_000;
+
+export class NgeniusApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly responseText: string
+  ) {
+    super(message);
+    this.name = "NgeniusApiError";
+  }
+}
 
 export interface NgeniusOrderItem {
   name: string;
@@ -46,18 +58,38 @@ function trimTrailingSlash(value: string) {
   return value.replace(/\/+$/, "");
 }
 
+function ngeniusTimingEnabled() {
+  return process.env.CHECKOUT_TIMING_LOGS === "1" || process.env.CHECKOUT_TIMING_LOGS === "true";
+}
+
 async function fetchWithTimeout(url: string, init: RequestInit, label: string) {
   const controller = new AbortController();
   const timeout = setTimeout(() => {
     controller.abort();
   }, NGENIUS_REQUEST_TIMEOUT_MS);
+  const startedAt = Date.now();
 
   try {
-    return await fetch(url, {
+    const response = await fetch(url, {
       ...init,
       signal: controller.signal
     });
+    if (ngeniusTimingEnabled()) {
+      console.info("[checkout-timing] ngenius.fetch", {
+        label,
+        status: response.status,
+        durationMs: Date.now() - startedAt
+      });
+    }
+    return response;
   } catch (error) {
+    if (ngeniusTimingEnabled()) {
+      console.info("[checkout-timing] ngenius.fetch.error", {
+        label,
+        durationMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    }
     if (error instanceof Error && error.name === "AbortError") {
       throw new Error(`N-Genius ${label} timed out after ${NGENIUS_REQUEST_TIMEOUT_MS / 1000} seconds.`);
     }
@@ -67,55 +99,91 @@ async function fetchWithTimeout(url: string, init: RequestInit, label: string) {
   }
 }
 
-async function requestAccessToken() {
+async function requestAccessToken(options: { forceRefresh?: boolean } = {}) {
   const config = getNgeniusConfig();
   const now = Date.now();
 
-  if (tokenCache && tokenCache.expiresAt - 30_000 > now) {
+  if (options.forceRefresh) {
+    tokenCache = null;
+  }
+
+  if (!options.forceRefresh && tokenCache && tokenCache.expiresAt - 30_000 > now) {
+    if (ngeniusTimingEnabled()) {
+      console.info("[checkout-timing] ngenius.token_cache_hit", {
+        expiresInMs: tokenCache.expiresAt - now
+      });
+    }
     return tokenCache.token;
   }
 
-  const response = await fetchWithTimeout(`${trimTrailingSlash(config.apiBaseUrl)}/identity/auth/access-token`, {
-    method: "POST",
-    headers: {
-      Authorization: `Basic ${config.apiKey}`,
-      "Content-Type": "application/vnd.ni-identity.v1+json"
+  if (tokenRequestPromise) {
+    return tokenRequestPromise;
+  }
+
+  tokenRequestPromise = (async () => {
+    const response = await fetchWithTimeout(`${trimTrailingSlash(config.apiBaseUrl)}/identity/auth/access-token`, {
+      method: "POST",
+      headers: {
+        Authorization: `Basic ${config.apiKey}`,
+        "Content-Type": "application/vnd.ni-identity.v1+json"
+      }
+    }, "token request");
+
+    if (!response.ok) {
+      throw new Error(`N-Genius token request failed with ${response.status}`);
     }
-  }, "token request");
 
-  if (!response.ok) {
-    throw new Error(`N-Genius token request failed with ${response.status}`);
+    const payload = (await response.json()) as { access_token?: string; expires_in?: number };
+    if (!payload.access_token) {
+      throw new Error("N-Genius token response did not include access_token.");
+    }
+
+    tokenCache = {
+      token: payload.access_token,
+      expiresAt: Date.now() + (payload.expires_in ?? 300) * 1000
+    };
+
+    return payload.access_token;
+  })();
+
+  try {
+    return await tokenRequestPromise;
+  } finally {
+    tokenRequestPromise = null;
   }
+}
 
-  const payload = (await response.json()) as { access_token?: string; expires_in?: number };
-  if (!payload.access_token) {
-    throw new Error("N-Genius token response did not include access_token.");
-  }
-
-  tokenCache = {
-    token: payload.access_token,
-    expiresAt: now + (payload.expires_in ?? 300) * 1000
-  };
-
-  return payload.access_token;
+export async function prefetchNgeniusAccessToken() {
+  await requestAccessToken();
 }
 
 async function ngeniusFetch(path: string, init: RequestInit = {}) {
   const config = getNgeniusConfig();
-  const token = await requestAccessToken();
-  const response = await fetchWithTimeout(`${trimTrailingSlash(config.apiBaseUrl)}${path}`, {
-    ...init,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/vnd.ni-payment.v2+json",
-      "Content-Type": "application/vnd.ni-payment.v2+json",
-      ...(init.headers ?? {})
-    }
-  }, "API request");
+  const makeRequest = async (forceRefresh = false) => {
+    const token = await requestAccessToken({ forceRefresh });
+    return fetchWithTimeout(`${trimTrailingSlash(config.apiBaseUrl)}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        Accept: "application/vnd.ni-payment.v2+json",
+        "Content-Type": "application/vnd.ni-payment.v2+json",
+        ...(init.headers ?? {})
+      }
+    }, "API request");
+  };
+
+  let response = await makeRequest();
+  if (response.status === 401) {
+    response = await makeRequest(true);
+  }
 
   if (!response.ok) {
     const text = await response.text().catch(() => "");
-    throw new Error(`N-Genius request failed with ${response.status}: ${text.slice(0, 500)}`);
+    throw new NgeniusApiError(
+      `N-Genius request failed with ${response.status}: ${text.slice(0, 500)}`,
+      response.status,
+      text
+    );
   }
 
   return response.json() as Promise<Record<string, unknown>>;

@@ -17,6 +17,7 @@ function createTicketOption(): EventTicketOption {
     description: "",
     note: "",
     badge: "",
+    capacity: null,
     priceMinor: 0,
     currencyCode: "AED",
     soldOut: false
@@ -24,7 +25,9 @@ function createTicketOption(): EventTicketOption {
 }
 
 export function TicketOptionsEditor({ initialTickets }: TicketOptionsEditorProps) {
-  const [tickets, setTickets] = useState<EventTicketOption[]>(initialTickets);
+  const [tickets, setTickets] = useState<EventTicketOption[]>(
+    initialTickets.map((ticket) => ({ ...ticket, capacity: null, priceMinor: 0, currencyCode: "AED" }))
+  );
   const serializedValue = useMemo(() => JSON.stringify(tickets), [tickets]);
 
   return (
@@ -33,7 +36,7 @@ export function TicketOptionsEditor({ initialTickets }: TicketOptionsEditorProps
 
       {tickets.length === 0 ? (
         <div className="rounded-2xl border border-dashed border-slate/20 bg-slate-50 px-4 py-5 text-sm text-slate">
-          No extra ticket options yet.
+          No activity categories defined yet.
         </div>
       ) : null}
 
@@ -41,9 +44,9 @@ export function TicketOptionsEditor({ initialTickets }: TicketOptionsEditorProps
         <section key={ticket.id} className="admin-card grid gap-4 p-4 sm:p-5">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="admin-label">Ticket option {index + 1}</p>
+              <p className="admin-label">Activity category {index + 1}</p>
               <p className="mt-1 text-base font-semibold tracking-tight text-ink">
-                {ticket.title.trim() || "Untitled option"}
+                {ticket.title.trim() || "Untitled activity category"}
               </p>
             </div>
             <Button
@@ -56,7 +59,7 @@ export function TicketOptionsEditor({ initialTickets }: TicketOptionsEditorProps
             </Button>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2">
             <label className="space-y-2">
               <span className="text-sm font-semibold text-ink">Title</span>
               <Input
@@ -68,26 +71,7 @@ export function TicketOptionsEditor({ initialTickets }: TicketOptionsEditorProps
                     )
                   )
                 }
-                placeholder="Bootcamp Admission - 18:30"
-                className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
-              />
-            </label>
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-ink">Capacity</span>
-              <Input
-                type="number"
-                min={1}
-                value={ticket.capacity ?? ""}
-                onChange={(event) =>
-                  setTickets((current) =>
-                    current.map((currentTicket) =>
-                      currentTicket.id === ticket.id
-                        ? { ...currentTicket, capacity: event.target.value ? Number(event.target.value) : null }
-                        : currentTicket
-                    )
-                  )
-                }
-                placeholder="No limit"
+                placeholder="Bootcamp - 18:30"
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </label>
@@ -106,26 +90,6 @@ export function TicketOptionsEditor({ initialTickets }: TicketOptionsEditorProps
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </label>
-            <label className="space-y-2">
-              <span className="text-sm font-semibold text-ink">Price (AED)</span>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={((ticket.priceMinor ?? 0) / 100).toString()}
-                onChange={(event) =>
-                  setTickets((current) =>
-                    current.map((currentTicket) =>
-                      currentTicket.id === ticket.id
-                        ? { ...currentTicket, priceMinor: Math.round(Number(event.target.value || 0) * 100), currencyCode: "AED" }
-                        : currentTicket
-                    )
-                  )
-                }
-                placeholder="0.00"
-                className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
-              />
-            </label>
           </div>
 
           <label className="space-y-2">
@@ -139,7 +103,7 @@ export function TicketOptionsEditor({ initialTickets }: TicketOptionsEditorProps
                   )
                 )
               }
-              placeholder="Select ONE session only (18:30 OR 19:30). Do not select both."
+              placeholder="Select the activity category assigned to this attendee."
               className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
             />
           </label>
@@ -170,7 +134,7 @@ export function TicketOptionsEditor({ initialTickets }: TicketOptionsEditorProps
           className="rounded-2xl"
           onClick={() => setTickets((current) => [...current, createTicketOption()])}
         >
-          Add ticket option
+          Add activity category
         </Button>
       </div>
     </div>

@@ -9,8 +9,8 @@ type CookieMutation = {
   options?: Record<string, unknown>;
 };
 
-export function createServerSupabaseClient() {
-  const cookieStore = cookies();
+export async function createServerSupabaseClient() {
+  const cookieStore = await cookies();
 
   return createServerClient(
     publicEnv.NEXT_PUBLIC_SUPABASE_URL,

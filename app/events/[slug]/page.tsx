@@ -11,11 +11,12 @@ export const dynamic = "force-dynamic";
 export default async function EventDetailPage({
   params
 }: {
-  params: { slug: string };
+  params: Promise<{ slug: string }>;
 }) {
   noStore();
 
-  const event = await getEventBySlug(params.slug);
+  const { slug } = await params;
+  const event = await getEventBySlug(slug);
 
   if (!event) {
     notFound();

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { waitUntil } from "@vercel/functions";
 import { checkoutStatusSchema } from "@/lib/validation/checkout";
+import type { CheckoutStatusResult } from "@/lib/types";
 import {
   buildFulfilledCheckoutStatusForBooking,
   claimCheckoutStatusSideEffect,
@@ -19,6 +20,10 @@ function responseHeaders() {
   };
 }
 
+function isExpiredCheckoutTokenError(error: unknown) {
+  return error instanceof Error && error.message === "Invalid or expired checkout token.";
+}
+
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const parsed = checkoutStatusSchema.safeParse({ token: url.searchParams.get("token") ?? "" });
@@ -30,7 +35,21 @@ export async function GET(request: Request) {
     );
   }
 
-  let result = await getCheckoutStatus(parsed.data.token);
+  let result: CheckoutStatusResult;
+  try {
+    result = await getCheckoutStatus(parsed.data.token);
+  } catch (error) {
+    if (isExpiredCheckoutTokenError(error)) {
+      return NextResponse.json(
+        {
+          status: "expired",
+          message: "This checkout confirmation link has expired. If payment was completed, use the ticket link from your email."
+        },
+        { headers: responseHeaders() }
+      );
+    }
+    throw error;
+  }
   if (
     (result.status === "paid" || result.paymentAttemptStatus === "paid") &&
     result.bookingIntentId &&
@@ -38,7 +57,8 @@ export async function GET(request: Request) {
     await claimCheckoutStatusSideEffect({
       bookingIntentId: result.bookingIntentId,
       action: "checkout_status_inline_fulfillment",
-      maxRequests: 5
+      maxRequests: 1,
+      windowSeconds: 20
     })
   ) {
     try {
@@ -50,18 +70,22 @@ export async function GET(request: Request) {
         bookingIntentId: result.bookingIntentId,
         paymentAttemptId: result.paymentAttemptId
       });
-      await runEmailWorker();
-      result = await getCheckoutStatus(parsed.data.token);
       if (
-        result.status !== "fulfilled" &&
         ["fulfilled", "already_fulfilled"].includes(fulfilled.outcome) &&
         fulfilled.attendees.length > 0
       ) {
+        waitUntil(
+          runEmailWorker().catch((emailError) => {
+            console.error("[checkout/status] background ticket email failed", emailError);
+          })
+        );
         result = await buildFulfilledCheckoutStatusForBooking({
           bookingIntentId: fulfilled.bookingIntentId,
           paymentAttemptId: result.paymentAttemptId,
           attendees: fulfilled.attendees
         });
+      } else {
+        result = await getCheckoutStatus(parsed.data.token);
       }
       console.info("[checkout/status] fulfilled status reload", {
         bookingIntentId: result.bookingIntentId,

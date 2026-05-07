@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 export default async function VerifyPage({
   searchParams
 }: {
-  searchParams: { token?: string };
+  searchParams: Promise<{ token?: string }>;
 }) {
-  const token = searchParams.token;
+  const { token } = await searchParams;
   const result = token
     ? await confirmRegistrationFromToken({ token })
     : {

@@ -8,9 +8,10 @@ export const dynamic = "force-dynamic";
 export default async function TicketWalletPage({
   params
 }: {
-  params: { token: string };
+  params: Promise<{ token: string }>;
 }) {
-  const wallet = await getTicketWalletByToken(params.token);
+  const { token } = await params;
+  const wallet = await getTicketWalletByToken(token);
 
   if (!wallet) {
     notFound();

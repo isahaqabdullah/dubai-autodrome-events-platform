@@ -115,7 +115,7 @@ export function CheckoutReturnClient({
       : finalStatus === "paid"
         ? "Your payment is confirmed. We are preparing your tickets and will email them shortly."
       : finalStatus === "manual_action_required"
-        ? "Payment was received, but ticket issuance needs manual review."
+        ? "We could not confirm the final payment status automatically. No ticket has been issued yet."
         : finalStatus === "payment_failed" || finalStatus === "cancelled" || finalStatus === "expired"
           ? "No ticket was issued. Return to the event page to try again."
           : elapsed >= 60

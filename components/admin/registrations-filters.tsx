@@ -224,7 +224,7 @@ export function RegistrationsFilters({
         }}
         className="rounded-lg border-ink/25 bg-white px-2.5 py-1.5 text-sm font-medium shadow-sm focus:border-ink/40 focus:ring-1 focus:ring-ink/20"
       >
-        <option value="">All categories</option>
+        <option value="">All ticket/activity categories</option>
         {categoryOptions.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

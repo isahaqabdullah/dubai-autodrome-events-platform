@@ -105,6 +105,17 @@ vi.mock("@/lib/supabase/admin", () => ({
         };
       }
 
+      if (table === "event_categories" || table === "event_addons") {
+        return {
+          upsert: vi.fn(async () => ({ error: null })),
+          update: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              not: vi.fn(async () => ({ error: null }))
+            }))
+          }))
+        };
+      }
+
       throw new Error(`Unexpected table: ${table}`);
     }
   })
@@ -131,7 +142,19 @@ function createBeforeEvent() {
     declaration_text: "Terms and conditions for the track day event.",
     form_config: {
       submitLabel: "Reserve my spot",
-      categories: [],
+      categoriesLabel: "Ticket type",
+      ticketOptionsLabel: "Activity category",
+      categories: [
+        {
+          id: "track-access",
+          title: "Track access",
+          description: "Track access",
+          note: null,
+          badge: null,
+          capacity: null,
+          soldOut: false
+        }
+      ],
       ticketOptions: [
         {
           id: "addon-session",
@@ -166,9 +189,19 @@ function createUpdateInput(overrides: Partial<UpdateEventInput> = {}): UpdateEve
     declarationText: "Terms and conditions for the track day event.",
     submitLabel: "Reserve my spot",
     mapLink: "",
-    categoriesLabel: "",
-    ticketOptionsLabel: "Additional category",
-    categories: [],
+    categoriesLabel: "Ticket type",
+    ticketOptionsLabel: "Activity category",
+    categories: [
+      {
+        id: "track-access",
+        title: "Track access",
+        description: "Track access",
+        note: "",
+        badge: "",
+        capacity: null,
+        soldOut: false
+      }
+    ],
     ticketOptions: [
       {
         id: "addon-session",
@@ -204,14 +237,14 @@ describe("updateEvent", () => {
     testState.beforeEvent = createBeforeEvent();
     testState.registrationSummary = {
       count: 2,
-      ticketCounts: { "addon-session": 2 },
-      categoryCounts: {}
+    ticketCounts: { "addon-session": 2 },
+    categoryCounts: { "track-access": 2 }
     };
     testState.lastUpdatePayload = null;
     testState.auditRows = [];
   });
 
-  it("rejects removing and recreating an add-on that already has registrations", async () => {
+  it("rejects removing and recreating an activity category that already has registrations", async () => {
     await expect(updateEvent(
       createUpdateInput({
         ticketOptions: [
@@ -227,13 +260,13 @@ describe("updateEvent", () => {
         ]
       }),
       actor
-    )).rejects.toThrow("Cannot remove additional category");
+    )).rejects.toThrow("Cannot remove activity category");
 
     expect(testState.lastUpdatePayload).toBeNull();
     expect(testState.auditRows).toHaveLength(0);
   });
 
-  it("rejects lowering an add-on capacity below current usage", async () => {
+  it("ignores activity category capacity because activity is a preference", async () => {
     await expect(updateEvent(
       createUpdateInput({
         ticketOptions: [
@@ -249,9 +282,10 @@ describe("updateEvent", () => {
         ]
       }),
       actor
-    )).rejects.toThrow('Additional category "Add-on Session" capacity cannot be set below 2');
+    )).resolves.toBeTruthy();
 
-    expect(testState.lastUpdatePayload).toBeNull();
-    expect(testState.auditRows).toHaveLength(0);
+    const formConfig = testState.lastUpdatePayload?.form_config as { ticketOptions?: Array<{ capacity?: number | null }> };
+    expect(formConfig.ticketOptions?.[0]?.capacity).toBeNull();
+    expect(testState.auditRows).toHaveLength(1);
   });
 });

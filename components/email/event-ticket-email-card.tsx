@@ -81,8 +81,8 @@ export function EventTicketEmailCard({
       label: "Venue",
       value: `${presentation.venueShort}${presentation.venueSecondary ? `, ${presentation.venueSecondary}` : ""}`
     },
-    { label: "Category", value: presentation.categoryLabel },
-    ...(presentation.addOnLabel ? [{ label: "Add-on", value: presentation.addOnLabel }] : [])
+    { label: "Ticket type", value: presentation.categoryLabel },
+    ...(presentation.addOnLabel ? [{ label: "Activity", value: presentation.addOnLabel }] : [])
   ];
 
   function buildQrImageHtml(size: number, className: string) {

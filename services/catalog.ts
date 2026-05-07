@@ -65,7 +65,7 @@ function fallbackCatalogFromEvent(event: EventRecord): EventCatalog {
     note: addon.note ?? null,
     badge: addon.badge ?? null,
     capacity: addon.capacity ?? null,
-    priceMinor: addon.priceMinor ?? 0,
+    priceMinor: 0,
     currencyCode: addon.currencyCode ?? "AED",
     active: true,
     soldOut: addon.soldOut ?? false,
@@ -98,7 +98,10 @@ export async function getEventCatalog(event: EventRecord): Promise<EventCatalog>
   }
 
   const categories = ((categoriesResult.data ?? []) as CatalogRow[]).map(mapCatalogRow);
-  const addons = ((addonsResult.data ?? []) as CatalogRow[]).map(mapCatalogRow);
+  const addons = ((addonsResult.data ?? []) as CatalogRow[]).map((row) => ({
+    ...mapCatalogRow(row),
+    priceMinor: 0
+  }));
 
   if (categories.length === 0) {
     if (isDemoMode()) {
