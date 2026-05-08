@@ -15,6 +15,7 @@ interface TicketWalletProps {
   mapLink?: string | null;
   className?: string;
   showHeader?: boolean;
+  compactMobile?: boolean;
 }
 
 export function TicketWallet({
@@ -24,7 +25,8 @@ export function TicketWallet({
   ticketUrl,
   mapLink,
   className,
-  showHeader = true
+  showHeader = true,
+  compactMobile = false
 }: TicketWalletProps) {
   const [activeIndex, setActiveIndex] = useState(0);
   const [touchStartX, setTouchStartX] = useState<number | null>(null);
@@ -98,7 +100,7 @@ export function TicketWallet({
   return (
     <section className={cn("mx-auto w-full max-w-6xl", className)}>
       {showHeader ? (
-        <div className="mb-5 text-center">
+        <div className={cn("mb-5 text-center", compactMobile && "hidden sm:block")}>
           <CheckCircle2 className="mx-auto h-10 w-10 text-[#2c7a86] sm:h-12 sm:w-12" />
           <p className="mt-3 text-xs font-bold uppercase tracking-[0.22em] text-[#2c7a86]">{attendeeListLabel}</p>
           <h1 className="mt-2 font-title text-2xl font-black italic leading-tight text-ink sm:text-4xl">Your tickets</h1>
@@ -108,14 +110,20 @@ export function TicketWallet({
         </div>
       ) : null}
 
-      <div className="mb-5 rounded-[26px] border border-slate/12 bg-white p-4 shadow-[0_18px_50px_rgba(12,23,35,0.08)] sm:p-5">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div
+        className={cn(
+          "mb-5 rounded-[26px] border border-slate/12 bg-white p-4 shadow-[0_18px_50px_rgba(12,23,35,0.08)] sm:p-5",
+          compactMobile && "mb-3 p-3 sm:mb-5 sm:p-5",
+          compactMobile && !hasMultipleTickets && "hidden sm:block"
+        )}
+      >
+        <div className={cn("flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between", compactMobile && "gap-3 sm:gap-4")}>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#2c7a86]">All tickets</p>
-            <h2 className="mt-1 font-title text-2xl font-black italic leading-tight text-ink sm:text-3xl">
+            <h2 className={cn("mt-1 font-title font-black italic leading-tight text-ink sm:text-3xl", compactMobile ? "text-xl" : "text-2xl")}>
               {attendeeListLabel}
             </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate">
+            <p className={cn("mt-2 max-w-2xl text-sm leading-relaxed text-slate", compactMobile && "hidden sm:block")}>
               {hasMultipleTickets
                 ? "Select an attendee below to show the matching QR code. Each attendee has a separate ticket."
                 : "This ticket link contains the QR code and backup manual code for the attendee."}
@@ -123,7 +131,7 @@ export function TicketWallet({
           </div>
 
           <div className="flex flex-wrap gap-2 lg:justify-end">
-            {ticketUrl && !showHeader ? (
+            {ticketUrl && !showHeader && !compactMobile ? (
               <a
                 href={ticketUrl}
                 target="_blank"
@@ -137,7 +145,7 @@ export function TicketWallet({
           </div>
         </div>
 
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5">
+        <div className={cn("grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5", compactMobile ? "mt-3 sm:mt-4" : "mt-4")}>
           {attendees.map((attendee, index) => (
             <button
               key={attendee.registrationId}
@@ -146,7 +154,8 @@ export function TicketWallet({
               aria-current={index === activeIndex ? "true" : undefined}
               onClick={() => setActiveIndex(index)}
               className={cn(
-                "min-h-[82px] rounded-[18px] border p-3 text-left transition",
+                "rounded-[18px] border text-left transition",
+                compactMobile ? "min-h-[64px] p-2.5 sm:min-h-[82px] sm:p-3" : "min-h-[82px] p-3",
                 index === activeIndex
                   ? "border-ink bg-ink text-white shadow-[0_12px_30px_rgba(12,23,35,0.18)]"
                   : "border-slate/12 bg-mist/55 text-ink hover:border-slate/28 hover:bg-white"
@@ -165,7 +174,7 @@ export function TicketWallet({
         </div>
       </div>
 
-      <div className="mb-3 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center">
+      <div className={cn("mb-3 flex flex-col items-start justify-between gap-2 sm:flex-row sm:items-center", compactMobile && !hasMultipleTickets && "hidden sm:flex")}>
         <div>
           <p className="text-sm font-bold text-ink">
             Showing ticket {activeIndex + 1} of {attendees.length}
@@ -204,6 +213,7 @@ export function TicketWallet({
           ticketNumber={activeIndex + 1}
           ticketTotal={attendees.length}
           mapLink={mapLink}
+          compactMobile={compactMobile}
         />
       </div>
 

@@ -20,13 +20,14 @@ export default async function TicketWalletPage({
   return (
     <>
       <SiteHeader />
-      <main className="mx-auto min-h-[70vh] max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <main className="mx-auto min-h-[70vh] max-w-7xl px-3 py-4 sm:px-6 sm:py-8 lg:px-8">
         <TicketWallet
           event={wallet.event}
           attendees={wallet.attendees}
           ticketToken={wallet.ticketToken}
           ticketUrl={wallet.ticketUrl}
           mapLink={wallet.event.form_config?.mapLink}
+          compactMobile
         />
       </main>
     </>
