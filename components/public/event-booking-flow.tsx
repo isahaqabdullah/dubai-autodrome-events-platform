@@ -677,6 +677,7 @@ export function EventBookingFlow({
       declarationAccepted: true,
       phone: form.phone,
       uaeResident: form.uaeResident,
+      marketingOptIn: form.marketingOptIn,
       attendees: attendees.map((attendee) => ({
         firstName: attendee.firstName,
         lastName: attendee.lastName,
@@ -685,7 +686,7 @@ export function EventBookingFlow({
         addonId: attendee.activityCategoryId
       }))
     };
-  }, [attendees, checkoutToken, form.declarationAccepted, form.phone, form.uaeResident]);
+  }, [attendees, checkoutToken, form.declarationAccepted, form.marketingOptIn, form.phone, form.uaeResident]);
   const paymentPreparationKey = useMemo(() => {
     return createPaymentPayload
       ? JSON.stringify({ ...createPaymentPayload, termsAccepted: form.declarationAccepted })

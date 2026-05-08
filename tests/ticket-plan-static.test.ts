@@ -117,6 +117,24 @@ describe("ticket plan static safeguards", () => {
     expect(publicBookingFlow).not.toContain('setForm((current) => ({ ...current, uaeResident: e.target.value === "yes" }));\n                clearCheckoutSession();');
   });
 
+  it("captures marketing opt-in from checkout through primary registration export data", () => {
+    const publicBookingFlow = readProjectFile("components/public/event-booking-flow.tsx");
+    const createPaymentRoute = readProjectFile("app/api/checkout/create-payment/route.ts");
+    const checkoutValidation = readProjectFile("lib/validation/checkout.ts");
+    const checkoutService = readProjectFile("services/checkout.ts");
+    const adminService = readProjectFile("services/admin.ts");
+    const migration = readProjectFile("supabase/migrations/20260508120000_capture_marketing_opt_in.sql");
+
+    expect(publicBookingFlow).toContain("marketingOptIn: form.marketingOptIn");
+    expect(checkoutValidation).toContain("marketingOptIn: z.boolean().optional().default(false)");
+    expect(createPaymentRoute).toContain("marketingOptIn: parsed.data.marketingOptIn");
+    expect(checkoutService).toContain("payer_marketing_opt_in: contact.marketingOptIn");
+    expect(migration).toContain("add column if not exists payer_marketing_opt_in boolean not null default false");
+    expect(migration).toContain("add column if not exists marketing_opt_in boolean not null default false");
+    expect(migration).toContain("new.marketing_opt_in := coalesce(v_payer_marketing_opt_in, false);");
+    expect(adminService).toContain('"Marketing Opt-In"');
+  });
+
   it("does not prepare gateway payment before terms are accepted", () => {
     const publicBookingFlow = readProjectFile("components/public/event-booking-flow.tsx");
     const checkoutValidation = readProjectFile("lib/validation/checkout.ts");

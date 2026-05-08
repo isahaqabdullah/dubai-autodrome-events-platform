@@ -17,7 +17,8 @@ export async function POST(request: Request) {
 
   const result = await createCheckoutPayment(parsed.data.checkoutToken, parsed.data.attendees, {
     phone: parsed.data.phone,
-    uaeResident: parsed.data.uaeResident
+    uaeResident: parsed.data.uaeResident,
+    marketingOptIn: parsed.data.marketingOptIn
   });
 
   return NextResponse.json(result, {

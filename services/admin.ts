@@ -463,7 +463,7 @@ function matchesCategoryFilter(
 }
 
 const ADMIN_REGISTRATION_SELECT =
-  "id, event_id, full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, checked_in_at, created_at, booking_id, is_primary, registered_by_email, booking_intent_id, payment_attempt_id, ni_order_reference, paid_amount_minor, paid_currency_code, events(title, slug)";
+  "id, event_id, full_name, email_raw, phone, age, uae_resident, marketing_opt_in, category_title, ticket_option_title, status, checked_in_at, created_at, booking_id, is_primary, registered_by_email, booking_intent_id, payment_attempt_id, ni_order_reference, paid_amount_minor, paid_currency_code, events(title, slug)";
 
 export async function listRegistrations(filters: ListRegistrationsFilters) {
   const page = Number.isFinite(filters.page) && (filters.page ?? 0) > 0 ? Math.floor(filters.page ?? 1) : 1;
@@ -761,6 +761,7 @@ type ExportRegistrationRowInput = {
   phone?: string | null;
   age?: number | null;
   uae_resident?: boolean | null;
+  marketing_opt_in?: boolean | null;
   category_title?: string | null;
   ticket_option_title?: string | null;
   status?: string | null;
@@ -771,7 +772,7 @@ type ExportRegistrationRowInput = {
 };
 
 const REGISTRATION_EXPORT_SELECT =
-  "full_name, email_raw, phone, age, uae_resident, category_title, ticket_option_title, status, registered_by_email, is_primary, created_at, checked_in_at";
+  "full_name, email_raw, phone, age, uae_resident, marketing_opt_in, category_title, ticket_option_title, status, registered_by_email, is_primary, created_at, checked_in_at";
 const EXPORT_BATCH_SIZE = 1000;
 const EXPORT_TIME_ZONE = "Asia/Dubai";
 const REGISTRATION_EXPORT_HEADERS = [
@@ -781,6 +782,7 @@ const REGISTRATION_EXPORT_HEADERS = [
   "Phone Number",
   "Age",
   "UAE Resident",
+  "Marketing Opt-In",
   "Ticket Type",
   "Activity Category",
   "Status",
@@ -842,7 +844,7 @@ function formatExportDateTime(value: string | null | undefined) {
   }).format(date);
 }
 
-function formatExportUaeResident(value: boolean | null | undefined, isPrimary?: boolean) {
+function formatExportPrimaryBoolean(value: boolean | null | undefined, isPrimary?: boolean) {
   if (typeof value !== "boolean") {
     return "";
   }
@@ -861,7 +863,8 @@ function buildRegistrationExportRow(row: ExportRegistrationRowInput, index: numb
     "Email": formatExportEmail(row.email_raw),
     "Phone Number": row.phone ?? "",
     "Age": row.age ?? "",
-    "UAE Resident": formatExportUaeResident(row.uae_resident, row.is_primary),
+    "UAE Resident": formatExportPrimaryBoolean(row.uae_resident, row.is_primary),
+    "Marketing Opt-In": formatExportPrimaryBoolean(row.marketing_opt_in, row.is_primary),
     "Ticket Type": row.category_title ?? "General Admission",
     "Activity Category": row.ticket_option_title ?? "",
     "Status": row.status ?? "",

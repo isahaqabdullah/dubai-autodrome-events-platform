@@ -137,10 +137,17 @@ describe("checkoutStartSchema", () => {
       declarationAccepted: true,
       phone: "050 123 4567",
       uaeResident: true,
+      marketingOptIn: true,
       attendees: validCheckout.attendees
     };
 
     expect(checkoutCreatePaymentSchema.safeParse(validPayment).success).toBe(true);
+    const withoutMarketingOptIn = checkoutCreatePaymentSchema.safeParse({
+      ...validPayment,
+      marketingOptIn: undefined
+    });
+    expect(withoutMarketingOptIn.success).toBe(true);
+    expect(withoutMarketingOptIn.success && withoutMarketingOptIn.data.marketingOptIn).toBe(false);
     expect(checkoutCreatePaymentSchema.safeParse({
       ...validPayment,
       attendees: [{ ...validCheckout.attendees[0], firstName: "" }]

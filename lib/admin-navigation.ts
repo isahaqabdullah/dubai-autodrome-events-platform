@@ -48,6 +48,10 @@ export function getAdminBackLabel(path: string) {
     return "Back to registrations";
   }
 
+  if (path.startsWith("/admin/payments")) {
+    return "Back to payments";
+  }
+
   if (path.startsWith("/admin/events")) {
     return "Back to events";
   }

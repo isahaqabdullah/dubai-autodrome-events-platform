@@ -292,6 +292,12 @@ export default async function RegistrationsPage({
                     Check in
                   </a>
                   <a
+                    href={appendReturnTo(`/admin/payments?eventId=${selectedEvent.id}`, currentRegistrationsHref)}
+                    className="admin-action"
+                  >
+                    Payments
+                  </a>
+                  <a
                     href={appendReturnTo(`/admin/events/${selectedEvent.id}/edit`, currentRegistrationsHref)}
                     className="admin-action"
                   >

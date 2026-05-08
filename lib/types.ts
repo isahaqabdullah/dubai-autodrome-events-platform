@@ -90,6 +90,7 @@ export interface RegistrationRecord {
   phone: string | null;
   age: number | null;
   uae_resident: boolean;
+  marketing_opt_in: boolean;
 
   category_id: string | null;
   category_title: string | null;

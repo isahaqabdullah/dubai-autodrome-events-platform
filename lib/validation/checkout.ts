@@ -42,6 +42,7 @@ export const checkoutStartSchema = z.object({
     .optional(),
   age: optionalAgeSchema,
   uaeResident: z.boolean().optional(),
+  marketingOptIn: z.boolean().optional().default(false),
   declarationAccepted: z.boolean().optional(),
   website: z.string().max(0).optional().or(z.literal("")),
   attendees: z.array(checkoutAttendeeStartSchema).min(1).max(5).optional()
@@ -66,6 +67,7 @@ export const checkoutCreatePaymentSchema = z.object({
     .max(40)
     .refine(isValidPhoneNumber, PHONE_NUMBER_VALIDATION_MESSAGE),
   uaeResident: z.boolean(),
+  marketingOptIn: z.boolean().optional().default(false),
   attendees: z.array(checkoutAttendeePaymentSchema).min(1).max(5).optional()
 });
 

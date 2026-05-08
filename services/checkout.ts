@@ -63,6 +63,7 @@ type BookingRow = {
   payer_full_name: string;
   payer_phone: string | null;
   payer_uae_resident: boolean;
+  payer_marketing_opt_in: boolean;
   total_minor: number;
   currency_code: string;
   attempt_count: number;
@@ -269,6 +270,7 @@ async function insertBooking(input: {
       payer_phone: normalizePhone(input.checkoutInput.phone),
       payer_age: input.checkoutInput.age ?? null,
       payer_uae_resident: input.checkoutInput.uaeResident ?? false,
+      payer_marketing_opt_in: input.checkoutInput.marketingOptIn ?? false,
       declaration_version: input.event.declaration_version,
       verification_token_hash: hashOpaqueToken(input.verificationCode),
       verification_expires_at: verificationExpiresAt,
@@ -672,7 +674,7 @@ function countMapsEqual(left: Map<string, number>, right: Map<string, number>) {
 async function updateBookingContactDetails(
   supabase: Supabase,
   bookingIntentId: string,
-  contact: Pick<CheckoutCreatePaymentInput, "phone" | "uaeResident">
+  contact: Pick<CheckoutCreatePaymentInput, "phone" | "uaeResident" | "marketingOptIn">
 ) {
   const normalizedPhone = normalizePhone(contact.phone);
 
@@ -681,7 +683,8 @@ async function updateBookingContactDetails(
       .from("booking_intents")
       .update({
         payer_phone: normalizedPhone,
-        payer_uae_resident: contact.uaeResident
+        payer_uae_resident: contact.uaeResident,
+        payer_marketing_opt_in: contact.marketingOptIn
       })
       .eq("id", bookingIntentId),
     supabase
@@ -1091,7 +1094,7 @@ export async function verifyCheckoutOtp(input: {
 export async function createCheckoutPayment(
   checkoutToken: string,
   attendees?: CheckoutCreatePaymentInput["attendees"],
-  contact?: Pick<CheckoutCreatePaymentInput, "phone" | "uaeResident">
+  contact?: Pick<CheckoutCreatePaymentInput, "phone" | "uaeResident" | "marketingOptIn">
 ): Promise<CheckoutPaymentResult> {
   const markTiming = createCheckoutTimer("create-payment");
   const supabase = createAdminSupabaseClient({ noStore: true });
@@ -1232,6 +1235,7 @@ export async function createCheckoutPayment(
     });
     booking.payer_phone = normalizePhone(contact.phone);
     booking.payer_uae_resident = contact.uaeResident;
+    booking.payer_marketing_opt_in = contact.marketingOptIn;
   }
 
   if (!attendeeDetailsCompleted) {

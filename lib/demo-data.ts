@@ -80,6 +80,7 @@ export const demoRegistrations: Array<
     | "phone"
     | "age"
     | "uae_resident"
+    | "marketing_opt_in"
     | "category_id"
     | "category_title"
     | "ticket_option_id"
@@ -98,6 +99,7 @@ export const demoRegistrations: Array<
     phone: "+971-50-555-0198",
     age: 29,
     uae_resident: true,
+    marketing_opt_in: true,
     category_id: "general-admission",
     category_title: "General Admission",
     ticket_option_id: null,
@@ -115,6 +117,7 @@ export const demoRegistrations: Array<
     phone: "+971-50-555-0129",
     age: 34,
     uae_resident: false,
+    marketing_opt_in: false,
     category_id: "general-admission",
     category_title: "General Admission",
     ticket_option_id: "bootcamp-1930",
@@ -132,6 +135,7 @@ export const demoRegistrations: Array<
     phone: "+971-50-555-0176",
     age: 26,
     uae_resident: true,
+    marketing_opt_in: true,
     category_id: "general-admission",
     category_title: "General Admission",
     ticket_option_id: null,

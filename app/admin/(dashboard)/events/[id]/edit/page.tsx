@@ -32,6 +32,8 @@ export default async function EditEventPage({
   const backCrumbLabel =
     backLabel === "Back to registrations"
       ? "Registrations"
+      : backLabel === "Back to payments"
+        ? "Payments"
       : backLabel === "Back to events"
         ? "Events"
         : backLabel === "Back to check-in"

@@ -116,11 +116,14 @@ function EventSection({
                   <ActionLink href={appendReturnTo(`/check-in/${event.slug}`, "/admin")} variant="primary" compact fresh>
                     Check in
                   </ActionLink>
-                  <ActionLink href={appendReturnTo(`/admin/events/${event.id}/edit`, "/admin")} compact>
-                    Edit
-                  </ActionLink>
                   <ActionLink href={`/admin/registrations?eventId=${event.id}`} compact fresh>
                     Registrations
+                  </ActionLink>
+                  <ActionLink href={appendReturnTo(`/admin/payments?eventId=${event.id}`, "/admin")} compact fresh>
+                    Payments
+                  </ActionLink>
+                  <ActionLink href={appendReturnTo(`/admin/events/${event.id}/edit`, "/admin")} compact>
+                    Edit
                   </ActionLink>
                   <ActionLink href={`/events/${event.slug}`} compact>
                     Public
