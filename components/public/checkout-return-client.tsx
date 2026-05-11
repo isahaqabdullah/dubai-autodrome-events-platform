@@ -132,7 +132,7 @@ export function CheckoutReturnClient({
       <p className="mt-3 text-sm leading-relaxed text-slate">{message}</p>
       {canShowTickets ? (
         <TicketWallet
-          className="mt-8 text-left"
+          className="mt-5 text-left"
           event={ticketEvent!}
           attendees={ticketAttendees}
           ticketToken={status?.ticketToken}

@@ -112,18 +112,18 @@ export function TicketWallet({
 
       <div
         className={cn(
-          "mb-5 rounded-[26px] border border-slate/12 bg-white p-4 shadow-[0_18px_50px_rgba(12,23,35,0.08)] sm:p-5",
-          compactMobile && "mb-3 p-3 sm:mb-5 sm:p-5",
+          "mb-4 rounded-[22px] border border-slate/12 bg-white p-3 shadow-[0_18px_50px_rgba(12,23,35,0.08)] sm:p-4",
+          compactMobile && "mb-3 p-3 sm:mb-4 sm:p-4",
           compactMobile && !hasMultipleTickets && "hidden sm:block"
         )}
       >
-        <div className={cn("flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between", compactMobile && "gap-3 sm:gap-4")}>
+        <div className={cn("flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between", compactMobile && "gap-3")}>
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#2c7a86]">All tickets</p>
-            <h2 className={cn("mt-1 font-title font-black italic leading-tight text-ink sm:text-3xl", compactMobile ? "text-xl" : "text-2xl")}>
+            <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#2c7a86]">All tickets</p>
+            <h2 className={cn("mt-1 font-title font-black italic leading-tight text-ink sm:text-2xl", compactMobile ? "text-xl" : "text-[26px]")}>
               {attendeeListLabel}
             </h2>
-            <p className={cn("mt-2 max-w-2xl text-sm leading-relaxed text-slate", compactMobile && "hidden sm:block")}>
+            <p className={cn("mt-1.5 max-w-2xl text-xs leading-relaxed text-slate sm:text-sm", compactMobile && "hidden sm:block")}>
               {hasMultipleTickets
                 ? "Select an attendee below to show the matching QR code. Each attendee has a separate ticket."
                 : "This ticket link contains the QR code and backup manual code for the attendee."}
@@ -136,7 +136,7 @@ export function TicketWallet({
                 href={ticketUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center rounded-2xl border border-ink bg-ink px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-ink/92"
+                className="inline-flex items-center justify-center rounded-xl border border-ink bg-ink px-3 py-2 text-sm font-semibold text-white transition hover:bg-ink/92"
               >
                 <ExternalLink className="mr-2 h-4 w-4" />
                 View all tickets link
@@ -145,7 +145,7 @@ export function TicketWallet({
           </div>
         </div>
 
-        <div className={cn("grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5", compactMobile ? "mt-3 sm:mt-4" : "mt-4")}>
+        <div className={cn("grid gap-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5", compactMobile ? "mt-3" : "mt-3")}>
           {attendees.map((attendee, index) => (
             <button
               key={attendee.registrationId}
@@ -154,18 +154,18 @@ export function TicketWallet({
               aria-current={index === activeIndex ? "true" : undefined}
               onClick={() => setActiveIndex(index)}
               className={cn(
-                "rounded-[18px] border text-left transition",
-                compactMobile ? "min-h-[64px] p-2.5 sm:min-h-[82px] sm:p-3" : "min-h-[82px] p-3",
+                "rounded-2xl border text-left transition",
+                compactMobile ? "min-h-[58px] p-2.5 sm:min-h-[66px]" : "min-h-[66px] p-2.5",
                 index === activeIndex
                   ? "border-ink bg-ink text-white shadow-[0_12px_30px_rgba(12,23,35,0.18)]"
                   : "border-slate/12 bg-mist/55 text-ink hover:border-slate/28 hover:bg-white"
               )}
             >
-              <span className={cn("text-[10px] font-bold uppercase tracking-[0.18em]", index === activeIndex ? "text-white/64" : "text-slate")}>
+              <span className={cn("text-[9px] font-bold uppercase tracking-[0.18em]", index === activeIndex ? "text-white/64" : "text-slate")}>
                 Ticket {index + 1}
               </span>
-              <span className="mt-1 block truncate text-sm font-black">{attendee.fullName}</span>
-              <span className={cn("mt-1 block truncate text-xs", index === activeIndex ? "text-white/72" : "text-slate")}>
+              <span className="mt-0.5 block truncate text-sm font-black">{attendee.fullName}</span>
+              <span className={cn("mt-0.5 block truncate text-xs", index === activeIndex ? "text-white/72" : "text-slate")}>
                 {attendee.categoryTitle}
                 {attendee.ticketTitle ? ` - ${attendee.ticketTitle}` : ""}
               </span>
