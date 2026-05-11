@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Clock3, FileText, MapPin, Minus, Plus } from "lucide-react";
+import { ArrowLeft, CheckCircle2, ChevronDown, ChevronUp, Clock3, FileText, Loader2, MapPin, Minus, Plus } from "lucide-react";
 import { TicketWallet } from "@/components/public/ticket-wallet";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -74,6 +74,11 @@ type CreatePaymentResult = {
     ticketTitle: string | null;
     email?: string;
   }>;
+};
+
+type CreatePaymentResponse = {
+  ok: boolean;
+  result: CreatePaymentResult;
 };
 
 interface SelectableOption extends EventTicketOption {
@@ -316,8 +321,14 @@ export function EventBookingFlow({
   const [paymentPreparationState, setPaymentPreparationState] = useState<PaymentPreparationState>("idle");
   const [paymentPreparationMessage, setPaymentPreparationMessage] = useState<string | null>(null);
   const [preparedPayment, setPreparedPayment] = useState<{ key: string; result: CreatePaymentResult } | null>(null);
+  const [paymentRedirectElapsed, setPaymentRedirectElapsed] = useState(0);
   const [ticketQuantities, setTicketQuantities] = useState<Record<string, number>>({});
   const [attendees, setAttendees] = useState<AttendeeDraft[]>([createAttendeeDraft(1)]);
+  const paymentPreparationRequestRef = useRef<{
+    key: string;
+    controller: AbortController;
+    promise: Promise<CreatePaymentResponse>;
+  } | null>(null);
 
   const [form, setForm] = useState(INITIAL_FORM_STATE);
 
@@ -642,12 +653,27 @@ export function EventBookingFlow({
     (sum, row) => sum + (row.category.priceMinor ?? 0) * row.quantity,
     0
   );
+  const paymentRedirectInProgress = step === "details" && submissionState === "submitting" && selectedTicketSubtotalMinor > 0;
+  const paymentRedirectIsSlow = paymentRedirectElapsed >= 8;
   const selectedTicketCurrencyCode =
     selectedTicketTypeRows.find((row) => row.category.currencyCode)?.category.currencyCode ?? "AED";
   const selectedTicketTypeIds = useMemo(
     () => new Set(selectedTicketTypeRows.map((row) => row.category.id)),
     [selectedTicketTypeRows]
   );
+
+  useEffect(() => {
+    if (!paymentRedirectInProgress) {
+      setPaymentRedirectElapsed(0);
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setPaymentRedirectElapsed((current) => current + 1);
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [paymentRedirectInProgress]);
 
   const attendeeSelections = attendees.map((attendee) => {
     const ticketType = categories.find((category) => category.id === attendee.categoryId) ?? null;
@@ -698,7 +724,39 @@ export function EventBookingFlow({
     preparedPayment.result.outcome === "redirect" &&
     preparedPayment.result.paymentUrl
   );
-  const paymentActionPreparing = selectedTicketSubtotalMinor > 0 && paymentPreparationState === "preparing" && !preparedPaymentReady;
+  const startPaymentPreparationRequest = useCallback((payload: NonNullable<typeof createPaymentPayload>, key: string) => {
+    const activeRequest = paymentPreparationRequestRef.current;
+    if (activeRequest?.key === key) {
+      return activeRequest;
+    }
+
+    activeRequest?.controller.abort();
+
+    const controller = new AbortController();
+    const request = {
+      key,
+      controller,
+      promise: fetch("/api/checkout/create-payment", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+        signal: controller.signal
+      }).then(async (response) => {
+        const result = (await response.json().catch(() => ({}))) as CreatePaymentResult;
+        return { ok: response.ok, result };
+      })
+    };
+
+    paymentPreparationRequestRef.current = request;
+    const clearRequest = () => {
+      if (paymentPreparationRequestRef.current === request) {
+        paymentPreparationRequestRef.current = null;
+      }
+    };
+    request.promise.then(clearRequest, clearRequest);
+
+    return request;
+  }, []);
   const requiredErrors = useMemo(() => {
     if (!showFieldErrors) {
       return {
@@ -938,6 +996,11 @@ export function EventBookingFlow({
       setPaymentPreparationState("idle");
       setPaymentPreparationMessage(null);
       setPreparedPayment(null);
+      const activeRequest = paymentPreparationRequestRef.current;
+      if (activeRequest) {
+        activeRequest.controller.abort();
+        paymentPreparationRequestRef.current = null;
+      }
       return;
     }
 
@@ -952,20 +1015,14 @@ export function EventBookingFlow({
       return;
     }
 
-    const controller = new AbortController();
     const timer = window.setTimeout(() => {
       setPaymentPreparationState("preparing");
-      setPaymentPreparationMessage("Preparing secure payment...");
+      setPaymentPreparationMessage("Getting secure payment ready in the background.");
 
-      void fetch("/api/checkout/create-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(createPaymentPayload),
-        signal: controller.signal
-      })
-        .then(async (response) => {
-          const result = (await response.json().catch(() => ({}))) as CreatePaymentResult;
-          if (!response.ok) {
+      const request = startPaymentPreparationRequest(createPaymentPayload, paymentPreparationKey);
+      void request.promise
+        .then(({ ok, result }) => {
+          if (!ok) {
             setPaymentPreparationState("error");
             setPaymentPreparationMessage(result.message ?? "Payment will be prepared when you continue.");
             setPreparedPayment(null);
@@ -981,7 +1038,7 @@ export function EventBookingFlow({
 
           if (result.outcome === "payment_pending") {
             setPaymentPreparationState("preparing");
-            setPaymentPreparationMessage(result.message ?? "Preparing secure payment...");
+            setPaymentPreparationMessage(result.message ?? "Getting secure payment ready in the background.");
             return;
           }
 
@@ -994,11 +1051,15 @@ export function EventBookingFlow({
           setPaymentPreparationMessage("Payment will be prepared when you continue.");
           setPreparedPayment(null);
         });
-    }, 350);
+    }, 50);
 
     return () => {
       window.clearTimeout(timer);
-      controller.abort();
+      const activeRequest = paymentPreparationRequestRef.current;
+      if (activeRequest?.key === paymentPreparationKey) {
+        activeRequest.controller.abort();
+        paymentPreparationRequestRef.current = null;
+      }
     };
   }, [
     completedRegistration,
@@ -1006,7 +1067,8 @@ export function EventBookingFlow({
     paymentPreparationKey,
     preparedPayment,
     readyForPayment,
-    selectedTicketSubtotalMinor
+    selectedTicketSubtotalMinor,
+    startPaymentPreparationRequest
   ]);
 
   async function sendOtp(endpoint: "/api/checkout/start" | "/api/checkout/resend-otp") {
@@ -1164,23 +1226,35 @@ export function EventBookingFlow({
     setSubmissionState("submitting");
     setMessage(null);
 
-    const paymentRequestController = new AbortController();
+    const activePaymentRequest =
+      selectedTicketSubtotalMinor > 0 && paymentPreparationRequestRef.current?.key === paymentPreparationKey
+        ? paymentPreparationRequestRef.current
+        : null;
+    const paymentRequestController = activePaymentRequest ? null : new AbortController();
     const paymentRequestTimeout = window.setTimeout(() => {
-      paymentRequestController.abort();
+      if (activePaymentRequest) {
+        activePaymentRequest.controller.abort();
+      } else {
+        paymentRequestController?.abort();
+      }
     }, 45000);
 
-    let response: Response;
+    let paymentResponse: CreatePaymentResponse;
     let result: CreatePaymentResult;
 
     try {
-      response = await fetch("/api/checkout/create-payment", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(createPaymentPayload),
-        signal: paymentRequestController.signal
-      });
-
-      result = (await response.json().catch(() => ({}))) as CreatePaymentResult;
+      paymentResponse = activePaymentRequest
+        ? await activePaymentRequest.promise
+        : await fetch("/api/checkout/create-payment", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(createPaymentPayload),
+          signal: paymentRequestController?.signal
+        }).then(async (response) => {
+          const responseResult = (await response.json().catch(() => ({}))) as CreatePaymentResult;
+          return { ok: response.ok, result: responseResult };
+        });
+      result = paymentResponse.result;
     } catch (error) {
       const aborted = error instanceof Error && error.name === "AbortError";
       setSubmissionState("error");
@@ -1194,7 +1268,7 @@ export function EventBookingFlow({
       window.clearTimeout(paymentRequestTimeout);
     }
 
-    if (!response.ok) {
+    if (!paymentResponse.ok) {
       setSubmissionState("error");
       setMessage(result.message ?? "Unable to complete the registration.");
       return;
@@ -2151,18 +2225,17 @@ export function EventBookingFlow({
 
                       void submitRegistration();
                     }}
-                    disabled={step === "tickets" ? !canContinueFromTickets : submissionState === "submitting" || paymentActionPreparing || !readyForPayment}
+                    disabled={step === "tickets" ? !canContinueFromTickets : submissionState === "submitting" || !readyForPayment}
                     className="mt-4 w-full rounded-xl bg-black py-2.5 font-display text-[14px] font-bold tracking-tight text-white shadow-[0_18px_40px_-24px_rgba(15,23,42,0.45)] hover:bg-black/90 sm:mt-6 sm:rounded-2xl sm:py-3.5 sm:text-base"
                   >
                     {step === "tickets"
                       ? "Continue"
                       : submissionState === "submitting"
-                        ? selectedTicketSubtotalMinor > 0 ? "Preparing payment..." : "Completing registration..."
+                        ? selectedTicketSubtotalMinor > 0 ? "Opening secure payment..." : "Completing registration..."
                         : !emailVerified ? "Verify email to continue"
                           : !attendeesComplete ? "Complete attendee details"
                             : !termsComplete ? "Accept terms to continue"
-                              : paymentActionPreparing ? "Preparing secure payment..."
-                                : selectedTicketSubtotalMinor > 0 ? "Continue to payment" : "Complete registration"}
+                              : selectedTicketSubtotalMinor > 0 ? "Continue to payment" : "Complete registration"}
                   </Button>
 
                   {step === "details" && selectedTicketSubtotalMinor > 0 && readyForPayment && (preparedPaymentReady || paymentPreparationMessage) ? (
@@ -2180,6 +2253,31 @@ export function EventBookingFlow({
           ) : null}
         </div>
       </div>
+
+      {paymentRedirectInProgress ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-ink/80 px-4 text-center text-ink backdrop-blur-sm"
+          role="status"
+          aria-live="polite"
+        >
+          <div className="w-full max-w-md rounded-[28px] border border-white/20 bg-white px-5 py-6 shadow-[0_28px_90px_rgba(0,0,0,0.32)] sm:px-7 sm:py-8">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-[#2c7a86]/10 text-[#2c7a86]">
+              <Loader2 className="h-7 w-7 animate-spin" />
+            </div>
+            <h2 className="mt-5 font-title text-2xl font-black italic leading-tight tracking-tight sm:text-3xl">
+              {paymentRedirectIsSlow ? "Still opening secure payment" : "Opening secure payment"}
+            </h2>
+            <p className="mx-auto mt-3 max-w-sm text-sm leading-relaxed text-slate sm:text-base">
+              {paymentRedirectIsSlow
+                ? "This is taking longer than usual. Please keep this page open while we connect to the secure payment page."
+                : "Please keep this page open. We are connecting you to the secure payment page now."}
+            </p>
+            <p className="mt-5 rounded-2xl bg-mist px-3 py-2 text-xs font-semibold text-slate">
+              {paymentRedirectIsSlow ? "If this fails, you can try again without re-entering your details." : "Do not refresh or close this page."}
+            </p>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

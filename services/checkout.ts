@@ -1104,6 +1104,15 @@ export async function createCheckoutPayment(
     status: booking.status,
     totalMinor: booking.total_minor
   });
+  if (booking.total_minor > 0) {
+    void prefetchNgeniusAccessToken().catch((error) => {
+      markTiming("prefetch_ngenius_token_failed", {
+        bookingIntentId: booking.id,
+        error: error instanceof Error ? error.message : "Unknown error"
+      });
+    });
+  }
+
   const event = await getEventById(booking.event_id);
   markTiming("load_event", {
     bookingIntentId: booking.id,
@@ -1191,15 +1200,6 @@ export async function createCheckoutPayment(
 
   if (!["email_verified", "payment_failed", "payment_pending"].includes(booking.status)) {
     return { outcome: "invalid", message: "This booking is not ready for payment." };
-  }
-
-  if (booking.total_minor > 0) {
-    void prefetchNgeniusAccessToken().catch((error) => {
-      markTiming("prefetch_ngenius_token_failed", {
-        bookingIntentId: booking.id,
-        error: error instanceof Error ? error.message : "Unknown error"
-      });
-    });
   }
 
   let attendeeDetailsCompleted = false;

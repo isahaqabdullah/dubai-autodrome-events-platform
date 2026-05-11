@@ -110,8 +110,47 @@ export function EventTicketCard({
         </div>
       </div>
 
-      <div className="grid gap-0 lg:grid-cols-[minmax(0,1fr)_300px]">
-        <div className={cn(compactMobile ? "order-2 p-3 sm:order-none sm:p-6 lg:p-7" : "p-4 sm:p-6 lg:p-7")}>
+      <div className="flex flex-col">
+        <aside className={cn("relative border-t border-slate/12 bg-[#f4ede4] text-ink", compactMobile ? "p-3 sm:p-4 lg:p-6" : "p-4 lg:p-6")}>
+          <div className="absolute inset-x-6 top-0" aria-hidden="true">
+            <div className="relative border-t border-dashed border-[#ccbfb0]">
+              <div className="absolute -left-1 top-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white" />
+              <div className="absolute -right-1 top-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white" />
+            </div>
+          </div>
+
+          <div className="mx-auto flex h-full max-w-[260px] flex-col justify-center">
+            <div className="text-center">
+              <div className={cn("mx-auto h-10 w-10 items-center justify-center rounded-full bg-[#2c7a86]/10 text-[#2c7a86]", compactMobile ? "hidden sm:flex" : "flex")}>
+                <QrCode className="h-5 w-5" />
+              </div>
+              <p className={cn("text-[10px] font-bold uppercase tracking-[0.24em] text-slate/70", compactMobile ? "mt-0 sm:mt-3" : "mt-3")}>Scan this ticket</p>
+            </div>
+
+            <div className={cn("border border-[#d7cfc4] bg-[#fffdfa] shadow-[0_16px_30px_rgba(12,23,35,0.08)]", compactMobile ? "mt-2 rounded-[18px] p-2 sm:mt-3 sm:rounded-[24px] sm:p-3" : "mt-3 rounded-[24px] p-3")}>
+              <img
+                src={qrSrc}
+                alt={`Ticket QR code for ${presentation.attendeeName}`}
+                referrerPolicy="no-referrer"
+                className={cn("mx-auto block h-auto w-full", compactMobile ? "max-w-[190px] sm:max-w-[214px]" : "max-w-[214px]")}
+              />
+              {manualCheckinCode ? (
+                <div className={cn("rounded-2xl border border-[#d7cfc4] bg-white px-3 text-center", compactMobile ? "mt-2 py-2 sm:mt-3 sm:py-2.5" : "mt-3 py-2.5")}>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate/70">Manual code</p>
+                  <p className={cn("mt-1 font-black tracking-[0.24em] text-ink", compactMobile ? "text-2xl sm:text-[28px]" : "text-[28px]")}>{manualCheckinCode}</p>
+                </div>
+              ) : null}
+            </div>
+
+            <p className={cn("text-[10px] leading-relaxed text-slate sm:text-[11px]", compactMobile ? "mt-2 sm:mt-3" : "mt-3")}>
+              {ticketTotal > 1
+                ? `This code is only for ${presentation.attendeeName}. Use the attendee selector above to view the other tickets.`
+                : `This code is only for ${presentation.attendeeName}. Staff can use the manual code if scanning fails.`}
+            </p>
+          </div>
+        </aside>
+
+        <div className={cn(compactMobile ? "p-3 sm:p-6 lg:p-7" : "p-4 sm:p-6 lg:p-7")}>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate">Event</p>
             <h3 className={cn("font-title font-black italic leading-tight text-ink sm:mt-2 sm:text-3xl", compactMobile ? "mt-1 text-xl" : "mt-2 text-2xl")}>
@@ -149,45 +188,6 @@ export function EventTicketCard({
             </a>
           ) : null}
         </div>
-
-        <aside className={cn("relative border-t border-slate/12 bg-[#f4ede4] text-ink lg:border-l lg:border-t-0", compactMobile ? "order-1 p-3 sm:order-none sm:p-4 lg:p-6" : "p-4 lg:p-6")}>
-          <div className="absolute inset-x-6 top-0 lg:hidden" aria-hidden="true">
-            <div className="relative border-t border-dashed border-[#ccbfb0]">
-              <div className="absolute -left-1 top-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white" />
-              <div className="absolute -right-1 top-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white" />
-            </div>
-          </div>
-
-          <div className="flex h-full flex-col justify-center">
-            <div className="text-center">
-              <div className={cn("mx-auto h-10 w-10 items-center justify-center rounded-full bg-[#2c7a86]/10 text-[#2c7a86]", compactMobile ? "hidden sm:flex" : "flex")}>
-                <QrCode className="h-5 w-5" />
-              </div>
-              <p className={cn("text-[10px] font-bold uppercase tracking-[0.24em] text-slate/70", compactMobile ? "mt-0 sm:mt-3" : "mt-3")}>Scan this ticket</p>
-            </div>
-
-            <div className={cn("border border-[#d7cfc4] bg-[#fffdfa] shadow-[0_16px_30px_rgba(12,23,35,0.08)]", compactMobile ? "mt-2 rounded-[18px] p-2 sm:mt-3 sm:rounded-[24px] sm:p-3" : "mt-3 rounded-[24px] p-3")}>
-              <img
-                src={qrSrc}
-                alt={`Ticket QR code for ${presentation.attendeeName}`}
-                referrerPolicy="no-referrer"
-                className={cn("mx-auto block h-auto w-full", compactMobile ? "max-w-[190px] sm:max-w-[214px]" : "max-w-[214px]")}
-              />
-              {manualCheckinCode ? (
-                <div className={cn("rounded-2xl border border-[#d7cfc4] bg-white px-3 text-center", compactMobile ? "mt-2 py-2 sm:mt-3 sm:py-2.5" : "mt-3 py-2.5")}>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-slate/70">Manual code</p>
-                  <p className={cn("mt-1 font-black tracking-[0.24em] text-ink", compactMobile ? "text-2xl sm:text-[28px]" : "text-[28px]")}>{manualCheckinCode}</p>
-                </div>
-              ) : null}
-            </div>
-
-            <p className={cn("text-[10px] leading-relaxed text-slate sm:text-[11px]", compactMobile ? "mt-2 sm:mt-3" : "mt-3")}>
-              {ticketTotal > 1
-                ? `This code is only for ${presentation.attendeeName}. Use the attendee selector above to view the other tickets.`
-                : `This code is only for ${presentation.attendeeName}. Staff can use the manual code if scanning fails.`}
-            </p>
-          </div>
-        </aside>
       </div>
     </section>
   );

@@ -23,6 +23,15 @@ describe("ticket plan static safeguards", () => {
     expect(ticketCard).toContain('rel="noopener noreferrer"');
   });
 
+  it("keeps the ticket QR panel above the event details", () => {
+    const ticketCard = readProjectFile("components/public/event-ticket-card.tsx");
+
+    expect(ticketCard.indexOf('aria-hidden="true"'))
+      .toBeLessThan(ticketCard.indexOf(">Event</p>"));
+    expect(ticketCard.indexOf("Scan this ticket"))
+      .toBeLessThan(ticketCard.indexOf(">Event</p>"));
+  });
+
   it("keeps automatic ticket delivery idempotent in the database migration", () => {
     const migration = readProjectFile("supabase/migrations/20260504120000_ticket_wallet_delivery_outbox.sql");
 
@@ -142,10 +151,24 @@ describe("ticket plan static safeguards", () => {
     expect(publicBookingFlow).toContain("const termsComplete = form.declarationAccepted;");
     expect(publicBookingFlow).toContain("const readyForPayment = contactComplete && attendeesComplete && termsComplete && Boolean(checkoutToken);");
     expect(publicBookingFlow).toContain("if (!checkoutToken || !form.declarationAccepted) return null;");
-    expect(publicBookingFlow).toContain('void fetch("/api/checkout/create-payment"');
+    expect(publicBookingFlow).toContain('fetch("/api/checkout/create-payment"');
+    expect(publicBookingFlow).toContain("const request = startPaymentPreparationRequest(createPaymentPayload, paymentPreparationKey);");
     expect(publicBookingFlow.indexOf("!readyForPayment ||"))
-      .toBeLessThan(publicBookingFlow.indexOf('void fetch("/api/checkout/create-payment"'));
+      .toBeLessThan(publicBookingFlow.indexOf("const request = startPaymentPreparationRequest(createPaymentPayload, paymentPreparationKey);"));
+    expect(publicBookingFlow).toContain('submissionState === "submitting" || !readyForPayment');
+    expect(publicBookingFlow).not.toContain("paymentActionPreparing");
     expect(checkoutValidation).toContain("declarationAccepted: z.literal(true)");
+  });
+
+  it("shows a full-screen payment handoff state after continuing to payment", () => {
+    const publicBookingFlow = readProjectFile("components/public/event-booking-flow.tsx");
+
+    expect(publicBookingFlow).toContain('const paymentRedirectInProgress = step === "details" && submissionState === "submitting" && selectedTicketSubtotalMinor > 0;');
+    expect(publicBookingFlow).toContain("const paymentRedirectIsSlow = paymentRedirectElapsed >= 8;");
+    expect(publicBookingFlow).toContain('role="status"');
+    expect(publicBookingFlow).toContain("Opening secure payment");
+    expect(publicBookingFlow).toContain("This is taking longer than usual.");
+    expect(publicBookingFlow).toContain("If this fails, you can try again without re-entering your details.");
   });
 
   it("only auto-selects attendee ticket types when all selected tickets share one type", () => {
