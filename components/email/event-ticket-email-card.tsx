@@ -3,7 +3,7 @@ import { buildTicketPresentation, type TicketEventLike, type TicketPresentationA
 interface EventTicketEmailCardProps {
   event: TicketEventLike;
   attendee: TicketPresentationAttendee;
-  posterImageUrl: string;
+  posterImageUrl?: string | null;
   qrImageSrc: string;
   qrLinkHref?: string | null;
   mapLink?: string | null;
@@ -125,20 +125,22 @@ export function EventTicketEmailCard({
                     "linear-gradient(135deg, rgba(255,255,255,0.03), rgba(255,255,255,0)), radial-gradient(circle at top right, rgba(36,140,119,0.18), transparent 34%)"
                 })}"
               >
-                <img
-                  src="${posterImageUrl}"
-                  alt="${presentation.title}"
-                  width="422"
-                  class="ticket-card__poster-image"
-                  style="${styleAttr({
-                    display: "block",
-                    width: "100%",
-                    height: "126px",
-                    objectFit: "cover",
-                    objectPosition: "center",
-                    border: 0
-                  })}"
-                />
+                ${posterImageUrl ? `
+                  <img
+                    src="${posterImageUrl}"
+                    alt="${presentation.title}"
+                    width="422"
+                    class="ticket-card__poster-image"
+                    style="${styleAttr({
+                      display: "block",
+                      width: "100%",
+                      height: "126px",
+                      objectFit: "cover",
+                      objectPosition: "center",
+                      border: 0
+                    })}"
+                  />
+                ` : ""}
                 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="${styleAttr({ padding: "14px 16px 16px" })}">
                   <tr>
                     <td>

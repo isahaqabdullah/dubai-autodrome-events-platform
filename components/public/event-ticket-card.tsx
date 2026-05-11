@@ -51,13 +51,15 @@ export function EventTicketCard({
       <div className="relative overflow-hidden bg-[#091118] text-white">
         <div className="absolute inset-0">
           {!hidePoster ? (
-            <img
-              src={posterImage}
-              alt={event.title}
-              referrerPolicy="no-referrer"
-              className="absolute inset-0 h-full w-full object-cover object-center"
-              onError={() => setHidePoster(true)}
-            />
+            posterImage ? (
+              <img
+                src={posterImage}
+                alt={event.title}
+                referrerPolicy="no-referrer"
+                className="absolute inset-0 h-full w-full object-cover object-center"
+                onError={() => setHidePoster(true)}
+              />
+            ) : null
           ) : null}
           <div className="absolute inset-0 bg-[linear-gradient(105deg,rgba(3,8,13,0.96)_0%,rgba(3,8,13,0.86)_50%,rgba(3,8,13,0.54)_100%)]" />
         </div>

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { CheckCircle2, ImageIcon, FileText, Upload, X } from "lucide-react";
+import { BookmarkPlus, CheckCircle2, Download, FileText, ImageIcon, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -10,11 +9,16 @@ import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { CategoriesEditor } from "@/components/admin/categories-editor";
 import { TicketOptionsEditor } from "@/components/admin/ticket-options-editor";
-import type { EventFormConfig, EventRecord } from "@/lib/types";
+import {
+  createEventFormTemplate,
+  EVENT_FORM_TEMPLATE_STORAGE_KEY,
+  EVENT_FORM_TEMPLATE_TEXT_FIELDS,
+  extractEventFormTemplateValues,
+  parseStoredEventFormTemplates,
+  type EventFormTemplate
+} from "@/lib/event-form-templates";
+import type { EventFormConfig, EventRecord, EventTicketOption } from "@/lib/types";
 import { formatInputDateTimeInZone } from "@/lib/utils";
-
-const DEFAULT_POSTER_IMAGE = "/train-with-dubai-police-cover.png";
-const DEFAULT_DISCLAIMER_PDF = "/disclaimer-dubai-autodrome.pdf";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
 const ALLOWED_IMAGE_TYPES = ["image/png", "image/jpeg", "image/webp"];
@@ -24,6 +28,27 @@ function formatFileSize(bytes: number) {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getDescriptionText(event: EventRecord | null | undefined, config: EventFormConfig) {
+  if (config.descriptionParagraphs?.length) {
+    return config.descriptionParagraphs.join("\n\n");
+  }
+
+  return event?.description ?? "";
+}
+
+function setFormFieldValue(form: HTMLFormElement, name: string, value: string) {
+  const field = form.elements.namedItem(name);
+
+  if (!field || field instanceof RadioNodeList || !("value" in field)) {
+    return;
+  }
+
+  const input = field as HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
+  input.value = value;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
 }
 
 export interface EventFormResult {
@@ -203,7 +228,7 @@ export function EventForm({
   successHref
 }: EventFormProps) {
   const config = (event?.form_config ?? {}) as EventFormConfig;
-  const router = useRouter();
+  const formRef = useRef<HTMLFormElement>(null);
   const [isPending, startTransition] = useTransition();
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -211,19 +236,111 @@ export function EventForm({
   const finalSuccessHref = successHref ?? cancelHref;
 
   // File upload state
-  const initialPosterImage = config.posterImage ?? DEFAULT_POSTER_IMAGE;
-  const initialDisclaimerPdfUrl = config.disclaimerPdfUrl ?? DEFAULT_DISCLAIMER_PDF;
+  const initialPosterImage = config.posterImage ?? "";
+  const initialDisclaimerPdfUrl = config.disclaimerPdfUrl ?? "";
+  const initialDescriptionText = getDescriptionText(event, config);
+  const dateInputTimeZone = event?.timezone?.trim() || "UTC";
   const [posterImage, setPosterImage] = useState(initialPosterImage);
   const [disclaimerPdfUrl, setDisclaimerPdfUrl] = useState(initialDisclaimerPdfUrl);
+  const [templates, setTemplates] = useState<EventFormTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  const [templateName, setTemplateName] = useState(event?.title ? `${event.title} template` : "");
+  const [templateMessage, setTemplateMessage] = useState<string | null>(null);
+  const [templateCategories, setTemplateCategories] = useState<EventTicketOption[] | null>(null);
+  const [templateTicketOptions, setTemplateTicketOptions] = useState<EventTicketOption[] | null>(null);
+  const [templateEditorVersion, setTemplateEditorVersion] = useState(0);
 
   const eventId = event?.id ?? "new";
 
   useEffect(() => {
     setPosterImage(initialPosterImage);
     setDisclaimerPdfUrl(initialDisclaimerPdfUrl);
+    setTemplateCategories(null);
+    setTemplateTicketOptions(null);
+    setTemplateEditorVersion((current) => current + 1);
   }, [formVersion, initialPosterImage, initialDisclaimerPdfUrl]);
 
-  function handleSubmit(formData: FormData) {
+  useEffect(() => {
+    setTemplates(parseStoredEventFormTemplates(window.localStorage.getItem(EVENT_FORM_TEMPLATE_STORAGE_KEY)));
+  }, []);
+
+  function persistTemplates(nextTemplates: EventFormTemplate[]) {
+    setTemplates(nextTemplates);
+    window.localStorage.setItem(EVENT_FORM_TEMPLATE_STORAGE_KEY, JSON.stringify(nextTemplates));
+    if (!nextTemplates.some((template) => template.id === selectedTemplateId)) {
+      setSelectedTemplateId(nextTemplates[0]?.id ?? "");
+    }
+  }
+
+  function handleSaveTemplate() {
+    if (!formRef.current) {
+      return;
+    }
+
+    const formData = new FormData(formRef.current);
+    formData.set("posterImage", posterImage);
+    formData.set("disclaimerPdfUrl", disclaimerPdfUrl);
+
+    const fallbackName = event?.title ? `${event.title} template` : "Event template";
+    const template = createEventFormTemplate(
+      templateName.trim() || fallbackName,
+      extractEventFormTemplateValues(formData, { posterImage, disclaimerPdfUrl })
+    );
+    const nextTemplates = [template, ...templates];
+    persistTemplates(nextTemplates);
+    setSelectedTemplateId(template.id);
+    setTemplateName("");
+    setTemplateMessage(`Saved "${template.name}" as a local template.`);
+  }
+
+  function handleLoadTemplate() {
+    const template = templates.find((item) => item.id === selectedTemplateId);
+
+    if (!template || !formRef.current) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Load "${template.name}"? This replaces reusable setup fields only and keeps title, slug, schedule, status, and capacity unchanged.`
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    for (const field of EVENT_FORM_TEMPLATE_TEXT_FIELDS) {
+      setFormFieldValue(formRef.current, field, template.values[field]);
+    }
+
+    setPosterImage(template.values.posterImage);
+    setDisclaimerPdfUrl(template.values.disclaimerPdfUrl);
+    setTemplateCategories(template.values.categories);
+    setTemplateTicketOptions(template.values.ticketOptions);
+    setTemplateEditorVersion((current) => current + 1);
+    setTemplateMessage(`Loaded "${template.name}".`);
+  }
+
+  function handleDeleteTemplate() {
+    const template = templates.find((item) => item.id === selectedTemplateId);
+
+    if (!template) {
+      return;
+    }
+
+    const confirmed = window.confirm(`Delete local template "${template.name}"?`);
+
+    if (!confirmed) {
+      return;
+    }
+
+    persistTemplates(templates.filter((item) => item.id !== template.id));
+    setTemplateMessage(`Deleted "${template.name}".`);
+  }
+
+  function handleSubmit(eventObject: React.FormEvent<HTMLFormElement>) {
+    eventObject.preventDefault();
+    const formData = new FormData(eventObject.currentTarget);
+
     setError(null);
     formData.set("posterImage", posterImage);
     formData.set("disclaimerPdfUrl", disclaimerPdfUrl);
@@ -231,9 +348,6 @@ export function EventForm({
       const result = await action(formData);
       if (result.ok) {
         setShowSuccess(true);
-        if (event) {
-          router.refresh();
-        }
       } else {
         setError(result.error ?? "Something went wrong.");
       }
@@ -242,8 +356,79 @@ export function EventForm({
 
   return (
     <>
-      <form key={formVersion} action={handleSubmit} className="grid gap-4 sm:gap-5">
+      <form ref={formRef} key={formVersion} onSubmit={handleSubmit} className="grid gap-4 sm:gap-5">
         {event ? <input type="hidden" name="id" value={event.id} /> : null}
+
+        <section className="admin-card grid gap-3 p-3 sm:gap-4 sm:p-5">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+            <div>
+              <p className="admin-label">Templates</p>
+              <h3 className="mt-1 text-base font-semibold tracking-tight text-ink sm:text-lg">Reuse event setup</h3>
+            </div>
+            {templateMessage ? (
+              <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
+                {templateMessage}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Select
+                value={selectedTemplateId}
+                onChange={(eventObject) => setSelectedTemplateId(eventObject.target.value)}
+                className="rounded-xl border-slate/20 bg-white px-3 py-2 text-sm"
+              >
+                <option value="">Select a saved template</option>
+                {templates.map((template) => (
+                  <option key={template.id} value={template.id}>
+                    {template.name}
+                  </option>
+                ))}
+              </Select>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  disabled={!selectedTemplateId}
+                  onClick={handleLoadTemplate}
+                  className="rounded-xl px-3 py-2 text-xs sm:text-sm"
+                >
+                  <Download className="h-4 w-4" />
+                  Load
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  disabled={!selectedTemplateId}
+                  onClick={handleDeleteTemplate}
+                  className="rounded-xl px-3 py-2 text-xs sm:text-sm"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete
+                </Button>
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Input
+                value={templateName}
+                onChange={(eventObject) => setTemplateName(eventObject.target.value)}
+                placeholder="Template name"
+                className="rounded-xl border-slate/20 bg-white px-3 py-2 text-sm"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleSaveTemplate}
+                className="rounded-xl px-3 py-2 text-xs sm:text-sm"
+              >
+                <BookmarkPlus className="h-4 w-4" />
+                Save as template
+              </Button>
+            </div>
+          </div>
+        </section>
 
         <FormSection
           eyebrow="Basics"
@@ -255,7 +440,7 @@ export function EventForm({
                 name="title"
                 required
                 defaultValue={event?.title ?? ""}
-                placeholder="Dubai Autodrome Track Day"
+                placeholder="Community Track Night"
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </Field>
@@ -264,7 +449,7 @@ export function EventForm({
                 name="slug"
                 required
                 defaultValue={event?.slug ?? ""}
-                placeholder="track-day-april-2026"
+                placeholder="community-track-night"
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </Field>
@@ -274,8 +459,8 @@ export function EventForm({
             <Field label="Venue" hint="Optional">
               <Input
                 name="venue"
-                defaultValue={event?.venue ?? "Dubai Autodrome, Sheikh Mohammed Bin Zayed Rd, Dubai"}
-                placeholder="Dubai Autodrome"
+                defaultValue={event?.venue ?? ""}
+                placeholder="Main venue"
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </Field>
@@ -283,7 +468,8 @@ export function EventForm({
               <Input
                 name="timezone"
                 required
-                defaultValue={event?.timezone ?? "Asia/Dubai"}
+                defaultValue={event?.timezone ?? ""}
+                placeholder="Asia/Dubai"
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </Field>
@@ -303,7 +489,7 @@ export function EventForm({
             <Input
               name="mapLink"
               type="url"
-              defaultValue={config.mapLink ?? "https://maps.app.goo.gl/7aQkJWJ7L9N8WetSA"}
+              defaultValue={config.mapLink ?? ""}
               placeholder="https://maps.google.com/..."
               className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
             />
@@ -331,7 +517,7 @@ export function EventForm({
               <Input
                 name="introLine"
                 defaultValue={config.introLine ?? ""}
-                placeholder="Hit the track for free. Dubai Police has you covered!"
+                placeholder="Short attendee-facing summary"
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </Field>
@@ -348,8 +534,8 @@ export function EventForm({
           <Field label="Event description" hint="Shown on the booking page. Separate paragraphs with blank lines.">
             <Textarea
               name="descriptionText"
-              defaultValue={config.descriptionParagraphs?.join("\n\n") ?? ""}
-              placeholder="Join us at Dubai Autodrome for the region's premier community fitness night!&#10;&#10;Registration is required, so secure your free spot today!"
+              defaultValue={initialDescriptionText}
+              placeholder="Describe what attendees can expect, who the event is for, and any important arrival details."
               className="min-h-[120px] rounded-2xl border-slate/20 bg-white px-3.5 py-3"
             />
           </Field>
@@ -393,7 +579,8 @@ export function EventForm({
             <Textarea
               name="declarationText"
               required
-              defaultValue={event?.declaration_text ?? "Terms & Conditions: By proceeding with this booking, you confirm that you have read and agree to the full Terms & Conditions. Entry is at your own risk and all participants must sign a waiver before taking part. Participants must follow all safety rules, use appropriate equipment, and comply with instructions from officials at all times. Unsafe behaviour or misuse of equipment may result in removal from the session. Specific rules apply for cyclists, runners, rollerbladers, and bootcamp users. Medical support is available onsite. Participants must meet fitness requirements and are responsible for any damage caused. Personal data may be collected for participation purposes. UAE law applies. - Full Terms & Conditions: dubaiautodrome.ae/open-track-days/traindxb"}
+              defaultValue={event?.declaration_text ?? ""}
+              placeholder="Enter the terms attendees must accept before registering."
               className="min-h-[160px] rounded-2xl border-slate/20 bg-white px-3.5 py-3"
             />
           </Field>
@@ -409,7 +596,7 @@ export function EventForm({
                 name="startAt"
                 type="datetime-local"
                 required
-                defaultValue={formatInputDateTimeInZone(event?.start_at ?? null, event?.timezone ?? "Asia/Dubai")}
+                defaultValue={formatInputDateTimeInZone(event?.start_at ?? null, dateInputTimeZone)}
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </Field>
@@ -418,7 +605,7 @@ export function EventForm({
                 name="endAt"
                 type="datetime-local"
                 required
-                defaultValue={formatInputDateTimeInZone(event?.end_at ?? null, event?.timezone ?? "Asia/Dubai")}
+                defaultValue={formatInputDateTimeInZone(event?.end_at ?? null, dateInputTimeZone)}
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </Field>
@@ -431,7 +618,7 @@ export function EventForm({
                 type="datetime-local"
                 defaultValue={formatInputDateTimeInZone(
                   event?.registration_opens_at ?? null,
-                  event?.timezone ?? "Asia/Dubai"
+                  dateInputTimeZone
                 )}
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
@@ -442,7 +629,7 @@ export function EventForm({
                 type="datetime-local"
                 defaultValue={formatInputDateTimeInZone(
                   event?.registration_closes_at ?? null,
-                  event?.timezone ?? "Asia/Dubai"
+                  dateInputTimeZone
                 )}
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
@@ -471,7 +658,10 @@ export function EventForm({
               className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
             />
           </Field>
-          <CategoriesEditor initialCategories={config.categories ?? []} />
+          <CategoriesEditor
+            key={`categories-${formVersion}-${templateEditorVersion}`}
+            initialCategories={templateCategories ?? config.categories ?? []}
+          />
         </FormSection>
 
         <FormSection
@@ -486,7 +676,10 @@ export function EventForm({
               className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
             />
           </Field>
-          <TicketOptionsEditor initialTickets={config.ticketOptions ?? []} />
+          <TicketOptionsEditor
+            key={`ticket-options-${formVersion}-${templateEditorVersion}`}
+            initialTickets={templateTicketOptions ?? config.ticketOptions ?? []}
+          />
         </FormSection>
 
         {hideRegistrationSections ? (
@@ -528,7 +721,7 @@ export function EventForm({
           </div>
         ) : null}
 
-        <div className="admin-card sticky bottom-3 z-10 flex items-center justify-between gap-3 px-3 py-3 backdrop-blur sm:px-6 sm:py-4">
+        <div className="admin-card flex items-center justify-between gap-3 px-3 py-3 sm:px-6 sm:py-4">
           <div className="min-w-0">
             <p className="admin-label">{event ? "Editing event" : "Create event"}</p>
             <p className="mt-0.5 hidden text-sm font-medium text-ink sm:block">{event ? "Ready to save changes." : "Ready to create the event."}</p>

@@ -28,6 +28,7 @@ function buildEventPayload(input: AdminEventInput) {
   return {
     slug: slugify(input.slug),
     title: input.title.trim(),
+    description: blankToNull(input.descriptionText),
     venue: blankToNull(input.venue),
     timezone: timeZone,
     start_at: zonedInputToUtcIso(input.startAt, timeZone),
@@ -699,7 +700,7 @@ export async function rotateQrAndResend(registrationId: string, actor: Authentic
         mapLink: fc?.mapLink,
         manualCheckinCode: registration.manual_checkin_code,
         ticketTitle: registration.ticket_option_title ?? registration.category_title ?? "General Admission",
-        posterImageUrl: buildAbsoluteUrl(env.APP_URL, fc?.posterImage ?? "/train-with-dubai-police-cover.png"),
+        posterImageUrl: fc?.posterImage?.trim() ? buildAbsoluteUrl(env.APP_URL, fc.posterImage) : null,
         qrImageSrc: buildQrEmailCid(qrAttachment.contentId),
         qrLinkHref: buildAbsoluteUrl(env.APP_URL, `/api/qr?token=${encodeURIComponent(nextQrToken)}`),
         introLine: fc?.emailIntroLine ?? fc?.introLine ?? undefined,

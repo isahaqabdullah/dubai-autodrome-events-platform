@@ -13,7 +13,7 @@ export function EventCard({ event }: { event: EventRecord }) {
       <div className="space-y-1 text-[13px] leading-snug text-slate sm:space-y-1.5 sm:text-sm">
         <p className="text-[13px] font-medium text-ink/70 sm:text-sm">{formatEventDateRange(event.start_at, event.end_at, event.timezone)}</p>
         {event.venue ? <p className="line-clamp-1">{event.venue}</p> : null}
-        <p className="line-clamp-2 sm:line-clamp-3">{event.description ?? "Registration opens on this event page."}</p>
+        {event.description ? <p className="line-clamp-2 sm:line-clamp-3">{event.description}</p> : null}
       </div>
 
       <div className="mt-auto">

@@ -12,8 +12,6 @@ export interface TicketPresentationAttendee {
 
 export type TicketEventLike = Pick<EventRecord, "title" | "venue" | "start_at" | "end_at" | "timezone">;
 
-export const DEFAULT_TICKET_POSTER_IMAGE = "/train-with-dubai-police-cover.png";
-
 function splitAdmissionLabel(label: string | null | undefined) {
   if (!label) {
     return { categoryLabel: "Event Access", addOnLabel: null as string | null };
@@ -29,7 +27,7 @@ function splitAdmissionLabel(label: string | null | undefined) {
 }
 
 export function getTicketPosterImageSrc(formConfig: EventFormConfig | null | undefined) {
-  return formConfig?.posterImage?.trim() || DEFAULT_TICKET_POSTER_IMAGE;
+  return formConfig?.posterImage?.trim() || null;
 }
 
 export function buildTicketAdmissionLabel(attendee: TicketPresentationAttendee) {

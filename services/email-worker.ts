@@ -1,6 +1,5 @@
 import "server-only";
 import { env } from "@/lib/env";
-import { DEFAULT_TICKET_POSTER_IMAGE } from "@/lib/ticket-presentation";
 import { buildQrEmailAttachment, buildQrEmailCid } from "@/lib/qr";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import type { EmailJobKind } from "@/lib/types";
@@ -129,7 +128,7 @@ async function handleRegistrationConfirmed(job: ClaimedJob) {
   }
 
   const fc = event.form_config;
-  const posterImageUrl = buildAbsoluteUrl(env.APP_URL, fc?.posterImage ?? DEFAULT_TICKET_POSTER_IMAGE);
+  const posterImageUrl = fc?.posterImage?.trim() ? buildAbsoluteUrl(env.APP_URL, fc.posterImage) : null;
   const emailIntroLine = fc?.emailIntroLine ?? fc?.introLine ?? undefined;
   const emailDescriptionParagraphs = fc?.emailDescriptionParagraphs ?? fc?.descriptionParagraphs ?? undefined;
 

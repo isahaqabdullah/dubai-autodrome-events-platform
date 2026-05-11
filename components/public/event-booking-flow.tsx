@@ -88,13 +88,6 @@ interface SelectableOption extends EventTicketOption {
 
 const HOLD_DURATION_SECONDS = 25 * 60;
 const MAX_ATTENDEES = 5;
-const DEFAULT_DISCLAIMER_PDF = "/disclaimer-dubai-autodrome.pdf";
-const DEFAULT_INTRO = "Hit the track for free. Dubai Police has you covered!";
-const DEFAULT_DESCRIPTION = [
-  "Join us at Dubai Autodrome for the region's premier community fitness night! In a shared commitment to community health, wellness, and safety, we are thrilled to announce Train With Dubai Police.",
-  "The best part? Dubai Police has your entry completely covered, making it 100% free for all participants. Join us on our Circuit under the lights for an unforgettable, high-energy evening of cycling, running, and specialized bootcamps.",
-  "Registration is required, so secure your free spot today and let's hit the track!"
-];
 const INITIAL_FORM_STATE = {
   firstName: "",
   lastName: "",
@@ -171,6 +164,14 @@ function formatTimer(totalSeconds: number) {
     .padStart(2, "0");
 
   return `${minutes}:${seconds}`;
+}
+
+function splitDescriptionParagraphs(description: string | null | undefined) {
+  if (!description?.trim()) {
+    return [];
+  }
+
+  return description.split(/\n\s*\n/).map((paragraph) => paragraph.trim()).filter(Boolean);
 }
 
 function formatPrice(amountMinor?: number, currencyCode = "AED") {
@@ -961,9 +962,11 @@ export function EventBookingFlow({
 
   const mapLink = config.mapLink ?? null;
   const posterImage = getTicketPosterImageSrc(config);
-  const introLine = config.introLine || DEFAULT_INTRO;
-  const descriptionParagraphs = config.descriptionParagraphs?.length ? config.descriptionParagraphs : DEFAULT_DESCRIPTION;
-  const disclaimerPdfUrl = config.disclaimerPdfUrl === null ? null : (config.disclaimerPdfUrl || DEFAULT_DISCLAIMER_PDF);
+  const introLine = config.introLine?.trim() ?? "";
+  const descriptionParagraphs = config.descriptionParagraphs?.length
+    ? config.descriptionParagraphs
+    : splitDescriptionParagraphs(event.description);
+  const disclaimerPdfUrl = config.disclaimerPdfUrl?.trim() || null;
   const hasPdf = Boolean(disclaimerPdfUrl);
   const visibleParagraphs = expandedDescription ? descriptionParagraphs : descriptionParagraphs.slice(0, 2);
   const contentLayoutClass = completedRegistration
@@ -1921,21 +1924,27 @@ export function EventBookingFlow({
             ) : step === "tickets" ? (
               <div className="max-w-3xl">
                 <h1 className="font-title text-3xl font-black italic leading-[1.1] tracking-tight text-ink sm:text-5xl">{event.title}</h1>
-                <p className="mt-2 font-body text-sm leading-relaxed text-slate sm:mt-3 sm:text-lg">{introLine}</p>
+                {introLine ? (
+                  <p className="mt-2 font-body text-sm leading-relaxed text-slate sm:mt-3 sm:text-lg">{introLine}</p>
+                ) : null}
 
-                <div className="mt-3 space-y-1.5 font-body text-[13px] leading-relaxed text-slate sm:text-[15px]">
-                  {visibleParagraphs.map((paragraph) => (
-                    <p key={paragraph}>{paragraph}</p>
-                  ))}
-                </div>
+                {visibleParagraphs.length > 0 ? (
+                  <div className="mt-3 space-y-1.5 font-body text-[13px] leading-relaxed text-slate sm:text-[15px]">
+                    {visibleParagraphs.map((paragraph) => (
+                      <p key={paragraph}>{paragraph}</p>
+                    ))}
+                  </div>
+                ) : null}
 
-                <button
-                  type="button"
-                  onClick={() => setExpandedDescription((current) => !current)}
-                  className="mt-1.5 font-display text-[13px] font-bold text-[#2e768b] transition hover:text-[#205260] sm:text-sm"
-                >
-                  {expandedDescription ? "Show less ^" : "Show more v"}
-                </button>
+                {descriptionParagraphs.length > 2 ? (
+                  <button
+                    type="button"
+                    onClick={() => setExpandedDescription((current) => !current)}
+                    className="mt-1.5 font-display text-[13px] font-bold text-[#2e768b] transition hover:text-[#205260] sm:text-sm"
+                  >
+                    {expandedDescription ? "Show less ^" : "Show more v"}
+                  </button>
+                ) : null}
 
                 <div className="mt-6 space-y-2.5 border-t border-slate/10 pt-5 font-body text-[13px] text-slate sm:mt-10 sm:space-y-3 sm:pt-7 sm:text-[15px]">
                   <p>
@@ -2093,13 +2102,15 @@ export function EventBookingFlow({
           {!completedRegistration ? (
             <aside className="border-t border-slate/10 bg-[linear-gradient(180deg,#fbfbfc_0%,#f3f9fc_100%)] px-3.5 py-4 sm:px-6 sm:py-8 md:border-l md:border-t-0 lg:px-8">
               <div className="lg:sticky lg:top-6">
-                <div className="mx-auto hidden max-w-[276px] overflow-hidden rounded-2xl border border-slate/10 bg-white sm:block">
-                  <div className="relative bg-white">
-                    <img src={posterImage} alt={event.title} className="block h-auto w-full" loading="lazy" decoding="async" />
+                {posterImage ? (
+                  <div className="mx-auto hidden max-w-[276px] overflow-hidden rounded-2xl border border-slate/10 bg-white sm:block">
+                    <div className="relative bg-white">
+                      <img src={posterImage} alt={event.title} className="block h-auto w-full" loading="lazy" decoding="async" />
+                    </div>
                   </div>
-                </div>
+                ) : null}
 
-                <div className="mt-2 rounded-[1.75rem] border border-white/70 bg-white/80 p-4 shadow-soft backdrop-blur-sm sm:mt-6 sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none">
+                <div className={`${posterImage ? "mt-2 sm:mt-6" : "mt-0"} rounded-[1.75rem] border border-white/70 bg-white/80 p-4 shadow-soft backdrop-blur-sm sm:rounded-none sm:border-0 sm:bg-transparent sm:p-0 sm:shadow-none`}>
                   <h3 className="font-title text-xl font-black italic leading-tight tracking-tight text-ink sm:text-2xl lg:text-[2rem]">Registration summary</h3>
 
                   <div className="mt-3 rounded-[1.5rem] border border-slate/10 bg-white px-4 py-4 shadow-sm sm:mt-6 sm:space-y-4 sm:px-5 sm:py-5">

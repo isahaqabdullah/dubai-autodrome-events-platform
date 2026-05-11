@@ -21,7 +21,7 @@ interface ConfirmationEmailInput {
   qrLinkHref?: string | null;
   manualCheckinCode: string;
   ticketTitle: string;
-  posterImageUrl: string;
+  posterImageUrl?: string | null;
   introLine?: string;
   detailParagraphs?: string[];
   bookedBy?: string;
@@ -44,7 +44,7 @@ interface GroupConfirmationEmailInput {
   eventTimezone: string;
   venue: string | null;
   mapLink?: string | null;
-  posterImageUrl: string;
+  posterImageUrl?: string | null;
   attendees: GroupAttendeeEmailData[];
   introLine?: string;
   detailParagraphs?: string[];
@@ -163,13 +163,8 @@ export function buildVerificationEmail(input: VerificationEmailInput) {
 export function buildConfirmationEmail(input: ConfirmationEmailInput) {
   const subject = `Your QR code for ${input.eventTitle}`;
   const schedule = formatEventDateRange(input.eventStartAt, input.eventEndAt, input.eventTimezone);
-  const introLine = input.introLine ?? "Hit the track for free. Dubai Police has you covered!";
-  const detailParagraphs =
-    input.detailParagraphs ?? [
-      "Join us at Dubai Autodrome for the region's premier community fitness night! In a shared commitment to community health, wellness, and safety, we are thrilled to announce Train With Dubai Police.",
-      "The best part? Dubai Police has your entry completely covered, making it 100% free for all participants. Join us on our Circuit under the lights for an unforgettable, high-energy evening of cycling, running, and specialized bootcamps.",
-      "Registration is required, so secure your free spot today and let's hit the track!"
-    ];
+  const introLine = input.introLine?.trim() || null;
+  const detailParagraphs = input.detailParagraphs ?? [];
   const ticketCardHtml = renderTicketCard({
     event: {
       title: input.eventTitle,
@@ -192,7 +187,7 @@ export function buildConfirmationEmail(input: ConfirmationEmailInput) {
   const html = buildEmailShell(`
     <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:0.26em;text-transform:uppercase;color:#8fb6a3">Registration confirmed</p>
     <h1 style="margin:0 0 14px;font-size:28px;line-height:1.1;color:#ffffff">${input.eventTitle}</h1>
-    <p style="margin:0 0 12px;font-size:16px;color:#d5dde5">${introLine}</p>
+    ${introLine ? `<p style="margin:0 0 12px;font-size:16px;color:#d5dde5">${introLine}</p>` : ""}
     ${detailParagraphs.map((paragraph) => `<p style="margin:0 0 14px;color:#b7c3cf">${paragraph}</p>`).join("")}
     <p style="margin:20px 0 16px;color:#dce5ec"><strong>${input.bookedBy ? "Attendee" : "Primary registrant"}:</strong> ${input.fullName}${input.bookedBy ? ` <span style="color:#9fb0be">(booked by ${input.bookedBy})</span>` : ""}</p>
     <p style="margin:0 0 16px;color:#9fb0be"><strong>Date and time:</strong> ${schedule}</p>
@@ -224,13 +219,8 @@ export function buildConfirmationEmail(input: ConfirmationEmailInput) {
 export function buildGroupConfirmationEmail(input: GroupConfirmationEmailInput) {
   const subject = `Your ${input.attendees.length} tickets for ${input.eventTitle}`;
   const schedule = formatEventDateRange(input.eventStartAt, input.eventEndAt, input.eventTimezone);
-  const introLine = input.introLine ?? "Hit the track for free. Dubai Police has you covered!";
-  const detailParagraphs =
-    input.detailParagraphs ?? [
-      "Join us at Dubai Autodrome for the region's premier community fitness night! In a shared commitment to community health, wellness, and safety, we are thrilled to announce Train With Dubai Police.",
-      "The best part? Dubai Police has your entry completely covered, making it 100% free for all participants. Join us on our Circuit under the lights for an unforgettable, high-energy evening of cycling, running, and specialized bootcamps.",
-      "Registration is required, so secure your free spot today and let's hit the track!"
-    ];
+  const introLine = input.introLine?.trim() || null;
+  const detailParagraphs = input.detailParagraphs ?? [];
 
   const attendeeBlocks = input.attendees
     .map((attendee) =>
@@ -259,7 +249,7 @@ export function buildGroupConfirmationEmail(input: GroupConfirmationEmailInput) 
   const html = buildEmailShell(`
     <p style="margin:0 0 10px;font-size:11px;font-weight:700;letter-spacing:0.26em;text-transform:uppercase;color:#8fb6a3">${input.attendees.length} tickets confirmed</p>
     <h1 style="margin:0 0 14px;font-size:28px;line-height:1.1;color:#ffffff">${input.eventTitle}</h1>
-    <p style="margin:0 0 12px;font-size:16px;color:#d5dde5">${introLine}</p>
+    ${introLine ? `<p style="margin:0 0 12px;font-size:16px;color:#d5dde5">${introLine}</p>` : ""}
     ${detailParagraphs.map((paragraph) => `<p style="margin:0 0 14px;color:#b7c3cf">${paragraph}</p>`).join("")}
     <p style="margin:20px 0 8px;color:#dce5ec"><strong>Booked by:</strong> ${input.primaryFullName}</p>
     <p style="margin:0 0 18px;color:#9fb0be"><strong>Date and time:</strong> ${schedule}</p>

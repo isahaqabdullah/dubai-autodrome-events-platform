@@ -121,7 +121,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   })
 }));
 
-import { updateEvent } from "@/services/admin";
+import { createEvent, updateEvent } from "@/services/admin";
 
 type UpdateEventInput = Parameters<typeof updateEvent>[0];
 
@@ -130,6 +130,7 @@ function createBeforeEvent() {
     id: "11111111-1111-1111-1111-111111111111",
     slug: "track-day-april-2026",
     title: "Track Day",
+    description: "Previous description",
     venue: "Dubai Autodrome",
     timezone: "Asia/Dubai",
     start_at: "2026-04-24T12:00:00.000Z",
@@ -287,5 +288,34 @@ describe("updateEvent", () => {
     const formConfig = testState.lastUpdatePayload?.form_config as { ticketOptions?: Array<{ capacity?: number | null }> };
     expect(formConfig.ticketOptions?.[0]?.capacity).toBeNull();
     expect(testState.auditRows).toHaveLength(1);
+  });
+
+  it("syncs the form description to event description and booking paragraphs", async () => {
+    await updateEvent(
+      createUpdateInput({
+        descriptionText: "First paragraph.\n\nSecond paragraph."
+      }),
+      actor
+    );
+
+    const formConfig = testState.lastUpdatePayload?.form_config as { descriptionParagraphs?: string[] };
+    expect(testState.lastUpdatePayload?.description).toBe("First paragraph.\n\nSecond paragraph.");
+    expect(formConfig.descriptionParagraphs).toEqual(["First paragraph.", "Second paragraph."]);
+  });
+
+  it("syncs the form description when creating an event", async () => {
+    testState.isDemoMode = true;
+
+    const created = await createEvent(
+      createUpdateInput({
+        id: undefined,
+        status: "draft",
+        descriptionText: "Created description.\n\nShown publicly."
+      }),
+      actor
+    );
+
+    expect(created.description).toBe("Created description.\n\nShown publicly.");
+    expect(created.form_config?.descriptionParagraphs).toEqual(["Created description.", "Shown publicly."]);
   });
 });
