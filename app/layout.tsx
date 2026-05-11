@@ -9,8 +9,7 @@ const openSans = Open_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Dubai Autodrome Events",
-  description: "Recurring event registration and check-in platform for Dubai Autodrome."
+  title: "Dubai Autodrome Events"
 };
 
 export const viewport: Viewport = {
