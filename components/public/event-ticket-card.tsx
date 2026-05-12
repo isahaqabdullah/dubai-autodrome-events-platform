@@ -112,12 +112,18 @@ export function EventTicketCard({
         </div>
       </div>
 
-      <div className="flex flex-col">
-        <aside className={cn("relative border-t border-slate/12 bg-[#f4ede4] text-ink", compactMobile ? "p-3 sm:p-4 lg:p-6" : "p-4 lg:p-6")}>
-          <div className="absolute inset-x-6 top-0" aria-hidden="true">
+      <div className="flex flex-col lg:grid lg:grid-cols-[minmax(0,1fr)_320px]">
+        <aside className={cn("relative order-1 border-t border-slate/12 bg-[#f4ede4] text-ink lg:order-2 lg:border-l lg:border-t-0", compactMobile ? "p-3 sm:p-4 lg:p-6" : "p-4 lg:p-6")}>
+          <div className="absolute inset-x-6 top-0 lg:hidden" aria-hidden="true">
             <div className="relative border-t border-dashed border-[#ccbfb0]">
               <div className="absolute -left-1 top-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white" />
               <div className="absolute -right-1 top-0 h-4 w-4 -translate-y-1/2 rounded-full bg-white" />
+            </div>
+          </div>
+          <div className="absolute inset-y-6 left-0 hidden lg:block" aria-hidden="true">
+            <div className="relative h-full border-l border-dashed border-[#ccbfb0]">
+              <div className="absolute left-0 top-0 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white" />
+              <div className="absolute bottom-0 left-0 h-4 w-4 -translate-x-1/2 translate-y-1/2 rounded-full bg-white" />
             </div>
           </div>
 
@@ -152,7 +158,7 @@ export function EventTicketCard({
           </div>
         </aside>
 
-        <div className={cn(compactMobile ? "p-3 sm:p-6 lg:p-7" : "p-4 sm:p-6 lg:p-7")}>
+        <div className={cn("order-2 lg:order-1", compactMobile ? "p-3 sm:p-6 lg:p-7" : "p-4 sm:p-6 lg:p-7")}>
           <div>
             <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-slate">Event</p>
             <h3 className={cn("font-title font-black italic leading-tight text-ink sm:mt-2 sm:text-3xl", compactMobile ? "mt-1 text-xl" : "mt-2 text-2xl")}>
