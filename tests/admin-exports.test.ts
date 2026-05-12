@@ -3,10 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const testState = vi.hoisted(() => ({
   isDemoMode: false,
   data: [] as Array<Record<string, unknown>>,
+  paymentData: [] as Array<Record<string, unknown>>,
   error: null as { message: string } | null,
   selectCalls: [] as string[],
   eqCalls: [] as Array<{ column: string; value: unknown }>,
   notCalls: [] as Array<{ column: string; operator: string; value: unknown }>,
+  gteCalls: [] as Array<{ column: string; value: unknown }>,
+  ltCalls: [] as Array<{ column: string; value: unknown }>,
   orderCalls: [] as Array<{ column: string; ascending: boolean }>,
   rangeCalls: [] as Array<{ from: number; to: number }>
 }));
@@ -53,7 +56,7 @@ vi.mock("@/services/mailer", () => ({
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminSupabaseClient: () => ({
     from(table: string) {
-      if (table !== "registrations") {
+      if (table !== "registrations" && table !== "payment_attempts") {
         throw new Error(`Unexpected table: ${table}`);
       }
 
@@ -64,18 +67,44 @@ vi.mock("@/lib/supabase/admin", () => ({
           const predicates: Array<(row: Record<string, unknown>) => boolean> = [];
           let orderColumn: string | null = null;
           let ascending = true;
+          const source = table === "payment_attempts" ? testState.paymentData : testState.data;
+          const getValue = (row: Record<string, unknown>, column: string): unknown => {
+            if (!column.includes(".")) {
+              return row[column];
+            }
+
+            return column.split(".").reduce<unknown>((current, part) => {
+              if (Array.isArray(current)) {
+                current = current[0] ?? null;
+              }
+
+              return current && typeof current === "object"
+                ? (current as Record<string, unknown>)[part]
+                : undefined;
+            }, row);
+          };
 
           const chain = {
             eq(column: string, value: unknown) {
               testState.eqCalls.push({ column, value });
-              predicates.push((row) => row[column] === value);
+              predicates.push((row) => getValue(row, column) === value);
               return chain;
             },
             not(column: string, operator: string, value: unknown) {
               testState.notCalls.push({ column, operator, value });
               if (operator === "is" && value === null) {
-                predicates.push((row) => row[column] != null);
+                predicates.push((row) => getValue(row, column) != null);
               }
+              return chain;
+            },
+            gte(column: string, value: unknown) {
+              testState.gteCalls.push({ column, value });
+              predicates.push((row) => String(getValue(row, column)) >= String(value));
+              return chain;
+            },
+            lt(column: string, value: unknown) {
+              testState.ltCalls.push({ column, value });
+              predicates.push((row) => String(getValue(row, column)) < String(value));
               return chain;
             },
             order(column: string, options?: { ascending?: boolean }) {
@@ -87,15 +116,15 @@ vi.mock("@/lib/supabase/admin", () => ({
             async range(from: number, to: number) {
               testState.rangeCalls.push({ from, to });
 
-              const data = [...testState.data]
+              const data = [...source]
                 .filter((row) => predicates.every((predicate) => predicate(row)))
                 .sort((left, right) => {
                   if (!orderColumn) {
                     return 0;
                   }
 
-                  const leftValue = left[orderColumn];
-                  const rightValue = right[orderColumn];
+                  const leftValue = getValue(left, orderColumn);
+                  const rightValue = getValue(right, orderColumn);
                   if (leftValue === rightValue) return 0;
                   if (leftValue == null) return 1;
                   if (rightValue == null) return -1;
@@ -118,7 +147,7 @@ vi.mock("@/lib/supabase/admin", () => ({
   })
 }));
 
-import { exportAttendeesCsv, exportRegistrationsCsv } from "@/services/admin";
+import { exportAttendeesCsv, exportDailySalesCsv, exportRegistrationsCsv } from "@/services/admin";
 
 function parseCsv(csv: string) {
   const rows: string[][] = [];
@@ -172,10 +201,13 @@ describe("admin exports", () => {
   beforeEach(() => {
     testState.isDemoMode = false;
     testState.data = [];
+    testState.paymentData = [];
     testState.error = null;
     testState.selectCalls = [];
     testState.eqCalls = [];
     testState.notCalls = [];
+    testState.gteCalls = [];
+    testState.ltCalls = [];
     testState.orderCalls = [];
     testState.rangeCalls = [];
   });
@@ -379,5 +411,112 @@ describe("admin exports", () => {
     expect(rows[0]["Full Name"]).toBe("'=IMPORTXML(\"https://example.com\")");
     expect(rows[0]["Ticket Type"]).toBe("'+Danger");
     expect(rows[0]["Activity Category"]).toBe("'@Command");
+  });
+
+  it("exports daily sales for paid transactions in the Dubai calendar day", async () => {
+    testState.paymentData = [
+      {
+        id: "attempt-1",
+        ni_order_reference: "NI-001",
+        merchant_order_reference: "MERCHANT-001",
+        amount_minor: 10500,
+        currency_code: "AED",
+        paid_at: "2026-05-11T20:30:00.000Z",
+        booking_intents: {
+          event_id: "event-1",
+          payer_full_name: "Primary Booker",
+          events: { title: "Track Night" },
+          booking_intent_items: [
+            { title: "Grandstand", quantity: 2, sort_order: 0 },
+            { title: "Pit Walk", quantity: 2, sort_order: 1 }
+          ]
+        }
+      },
+      {
+        id: "attempt-previous-day",
+        ni_order_reference: "NI-PREV",
+        amount_minor: 10500,
+        currency_code: "AED",
+        paid_at: "2026-05-11T19:59:59.000Z",
+        booking_intents: {
+          event_id: "event-1",
+          payer_full_name: "Previous Day",
+          events: { title: "Track Night" },
+          booking_intent_items: []
+        }
+      },
+      {
+        id: "attempt-other-event",
+        ni_order_reference: "NI-OTHER",
+        amount_minor: 21000,
+        currency_code: "AED",
+        paid_at: "2026-05-12T06:00:00.000Z",
+        booking_intents: {
+          event_id: "event-2",
+          payer_full_name: "Other Event",
+          events: { title: "Karting" },
+          booking_intent_items: []
+        }
+      },
+      {
+        id: "attempt-not-paid",
+        ni_order_reference: "NI-NOT-PAID",
+        amount_minor: 10500,
+        currency_code: "AED",
+        paid_at: null,
+        booking_intents: {
+          event_id: "event-1",
+          payer_full_name: "Pending Booker",
+          events: { title: "Track Night" },
+          booking_intent_items: []
+        }
+      }
+    ];
+
+    const csv = await exportDailySalesCsv({ date: "2026-05-12", eventId: "event-1" });
+    const rows = parseCsv(csv);
+
+    expect(rows).toEqual([
+      {
+        "Date": "May 12, 2026, 12:30 AM",
+        "Transaction ref": "NI-001",
+        "Name": "Primary Booker",
+        "Total amount": "AED 105.00",
+        "Amount before vat": "AED 100.00",
+        "Vat 5%": "AED 5.00",
+        "Activity description": "Track Night: Grandstand x2; Pit Walk x2"
+      }
+    ]);
+    expect(testState.notCalls).toContainEqual({ column: "paid_at", operator: "is", value: null });
+    expect(testState.gteCalls).toContainEqual({ column: "paid_at", value: "2026-05-11T20:00:00.000Z" });
+    expect(testState.ltCalls).toContainEqual({ column: "paid_at", value: "2026-05-12T20:00:00.000Z" });
+    expect(testState.eqCalls).toContainEqual({ column: "booking_intents.event_id", value: "event-1" });
+  });
+
+  it("falls back to payment attempt id and guards sales CSV values", async () => {
+    testState.paymentData = [
+      {
+        id: "attempt-fallback",
+        ni_order_reference: null,
+        merchant_order_reference: null,
+        amount_minor: 10500,
+        currency_code: "AED",
+        paid_at: "2026-05-12T08:00:00.000Z",
+        booking_intents: {
+          event_id: "event-1",
+          payer_full_name: "=Jane Doe",
+          events: { title: "+Track Night" },
+          booking_intent_items: [
+            { title: "@Pit Walk", quantity: 1, sort_order: 0 }
+          ]
+        }
+      }
+    ];
+
+    const rows = parseCsv(await exportDailySalesCsv({ date: "2026-05-12" }));
+
+    expect(rows[0]["Transaction ref"]).toBe("attempt-fallback");
+    expect(rows[0]["Name"]).toBe("'=Jane Doe");
+    expect(rows[0]["Activity description"]).toBe("'+Track Night: @Pit Walk");
   });
 });

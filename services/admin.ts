@@ -882,6 +882,233 @@ function registrationRowsToCsv(dataRows: Array<Record<string, unknown>>) {
   ]);
 }
 
+type SalesReportFilters = {
+  date: string;
+  eventId?: string;
+};
+
+type SalesReportItemInput = {
+  title?: string | null;
+  quantity?: number | null;
+  sort_order?: number | null;
+};
+
+type SalesReportBookingInput = {
+  payer_full_name?: string | null;
+  events?: { title?: string | null } | Array<{ title?: string | null }> | null;
+  booking_intent_items?: SalesReportItemInput[] | null;
+};
+
+type SalesReportPaymentInput = {
+  id: string;
+  ni_order_reference?: string | null;
+  merchant_order_reference?: string | null;
+  amount_minor: number;
+  currency_code?: string | null;
+  paid_at: string;
+  booking_intents?: SalesReportBookingInput | SalesReportBookingInput[] | null;
+};
+
+export type SalesReportRow = {
+  paidAt: string;
+  transactionRef: string;
+  name: string;
+  totalAmountMinor: number;
+  amountBeforeVatMinor: number;
+  vatMinor: number;
+  currencyCode: string;
+  activityDescription: string;
+};
+
+export type DailySalesReport = {
+  date: string;
+  startIso: string;
+  endIso: string;
+  rows: SalesReportRow[];
+  totalAmountMinor: number;
+  amountBeforeVatMinor: number;
+  vatMinor: number;
+  currencyCode: string;
+};
+
+const SALES_REPORT_HEADERS = [
+  "Date",
+  "Transaction ref",
+  "Name",
+  "Total amount",
+  "Amount before vat",
+  "Vat 5%",
+  "Activity description"
+];
+
+function getDatePart(value: string, part: "year" | "month" | "day") {
+  const index = part === "year" ? 0 : part === "month" ? 1 : 2;
+  return Number(value.split("-")[index]);
+}
+
+function getNextDateValue(value: string) {
+  const date = new Date(Date.UTC(
+    getDatePart(value, "year"),
+    getDatePart(value, "month") - 1,
+    getDatePart(value, "day") + 1
+  ));
+
+  return date.toISOString().slice(0, 10);
+}
+
+function getSalesReportDateRange(date: string) {
+  return {
+    startIso: zonedInputToUtcIso(`${date}T00:00`, EXPORT_TIME_ZONE),
+    endIso: zonedInputToUtcIso(`${getNextDateValue(date)}T00:00`, EXPORT_TIME_ZONE)
+  };
+}
+
+function firstRelatedRow<T>(value: T | T[] | null | undefined) {
+  if (Array.isArray(value)) {
+    return value[0] ?? null;
+  }
+
+  return value ?? null;
+}
+
+function splitVatInclusiveMinor(totalAmountMinor: number) {
+  const amountBeforeVatMinor = Math.round((totalAmountMinor * 100) / 105);
+  return {
+    amountBeforeVatMinor,
+    vatMinor: totalAmountMinor - amountBeforeVatMinor
+  };
+}
+
+function formatExportMoneyMinor(amountMinor: number, currencyCode: string) {
+  return `${currencyCode} ${(amountMinor / 100).toFixed(2)}`;
+}
+
+export function formatSalesMoneyMinor(amountMinor: number, currencyCode = "AED") {
+  return new Intl.NumberFormat("en-AE", {
+    style: "currency",
+    currency: currencyCode,
+    maximumFractionDigits: 2
+  }).format(amountMinor / 100);
+}
+
+export function getDubaiDateInputValue(date = new Date()) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: EXPORT_TIME_ZONE,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).formatToParts(date);
+  const lookup = new Map(parts.map((part) => [part.type, part.value]));
+  return `${lookup.get("year")}-${lookup.get("month")}-${lookup.get("day")}`;
+}
+
+function buildActivityDescription(booking: SalesReportBookingInput | null) {
+  const event = firstRelatedRow(booking?.events);
+  const eventTitle = event?.title?.trim() || "Unknown event";
+  const items = [...(booking?.booking_intent_items ?? [])]
+    .sort((left, right) => (left.sort_order ?? 0) - (right.sort_order ?? 0))
+    .map((item) => {
+      const title = item.title?.trim();
+      if (!title) {
+        return null;
+      }
+
+      const quantity = item.quantity ?? 1;
+      return quantity > 1 ? `${title} x${quantity}` : title;
+    })
+    .filter((item): item is string => Boolean(item));
+
+  return items.length > 0 ? `${eventTitle}: ${items.join("; ")}` : eventTitle;
+}
+
+function buildSalesReportRow(row: SalesReportPaymentInput): SalesReportRow {
+  const booking = firstRelatedRow(row.booking_intents);
+  const currencyCode = row.currency_code ?? "AED";
+  const vat = splitVatInclusiveMinor(row.amount_minor);
+
+  return {
+    paidAt: row.paid_at,
+    transactionRef: row.ni_order_reference ?? row.merchant_order_reference ?? row.id,
+    name: booking?.payer_full_name ?? "",
+    totalAmountMinor: row.amount_minor,
+    amountBeforeVatMinor: vat.amountBeforeVatMinor,
+    vatMinor: vat.vatMinor,
+    currencyCode,
+    activityDescription: buildActivityDescription(booking)
+  };
+}
+
+export function buildSalesReportCsvRows(rows: SalesReportRow[]) {
+  return [
+    SALES_REPORT_HEADERS,
+    ...rows.map((row) => [
+      formatExportDateTime(row.paidAt),
+      row.transactionRef,
+      row.name,
+      formatExportMoneyMinor(row.totalAmountMinor, row.currencyCode),
+      formatExportMoneyMinor(row.amountBeforeVatMinor, row.currencyCode),
+      formatExportMoneyMinor(row.vatMinor, row.currencyCode),
+      row.activityDescription
+    ])
+  ];
+}
+
+export async function getDailySalesReport(filters: SalesReportFilters): Promise<DailySalesReport> {
+  const { startIso, endIso } = getSalesReportDateRange(filters.date);
+  let rows: SalesReportRow[] = [];
+
+  if (!isDemoMode()) {
+    const supabase = createAdminSupabaseClient();
+    const data = await fetchExportRowsInBatches<SalesReportPaymentInput>((from, to) => {
+      let query = supabase
+        .from("payment_attempts")
+        .select(`
+          id,
+          ni_order_reference,
+          merchant_order_reference,
+          amount_minor,
+          currency_code,
+          paid_at,
+          booking_intents!inner(
+            payer_full_name,
+            events(title),
+            booking_intent_items(title, quantity, sort_order)
+          )
+        `)
+        .not("paid_at", "is", null)
+        .gte("paid_at", startIso)
+        .lt("paid_at", endIso)
+        .order("paid_at", { ascending: true });
+
+      if (filters.eventId) {
+        query = query.eq("booking_intents.event_id", filters.eventId);
+      }
+
+      return query.range(from, to);
+    });
+
+    rows = data.map(buildSalesReportRow);
+  }
+
+  const currencyCode = rows[0]?.currencyCode ?? "AED";
+
+  return {
+    date: filters.date,
+    startIso,
+    endIso,
+    rows,
+    totalAmountMinor: rows.reduce((sum, row) => sum + row.totalAmountMinor, 0),
+    amountBeforeVatMinor: rows.reduce((sum, row) => sum + row.amountBeforeVatMinor, 0),
+    vatMinor: rows.reduce((sum, row) => sum + row.vatMinor, 0),
+    currencyCode
+  };
+}
+
+export async function exportDailySalesCsv(filters: SalesReportFilters) {
+  const report = await getDailySalesReport(filters);
+  return buildCsv(buildSalesReportCsvRows(report.rows));
+}
+
 export async function exportAttendeesCsv(eventId: string) {
   let dataRows: Array<Record<string, unknown>>;
 
