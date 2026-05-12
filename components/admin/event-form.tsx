@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, useTransition } from "react";
-import { BookmarkPlus, CheckCircle2, Download, FileText, ImageIcon, Trash2, Upload, X } from "lucide-react";
+import { BookmarkPlus, CheckCircle2, Download, FileText, ImageIcon, RotateCcw, Trash2, Upload, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
@@ -15,7 +15,8 @@ import {
   EVENT_FORM_TEMPLATE_TEXT_FIELDS,
   extractEventFormTemplateValues,
   parseStoredEventFormTemplates,
-  type EventFormTemplate
+  type EventFormTemplate,
+  type EventFormTemplateTextField
 } from "@/lib/event-form-templates";
 import type { EventFormConfig, EventRecord, EventTicketOption } from "@/lib/types";
 import { formatInputDateTimeInZone } from "@/lib/utils";
@@ -36,6 +37,28 @@ function getDescriptionText(event: EventRecord | null | undefined, config: Event
   }
 
   return event?.description ?? "";
+}
+
+function getInitialTemplateTextValues(
+  event: EventRecord | null | undefined,
+  config: EventFormConfig,
+  descriptionText: string
+): Record<EventFormTemplateTextField, string> {
+  return {
+    venue: event?.venue ?? "",
+    timezone: event?.timezone ?? "",
+    mapLink: config.mapLink ?? "",
+    introLine: config.introLine ?? "",
+    descriptionText,
+    emailIntroLine: config.emailIntroLine ?? "",
+    emailDescriptionText: config.emailDescriptionParagraphs?.join("\n\n") ?? "",
+    disclaimerHeading: config.disclaimerHeading ?? "",
+    declarationText: event?.declaration_text ?? "",
+    categoriesLabel: config.categoriesLabel ?? "",
+    ticketOptionsLabel: config.ticketOptionsLabel ?? "",
+    declarationVersion: String(event?.declaration_version ?? 1),
+    submitLabel: config.submitLabel ?? ""
+  };
 }
 
 function setFormFieldValue(form: HTMLFormElement, name: string, value: string) {
@@ -239,12 +262,13 @@ export function EventForm({
   const initialPosterImage = config.posterImage ?? "";
   const initialDisclaimerPdfUrl = config.disclaimerPdfUrl ?? "";
   const initialDescriptionText = getDescriptionText(event, config);
+  const initialTemplateTextValues = getInitialTemplateTextValues(event, config, initialDescriptionText);
   const dateInputTimeZone = event?.timezone?.trim() || "UTC";
   const [posterImage, setPosterImage] = useState(initialPosterImage);
   const [disclaimerPdfUrl, setDisclaimerPdfUrl] = useState(initialDisclaimerPdfUrl);
   const [templates, setTemplates] = useState<EventFormTemplate[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  const [templateName, setTemplateName] = useState(event?.title ? `${event.title} template` : "");
+  const [templateName, setTemplateName] = useState("");
   const [templateMessage, setTemplateMessage] = useState<string | null>(null);
   const [templateCategories, setTemplateCategories] = useState<EventTicketOption[] | null>(null);
   const [templateTicketOptions, setTemplateTicketOptions] = useState<EventTicketOption[] | null>(null);
@@ -277,13 +301,19 @@ export function EventForm({
       return;
     }
 
+    const trimmedTemplateName = templateName.trim();
+
+    if (!trimmedTemplateName) {
+      setTemplateMessage("Enter a template name before saving.");
+      return;
+    }
+
     const formData = new FormData(formRef.current);
     formData.set("posterImage", posterImage);
     formData.set("disclaimerPdfUrl", disclaimerPdfUrl);
 
-    const fallbackName = event?.title ? `${event.title} template` : "Event template";
     const template = createEventFormTemplate(
-      templateName.trim() || fallbackName,
+      trimmedTemplateName,
       extractEventFormTemplateValues(formData, { posterImage, disclaimerPdfUrl })
     );
     const nextTemplates = [template, ...templates];
@@ -318,6 +348,32 @@ export function EventForm({
     setTemplateTicketOptions(template.values.ticketOptions);
     setTemplateEditorVersion((current) => current + 1);
     setTemplateMessage(`Loaded "${template.name}".`);
+  }
+
+  function handleResetTemplate() {
+    if (!formRef.current) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      "Reset reusable setup fields to the saved event values? Title, slug, schedule, status, and capacity will stay unchanged."
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    for (const field of EVENT_FORM_TEMPLATE_TEXT_FIELDS) {
+      setFormFieldValue(formRef.current, field, initialTemplateTextValues[field]);
+    }
+
+    setPosterImage(initialPosterImage);
+    setDisclaimerPdfUrl(initialDisclaimerPdfUrl);
+    setTemplateCategories(null);
+    setTemplateTicketOptions(null);
+    setSelectedTemplateId("");
+    setTemplateEditorVersion((current) => current + 1);
+    setTemplateMessage("Template fields reset.");
   }
 
   function handleDeleteTemplate() {
@@ -407,6 +463,15 @@ export function EventForm({
                   <Trash2 className="h-4 w-4" />
                   Delete
                 </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={handleResetTemplate}
+                  className="rounded-xl px-3 py-2 text-xs sm:text-sm"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Reset template
+                </Button>
               </div>
             </div>
 
@@ -414,13 +479,14 @@ export function EventForm({
               <Input
                 value={templateName}
                 onChange={(eventObject) => setTemplateName(eventObject.target.value)}
-                placeholder="Template name"
+                placeholder="Template name (required)"
                 className="rounded-xl border-slate/20 bg-white px-3 py-2 text-sm"
               />
               <Button
                 type="button"
                 variant="secondary"
                 onClick={handleSaveTemplate}
+                disabled={!templateName.trim()}
                 className="rounded-xl px-3 py-2 text-xs sm:text-sm"
               >
                 <BookmarkPlus className="h-4 w-4" />
@@ -721,21 +787,42 @@ export function EventForm({
           </div>
         ) : null}
 
-        <div className="admin-card flex items-center justify-between gap-3 px-3 py-3 sm:px-6 sm:py-4">
+        <div className="admin-card flex flex-col gap-3 px-3 py-3 sm:px-6 sm:py-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="min-w-0">
             <p className="admin-label">{event ? "Editing event" : "Create event"}</p>
             <p className="mt-0.5 hidden text-sm font-medium text-ink sm:block">{event ? "Ready to save changes." : "Ready to create the event."}</p>
           </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <a
-              href={cancelHref}
-              className="inline-flex items-center justify-center rounded-xl border border-slate/15 bg-white px-4 py-2 text-xs font-semibold text-ink transition hover:border-slate/30 hover:bg-slate-50 sm:rounded-2xl sm:text-sm"
-            >
-              Cancel
-            </a>
-            <Button type="submit" disabled={isPending} className="rounded-xl px-4 py-2 text-xs sm:min-w-[150px] sm:rounded-2xl sm:text-sm">
-              {isPending ? "Saving..." : event ? "Save event" : "Create event"}
-            </Button>
+          <div className="flex w-full flex-col gap-3 lg:w-auto lg:flex-row lg:items-center">
+            <div className="flex w-full flex-col gap-2 sm:flex-row lg:w-auto">
+              <Input
+                value={templateName}
+                onChange={(eventObject) => setTemplateName(eventObject.target.value)}
+                placeholder="Template name (required)"
+                aria-label="Template name for bottom save"
+                className="w-full rounded-xl border-slate/20 bg-white px-3 py-2 text-sm sm:min-w-[220px] lg:w-64"
+              />
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={handleSaveTemplate}
+                disabled={!templateName.trim()}
+                className="rounded-xl px-3 py-2 text-xs sm:text-sm"
+              >
+                <BookmarkPlus className="h-4 w-4" />
+                Save template
+              </Button>
+            </div>
+            <div className="flex shrink-0 items-center justify-end gap-2">
+              <a
+                href={cancelHref}
+                className="inline-flex items-center justify-center rounded-xl border border-slate/15 bg-white px-4 py-2 text-xs font-semibold text-ink transition hover:border-slate/30 hover:bg-slate-50 sm:rounded-2xl sm:text-sm"
+              >
+                Cancel
+              </a>
+              <Button type="submit" disabled={isPending} className="rounded-xl px-4 py-2 text-xs sm:min-w-[150px] sm:rounded-2xl sm:text-sm">
+                {isPending ? "Saving..." : event ? "Save event" : "Create event"}
+              </Button>
+            </div>
           </div>
         </div>
       </form>

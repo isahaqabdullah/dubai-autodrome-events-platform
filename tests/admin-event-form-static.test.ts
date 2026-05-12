@@ -44,6 +44,19 @@ describe("admin event form static safeguards", () => {
     expect(eventForm).toContain("Save as template");
     expect(eventForm).toContain("handleLoadTemplate");
     expect(eventForm).toContain("handleDeleteTemplate");
+    expect(eventForm).toContain("handleResetTemplate");
+    expect(eventForm).toContain("Reset template");
+    expect(eventForm).toContain("Template name for bottom save");
+    expect(eventForm).toContain("Save template");
     expect(eventForm).toContain("title, slug, schedule, status, and capacity unchanged");
+  });
+
+  it("requires a template name before saving", () => {
+    const eventForm = readProjectFile("components/admin/event-form.tsx");
+
+    expect(eventForm).toContain("const trimmedTemplateName = templateName.trim();");
+    expect(eventForm).toContain("Enter a template name before saving.");
+    expect(eventForm).toContain("disabled={!templateName.trim()}");
+    expect(eventForm).not.toContain("templateName.trim() || fallbackName");
   });
 });
