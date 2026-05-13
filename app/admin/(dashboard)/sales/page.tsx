@@ -56,9 +56,9 @@ export default async function AdminSalesPage({
   return (
     <main className="admin-page">
       <section className="admin-card p-2.5 sm:p-4">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+        <div className="flex flex-col gap-3">
           <div className="min-w-0">
-            <p className="admin-label">Daily Sales</p>
+            <p className="admin-label">Sales Report</p>
             <h2 className="mt-0.5 text-sm font-semibold tracking-tight text-ink sm:mt-1 sm:text-xl">
               {selectedEvent?.title ?? "All events"}
             </h2>
@@ -70,31 +70,6 @@ export default async function AdminSalesPage({
                 day: "numeric"
               }).format(new Date(`${report.date}T00:00:00.000Z`))}
             </p>
-          </div>
-
-          <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-4 sm:gap-2 xl:min-w-[680px]">
-            <div className="admin-card-muted flex items-center justify-between px-2 py-1.5 sm:px-3.5 sm:py-2.5">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate sm:text-[10px] sm:tracking-[0.16em]">Sales</p>
-              <p className="text-base font-semibold tracking-tight text-ink sm:text-xl">{report.rows.length}</p>
-            </div>
-            <div className="admin-card-muted flex items-center justify-between px-2 py-1.5 sm:px-3.5 sm:py-2.5">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate sm:text-[10px] sm:tracking-[0.16em]">Total</p>
-              <p className="text-sm font-semibold tracking-tight text-ink sm:text-base">
-                {formatSalesMoneyMinor(report.totalAmountMinor, report.currencyCode)}
-              </p>
-            </div>
-            <div className="admin-card-muted flex items-center justify-between px-2 py-1.5 sm:px-3.5 sm:py-2.5">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate sm:text-[10px] sm:tracking-[0.16em]">Before VAT</p>
-              <p className="text-sm font-semibold tracking-tight text-ink sm:text-base">
-                {formatSalesMoneyMinor(report.amountBeforeVatMinor, report.currencyCode)}
-              </p>
-            </div>
-            <div className="admin-card-muted flex items-center justify-between px-2 py-1.5 sm:px-3.5 sm:py-2.5">
-              <p className="text-[9px] font-semibold uppercase tracking-[0.12em] text-slate sm:text-[10px] sm:tracking-[0.16em]">VAT 5%</p>
-              <p className="text-sm font-semibold tracking-tight text-ink sm:text-base">
-                {formatSalesMoneyMinor(report.vatMinor, report.currencyCode)}
-              </p>
-            </div>
           </div>
         </div>
       </section>
@@ -116,8 +91,8 @@ export default async function AdminSalesPage({
       <section className="admin-card p-4 sm:p-6">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="admin-label">Sales</p>
-            <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink sm:text-2xl">Daily sales report</h2>
+            <p className="admin-label">Report</p>
+            <h2 className="mt-1 text-xl font-semibold tracking-tight text-ink sm:text-2xl">Sales report</h2>
           </div>
           <p className="text-sm text-slate">
             {report.rows.length} paid transaction{report.rows.length === 1 ? "" : "s"}

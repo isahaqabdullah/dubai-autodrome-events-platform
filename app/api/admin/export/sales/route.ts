@@ -26,7 +26,7 @@ export async function GET(request: Request) {
     status: 200,
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": `attachment; filename="daily-sales-${parsed.data.date}${eventSuffix}.csv"`
+      "Content-Disposition": `attachment; filename="sales-report-${parsed.data.date}${eventSuffix}.csv"`
     }
   });
 }

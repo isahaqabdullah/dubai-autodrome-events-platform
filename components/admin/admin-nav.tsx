@@ -36,7 +36,7 @@ const navItems = [
   },
   {
     href: "/admin/sales",
-    label: "Daily Sales",
+    label: "Sales Report",
     primary: false,
     fresh: true,
     match: (pathname: string) => pathname.startsWith("/admin/sales")
