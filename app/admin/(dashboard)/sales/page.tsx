@@ -1,4 +1,4 @@
-import { Download } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { SalesReportFilters } from "@/components/admin/sales-report-filters";
 import { salesReportQuerySchema } from "@/lib/validation/admin";
 import { getDailySalesReport, getDubaiDateInputValue, formatSalesMoneyMinor } from "@/services/admin";
@@ -57,6 +57,10 @@ export default async function AdminSalesPage({
     <main className="admin-page">
       <section className="admin-card p-2.5 sm:p-4">
         <div className="flex flex-col gap-3">
+          <a href="/admin" className="admin-back-link self-start">
+            <ArrowLeft className="h-4 w-4" />
+            Back to home
+          </a>
           <div className="min-w-0">
             <p className="admin-label">Sales Report</p>
             <h2 className="mt-0.5 text-sm font-semibold tracking-tight text-ink sm:mt-1 sm:text-xl">
