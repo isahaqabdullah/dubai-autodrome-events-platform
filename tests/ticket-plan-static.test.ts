@@ -192,6 +192,12 @@ describe("ticket plan static safeguards", () => {
     expect(publicBookingFlow).toContain("if (draft.otpState === \"sent\" && savedCheckoutToken && !draft.emailVerified) {");
   });
 
+  it("keeps ticket quantity controls from shrinking and clipping the plus button", () => {
+    const publicBookingFlow = readProjectFile("components/public/event-booking-flow.tsx");
+
+    expect(publicBookingFlow).toContain("sm:w-36 sm:shrink-0");
+  });
+
   it("expires abandoned prepared payment links through maintenance after gateway reconciliation", () => {
     const paymentWorker = readProjectFile("services/payment-worker.ts");
 

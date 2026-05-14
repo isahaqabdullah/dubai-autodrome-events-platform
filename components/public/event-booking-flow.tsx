@@ -1434,7 +1434,7 @@ export function EventBookingFlow({
                       <p className="mt-1 text-sm font-bold text-ink">{formatPrice(category.priceMinor, category.currencyCode)}</p>
                     </div>
 
-                    <div className="grid w-full grid-cols-[2.75rem_minmax(3rem,1fr)_2.75rem] items-center overflow-hidden rounded-2xl border border-slate/15 bg-white sm:w-36">
+                    <div className="grid w-full grid-cols-[2.75rem_minmax(3rem,1fr)_2.75rem] items-center overflow-hidden rounded-2xl border border-slate/15 bg-white sm:w-36 sm:shrink-0">
                       <button
                         type="button"
                         onClick={() => updateTicketQuantity(category, -1)}
