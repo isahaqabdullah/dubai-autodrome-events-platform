@@ -971,7 +971,7 @@ export function EventBookingFlow({
   const visibleParagraphs = expandedDescription ? descriptionParagraphs : descriptionParagraphs.slice(0, 2);
   const contentLayoutClass = completedRegistration
     ? "block"
-    : "grid gap-0 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px]";
+    : "grid min-w-0 grid-cols-[minmax(0,1fr)] gap-0 md:grid-cols-[minmax(0,1fr)_300px] lg:grid-cols-[minmax(0,1fr)_340px] xl:grid-cols-[minmax(0,1fr)_360px]";
 
   useEffect(() => {
     if (step !== "details" || completedRegistration) return;
@@ -1418,7 +1418,7 @@ export function EventBookingFlow({
                   }`}
                 >
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="min-w-0">
+                    <div className="min-w-0 [overflow-wrap:anywhere]">
                       <div className="flex flex-wrap items-center gap-2">
                         <p className="font-display text-base font-bold tracking-tight text-ink sm:text-lg">{category.title}</p>
                         <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.18em] text-slate">
@@ -1892,7 +1892,7 @@ export function EventBookingFlow({
         </div>
 
         <div className={contentLayoutClass}>
-          <div className="px-3.5 py-4 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
+          <div className="min-w-0 px-3.5 py-4 sm:px-6 sm:py-7 lg:px-8 lg:py-8">
             {completedRegistration && completedRegistration.attendees.length > 0 ? (
               <div className="mx-auto max-w-5xl">
                 <div className="flex flex-col items-center pb-6 pt-1 text-center sm:pb-8 sm:pt-2">

@@ -198,6 +198,13 @@ describe("ticket plan static safeguards", () => {
     expect(publicBookingFlow).toContain("sm:w-36 sm:shrink-0");
   });
 
+  it("keeps the ticket page grid and long ticket copy inside mobile cards", () => {
+    const publicBookingFlow = readProjectFile("components/public/event-booking-flow.tsx");
+
+    expect(publicBookingFlow).toContain("grid min-w-0 grid-cols-[minmax(0,1fr)]");
+    expect(publicBookingFlow).toContain("[overflow-wrap:anywhere]");
+  });
+
   it("expires abandoned prepared payment links through maintenance after gateway reconciliation", () => {
     const paymentWorker = readProjectFile("services/payment-worker.ts");
 
