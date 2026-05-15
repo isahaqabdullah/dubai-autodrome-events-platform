@@ -1,8 +1,8 @@
 import "server-only";
-import { demoEvents, demoRegistrations } from "@/lib/demo-data";
+import { demoEventGroups, demoEvents, demoRegistrations } from "@/lib/demo-data";
 import { isDemoMode } from "@/lib/demo-mode";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import type { EventRecord } from "@/lib/types";
+import type { EventGroup, EventRecord } from "@/lib/types";
 
 type RegistrationSummary = {
   count: number;
@@ -14,6 +14,21 @@ type RegistrationSummaryRpcRow = {
   registration_count: number | string | null;
   ticket_counts: Record<string, number | string> | null;
   category_counts: Record<string, number | string> | null;
+};
+
+export type EventGroupWithEvents = EventGroup & {
+  events: EventRecord[];
+};
+
+const LEGACY_EVENT_GROUP: EventGroup = {
+  id: "00000000-0000-4000-8000-000000000001",
+  name: "Events",
+  slug: "events",
+  description: null,
+  sort_order: 0,
+  active: true,
+  created_at: "1970-01-01T00:00:00.000Z",
+  updated_at: "1970-01-01T00:00:00.000Z"
 };
 
 function parseCountMap(value: unknown) {
@@ -35,6 +50,19 @@ function canFallbackToLegacySummary(error: { code?: string; message?: string } |
   }
 
   return error.code === "PGRST202" || error.code === "42883" || error.message?.includes("get_registration_summary") === true;
+}
+
+function canFallbackToLegacyEventGroups(error: { code?: string; message?: string } | null) {
+  if (!error) {
+    return false;
+  }
+
+  return (
+    error.code === "PGRST200" ||
+    error.code === "PGRST202" ||
+    error.code === "PGRST205" ||
+    error.message?.includes("event_groups") === true
+  );
 }
 
 export async function listUpcomingEvents() {
@@ -59,6 +87,65 @@ export async function listUpcomingEvents() {
   return (data ?? []) as EventRecord[];
 }
 
+export async function listEventGroups(options: { includeInactive?: boolean } = {}) {
+  if (isDemoMode()) {
+    return demoEventGroups;
+  }
+
+  const supabase = createAdminSupabaseClient();
+
+  let query = supabase
+    .from("event_groups")
+    .select("*")
+    .order("sort_order", { ascending: true })
+    .order("name", { ascending: true });
+
+  if (!options.includeInactive) {
+    query = query.eq("active", true);
+  }
+
+  const { data, error } = await query;
+
+  if (error) {
+    throw error;
+  }
+
+  return (data ?? []) as EventGroup[];
+}
+
+export async function listUpcomingEventGroups(): Promise<EventGroupWithEvents[]> {
+  const events = await listUpcomingEvents();
+  let eventGroups: EventGroup[];
+
+  try {
+    eventGroups = await listEventGroups();
+  } catch (error) {
+    if (canFallbackToLegacyEventGroups(error as { code?: string; message?: string })) {
+      return [{ ...LEGACY_EVENT_GROUP, events }];
+    }
+
+    throw error;
+  }
+
+  const groupsById = new Map(eventGroups.map((group) => [group.id, { ...group, events: [] as EventRecord[] }]));
+  const ungroupedEvents: EventRecord[] = [];
+
+  for (const event of events) {
+    const group = groupsById.get(event.event_group_id);
+    if (group) {
+      group.events.push(event);
+    } else {
+      ungroupedEvents.push(event);
+    }
+  }
+
+  const groupedEvents = [...groupsById.values()].filter((group) => group.events.length > 0);
+
+  return ungroupedEvents.length > 0
+    ? [...groupedEvents, { ...LEGACY_EVENT_GROUP, events: ungroupedEvents }]
+    : groupedEvents;
+}
+
 export async function listAdminEvents() {
   if (isDemoMode()) {
     return demoEvents;
@@ -75,7 +162,23 @@ export async function listAdminEvents() {
     throw error;
   }
 
-  return (data ?? []) as EventRecord[];
+  const events = (data ?? []) as EventRecord[];
+
+  try {
+    const eventGroups = await listEventGroups({ includeInactive: true });
+    const groupsById = new Map(eventGroups.map((group) => [group.id, group]));
+
+    return events.map((event) => ({
+      ...event,
+      event_group: groupsById.get(event.event_group_id) ?? null
+    }));
+  } catch (error) {
+    if (canFallbackToLegacyEventGroups(error as { code?: string; message?: string })) {
+      return events;
+    }
+
+    throw error;
+  }
 }
 
 export async function getEventBySlug(slug: string) {

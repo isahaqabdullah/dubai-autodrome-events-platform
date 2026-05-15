@@ -60,8 +60,21 @@ export interface EventFormConfig {
   disclaimerHeading?: string;
 }
 
+export interface EventGroup {
+  id: string;
+  name: string;
+  slug: string;
+  description: string | null;
+  sort_order: number;
+  active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface EventRecord {
   id: string;
+  event_group_id: string;
+  event_group?: EventGroup | null;
   slug: string;
   title: string;
   description: string | null;

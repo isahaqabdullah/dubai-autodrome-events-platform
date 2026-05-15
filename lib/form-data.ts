@@ -1,4 +1,4 @@
-import { adminEventSchema } from "@/lib/validation/admin";
+import { adminEventGroupSchema, adminEventSchema } from "@/lib/validation/admin";
 
 export function parseAdminEventFormData(formData: FormData) {
   const rawTicketOptions = String(formData.get("ticketOptionsJson") ?? "[]");
@@ -19,6 +19,7 @@ export function parseAdminEventFormData(formData: FormData) {
 
   return adminEventSchema.parse({
     id: String(formData.get("id") ?? "") || undefined,
+    eventGroupId: String(formData.get("eventGroupId") ?? ""),
     slug: String(formData.get("slug") ?? ""),
     title: String(formData.get("title") ?? ""),
     venue: String(formData.get("venue") ?? ""),
@@ -44,5 +45,16 @@ export function parseAdminEventFormData(formData: FormData) {
     emailDescriptionText: String(formData.get("emailDescriptionText") ?? ""),
     disclaimerPdfUrl: String(formData.get("disclaimerPdfUrl") ?? ""),
     disclaimerHeading: String(formData.get("disclaimerHeading") ?? "")
+  });
+}
+
+export function parseAdminEventGroupFormData(formData: FormData) {
+  return adminEventGroupSchema.parse({
+    id: String(formData.get("id") ?? "") || undefined,
+    name: String(formData.get("name") ?? ""),
+    slug: String(formData.get("slug") ?? ""),
+    description: String(formData.get("description") ?? ""),
+    sortOrder: Number(formData.get("sortOrder") ?? 0),
+    active: formData.get("active") !== "false"
   });
 }

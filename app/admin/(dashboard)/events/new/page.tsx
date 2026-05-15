@@ -7,6 +7,7 @@ import { getAdminBackLabel, normalizeAdminReturnTo } from "@/lib/admin-navigatio
 import { requireAuthenticatedUser } from "@/lib/auth";
 import { parseAdminEventFormData } from "@/lib/form-data";
 import { createEvent } from "@/services/admin";
+import { listEventGroups } from "@/services/events";
 
 export default async function NewEventPage({
   searchParams
@@ -14,6 +15,7 @@ export default async function NewEventPage({
   searchParams: Promise<{ returnTo?: string }>;
 }) {
   const { returnTo } = await searchParams;
+  const eventGroups = await listEventGroups();
   const backHref = normalizeAdminReturnTo(returnTo, "/admin");
   const backLabel = getAdminBackLabel(backHref);
 
@@ -57,7 +59,7 @@ export default async function NewEventPage({
           <p className="admin-label">Create event</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">New event</h1>
         </div>
-        <EventForm action={createEventAction} cancelHref={backHref} successHref={backHref} />
+        <EventForm eventGroups={eventGroups} action={createEventAction} cancelHref={backHref} successHref={backHref} />
       </section>
     </main>
   );

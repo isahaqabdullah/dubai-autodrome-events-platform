@@ -128,6 +128,7 @@ type UpdateEventInput = Parameters<typeof updateEvent>[0];
 function createBeforeEvent() {
   return {
     id: "11111111-1111-1111-1111-111111111111",
+    event_group_id: "22222222-2222-4222-8222-222222222222",
     slug: "track-day-april-2026",
     title: "Track Day",
     description: "Previous description",
@@ -176,6 +177,7 @@ function createBeforeEvent() {
 function createUpdateInput(overrides: Partial<UpdateEventInput> = {}): UpdateEventInput {
   return {
     id: "11111111-1111-1111-1111-111111111111",
+    eventGroupId: "22222222-2222-4222-8222-222222222222",
     slug: "track-day-april-2026",
     title: "Track Day",
     venue: "Dubai Autodrome",

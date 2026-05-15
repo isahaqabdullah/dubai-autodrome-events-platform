@@ -10,7 +10,7 @@ import { requireAuthenticatedUser } from "@/lib/auth";
 import { parseAdminEventFormData } from "@/lib/form-data";
 import { formatEventDateRange, getRegistrationWindowState } from "@/lib/utils";
 import { updateEvent } from "@/services/admin";
-import { getEventById } from "@/services/events";
+import { getEventById, listEventGroups } from "@/services/events";
 
 export default async function EditEventPage({
   params,
@@ -20,7 +20,10 @@ export default async function EditEventPage({
   searchParams: Promise<{ returnTo?: string }>;
 }) {
   const [{ id }, { returnTo }] = await Promise.all([params, searchParams]);
-  const event = await getEventById(id);
+  const [event, eventGroups] = await Promise.all([
+    getEventById(id),
+    listEventGroups({ includeInactive: true })
+  ]);
 
   if (!event) {
     notFound();
@@ -128,6 +131,7 @@ export default async function EditEventPage({
       <section className="admin-card p-3 sm:p-6">
         <EventForm
           event={currentEvent}
+          eventGroups={eventGroups}
           action={updateEventAction}
           hideRegistrationSections
           cancelHref={backHref}

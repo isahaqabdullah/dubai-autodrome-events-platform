@@ -1,14 +1,14 @@
 import "server-only";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
-import { demoEvents, demoRegistrations } from "@/lib/demo-data";
+import { demoEventGroups, demoEvents, demoRegistrations } from "@/lib/demo-data";
 import { isDemoMode } from "@/lib/demo-mode";
 import { env } from "@/lib/env";
 import { buildQrEmailAttachment, buildQrEmailCid } from "@/lib/qr";
 import { generateOpaqueToken, hashOpaqueToken } from "@/lib/tokens";
 import type { AuthenticatedAppUser } from "@/lib/auth";
-import type { EventFormConfig, EventRecord, EventTicketOption } from "@/lib/types";
+import type { EventFormConfig, EventGroup, EventRecord, EventTicketOption } from "@/lib/types";
 import { blankToNull, buildAbsoluteUrl, isSyntheticEmail, resolveCategories, slugify, zonedInputToUtcIso } from "@/lib/utils";
-import { adminEventSchema } from "@/lib/validation/admin";
+import { adminEventGroupSchema, adminEventSchema } from "@/lib/validation/admin";
 import { buildConfirmationEmail } from "@/services/email-templates";
 import { executeEmailJob } from "@/services/email-jobs";
 import { sendMail } from "@/services/mailer";
@@ -16,6 +16,7 @@ import { getRegistrationSummaryForEvent } from "@/services/events";
 import type { z } from "zod";
 
 type AdminEventInput = z.infer<typeof adminEventSchema>;
+type AdminEventGroupInput = z.infer<typeof adminEventGroupSchema>;
 
 function splitParagraphs(text: string | undefined | null): string[] | undefined {
   if (!text?.trim()) return undefined;
@@ -26,6 +27,7 @@ function buildEventPayload(input: AdminEventInput) {
   const timeZone = input.timezone.trim();
 
   return {
+    event_group_id: input.eventGroupId,
     slug: slugify(input.slug),
     title: input.title.trim(),
     description: blankToNull(input.descriptionText),
@@ -258,6 +260,111 @@ export async function logAuditEvent(input: {
     before_json: input.beforeJson ?? null,
     after_json: input.afterJson ?? null
   });
+}
+
+function buildEventGroupPayload(input: AdminEventGroupInput) {
+  const slug = slugify(input.slug);
+
+  if (!slug) {
+    throw new Error("Enter a valid group slug.");
+  }
+
+  return {
+    name: input.name.trim(),
+    slug,
+    description: blankToNull(input.description),
+    sort_order: input.sortOrder,
+    active: input.active
+  };
+}
+
+export async function createEventGroup(input: AdminEventGroupInput, actor: AuthenticatedAppUser) {
+  const payload = buildEventGroupPayload(input);
+
+  if (isDemoMode()) {
+    return {
+      id: "7a6c5527-fba8-44d4-9475-07b97cc2223a",
+      ...payload,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    } as EventGroup;
+  }
+
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from("event_groups")
+    .insert(payload)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  await logAuditEvent({
+    actor,
+    action: "event_group.created",
+    entityType: "event_group",
+    entityId: data.id,
+    afterJson: data
+  });
+
+  return data as EventGroup;
+}
+
+export async function updateEventGroup(input: AdminEventGroupInput, actor: AuthenticatedAppUser) {
+  const payload = buildEventGroupPayload(input);
+
+  if (!input.id) {
+    throw new Error("Event group id is required for updates.");
+  }
+
+  if (isDemoMode()) {
+    const existing = demoEventGroups.find((group) => group.id === input.id);
+
+    if (!existing) {
+      throw new Error("Demo event group not found.");
+    }
+
+    return {
+      ...existing,
+      ...payload,
+      updated_at: new Date().toISOString()
+    } as EventGroup;
+  }
+
+  const supabase = createAdminSupabaseClient();
+  const { data: before, error: beforeError } = await supabase
+    .from("event_groups")
+    .select("*")
+    .eq("id", input.id)
+    .single();
+
+  if (beforeError) {
+    throw beforeError;
+  }
+
+  const { data, error } = await supabase
+    .from("event_groups")
+    .update(payload)
+    .eq("id", input.id)
+    .select("*")
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  await logAuditEvent({
+    actor,
+    action: "event_group.updated",
+    entityType: "event_group",
+    entityId: input.id,
+    beforeJson: before,
+    afterJson: data
+  });
+
+  return data as EventGroup;
 }
 
 export async function createEvent(input: AdminEventInput, actor: AuthenticatedAppUser) {

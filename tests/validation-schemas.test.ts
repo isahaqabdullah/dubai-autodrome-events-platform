@@ -391,6 +391,7 @@ describe("manualCheckinByCodeSchema", () => {
 
 describe("adminEventSchema", () => {
   const validEvent = {
+    eventGroupId: "65f8c18d-a55e-4db3-9609-2208a9e6a445",
     slug: "track-day-april",
     title: "Dubai Autodrome Track Day",
     timezone: "Asia/Dubai",

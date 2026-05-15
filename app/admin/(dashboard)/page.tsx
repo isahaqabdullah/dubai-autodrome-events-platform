@@ -110,6 +110,9 @@ function EventSection({
                   <p className="mt-0.5 text-xs font-medium text-ink/70 sm:mt-1 sm:text-sm">
                     {formatEventDateRange(event.start_at, event.end_at, event.timezone)}
                   </p>
+                  <p className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate">
+                    {event.event_group?.name ?? "No group assigned"}
+                  </p>
                 </div>
 
                 <div className="flex flex-wrap gap-1 sm:gap-2 xl:justify-end">

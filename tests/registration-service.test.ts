@@ -180,6 +180,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 function createEvent(overrides: Partial<EventRecord> = {}): EventRecord {
   return {
     id: "event-1",
+    event_group_id: "event-group-1",
     slug: "single-attendee-flow",
     title: "Single Attendee Flow",
     description: null,

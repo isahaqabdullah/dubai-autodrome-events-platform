@@ -21,6 +21,12 @@ const navItems = [
       pathname === "/admin" || (pathname.startsWith("/admin/events/") && pathname !== "/admin/events/new")
   },
   {
+    href: "/admin/event-groups",
+    label: "Event groups",
+    primary: false,
+    match: (pathname: string) => pathname.startsWith("/admin/event-groups")
+  },
+  {
     href: "/admin/registrations",
     label: "Registrations & Analytics",
     primary: false,

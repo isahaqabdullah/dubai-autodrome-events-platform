@@ -18,7 +18,7 @@ import {
   type EventFormTemplate,
   type EventFormTemplateTextField
 } from "@/lib/event-form-templates";
-import type { EventFormConfig, EventRecord, EventTicketOption } from "@/lib/types";
+import type { EventFormConfig, EventGroup, EventRecord, EventTicketOption } from "@/lib/types";
 import { formatInputDateTimeInZone } from "@/lib/utils";
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
@@ -81,6 +81,7 @@ export interface EventFormResult {
 
 interface EventFormProps {
   event?: EventRecord | null;
+  eventGroups: EventGroup[];
   action: (formData: FormData) => Promise<EventFormResult>;
   hideRegistrationSections?: boolean;
   cancelHref?: string;
@@ -245,6 +246,7 @@ function FileUploadField({
 
 export function EventForm({
   event,
+  eventGroups,
   action,
   hideRegistrationSections = false,
   cancelHref = "/admin",
@@ -510,6 +512,24 @@ export function EventForm({
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </Field>
+            <Field label="Event group" hint="Controls how upcoming events are grouped publicly">
+              <Select
+                name="eventGroupId"
+                required
+                defaultValue={event?.event_group_id ?? eventGroups[0]?.id ?? ""}
+                className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+              >
+                <option value="">Choose a group</option>
+                {eventGroups.map((group) => (
+                  <option key={group.id} value={group.id}>
+                    {group.name}
+                  </option>
+                ))}
+              </Select>
+            </Field>
+          </div>
+
+          <div className="grid gap-4 sm:gap-5 md:grid-cols-2">
             <Field label="Slug" hint="Used in URLs">
               <Input
                 name="slug"

@@ -19,6 +19,7 @@ function hasAvailableOption(options: Array<z.infer<typeof eventTicketOptionSchem
 export const adminEventSchema = z
   .object({
     id: z.string().uuid().optional(),
+    eventGroupId: z.string().uuid("Choose an event group."),
     slug: z.string().trim().min(2).max(80),
     title: z.string().trim().min(2).max(160),
     venue: z.string().trim().max(255).optional().or(z.literal("")),
@@ -64,6 +65,15 @@ export const adminEventSchema = z
     path: ["ticketOptions"],
     message: "Add at least one available activity category before opening registration."
   });
+
+export const adminEventGroupSchema = z.object({
+  id: z.string().uuid().optional(),
+  name: z.string().trim().min(2).max(120),
+  slug: z.string().trim().min(2).max(80),
+  description: z.string().trim().max(500).optional().or(z.literal("")),
+  sortOrder: z.coerce.number().int().min(0).default(0),
+  active: z.coerce.boolean().default(true)
+});
 
 export const resendQrSchema = z.object({
   registrationId: z.string().uuid()

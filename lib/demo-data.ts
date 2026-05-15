@@ -1,8 +1,23 @@
-import type { EventAnalyticsSummary, EventRecord, RecentScanActivity, RegistrationRecord } from "@/lib/types";
+import type { EventAnalyticsSummary, EventGroup, EventRecord, RecentScanActivity, RegistrationRecord } from "@/lib/types";
+
+export const demoEventGroups: EventGroup[] = [
+  {
+    id: "65f8c18d-a55e-4db3-9609-2208a9e6a445",
+    name: "Safety Orientations",
+    slug: "safety-orientations",
+    description: "Recurring safety briefings and operational readiness sessions.",
+    sort_order: 0,
+    active: true,
+    created_at: "2026-04-01T08:00:00.000Z",
+    updated_at: "2026-04-01T08:00:00.000Z"
+  }
+];
 
 export const demoEvents: EventRecord[] = [
   {
     id: "6db7f8b7-4e20-410e-9a1d-78c7bfc2f101",
+    event_group_id: demoEventGroups[0].id,
+    event_group: demoEventGroups[0],
     slug: "dubai-autodrome-safety-orientation-may-2026",
     title: "Dubai Autodrome Safety Orientation · May 2026",
     description:
@@ -46,6 +61,8 @@ export const demoEvents: EventRecord[] = [
   },
   {
     id: "e0f850ba-f86d-4f47-85a4-b9dd602f95f5",
+    event_group_id: demoEventGroups[0].id,
+    event_group: demoEventGroups[0],
     slug: "dubai-autodrome-safety-orientation-june-2026",
     title: "Dubai Autodrome Safety Orientation · June 2026",
     description:
