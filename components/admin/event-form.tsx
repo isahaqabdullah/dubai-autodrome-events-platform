@@ -512,14 +512,14 @@ export function EventForm({
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               />
             </Field>
-            <Field label="Event group" hint="Controls how upcoming events are grouped publicly">
+            <Field label="Event category" hint="Controls where the event appears publicly">
               <Select
                 name="eventGroupId"
                 required
                 defaultValue={event?.event_group_id ?? eventGroups[0]?.id ?? ""}
                 className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
               >
-                <option value="">Choose a group</option>
+                <option value="">Choose a category</option>
                 {eventGroups.map((group) => (
                   <option key={group.id} value={group.id}>
                     {group.name}

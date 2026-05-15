@@ -87,6 +87,42 @@ export async function listUpcomingEvents() {
   return (data ?? []) as EventRecord[];
 }
 
+export async function listUpcomingEventsForGroup(groupId: string) {
+  const events = await listUpcomingEvents();
+
+  if (groupId === LEGACY_EVENT_GROUP.id) {
+    try {
+      const groups = await listEventGroups();
+      const groupIds = new Set(groups.map((group) => group.id));
+      return events.filter((event) => !groupIds.has(event.event_group_id));
+    } catch (error) {
+      if (canFallbackToLegacyEventGroups(error as { code?: string; message?: string })) {
+        return events;
+      }
+
+      throw error;
+    }
+  }
+
+  return events.filter((event) => event.event_group_id === groupId);
+}
+
+async function hasLegacyUngroupedEvents() {
+  const events = await listUpcomingEvents();
+
+  try {
+    const groups = await listEventGroups();
+    const groupIds = new Set(groups.map((group) => group.id));
+    return events.some((event) => !groupIds.has(event.event_group_id));
+  } catch (error) {
+    if (canFallbackToLegacyEventGroups(error as { code?: string; message?: string })) {
+      return events.length > 0;
+    }
+
+    throw error;
+  }
+}
+
 export async function listEventGroups(options: { includeInactive?: boolean } = {}) {
   if (isDemoMode()) {
     return demoEventGroups;
@@ -113,6 +149,86 @@ export async function listEventGroups(options: { includeInactive?: boolean } = {
   return (data ?? []) as EventGroup[];
 }
 
+export async function getEventGroupBySlug(slug: string, options: { includeInactive?: boolean } = {}) {
+  if (isDemoMode()) {
+    return demoEventGroups.find((group) => group.slug === slug && (options.includeInactive || group.active)) ?? null;
+  }
+
+  const supabase = createAdminSupabaseClient();
+
+  let query = supabase
+    .from("event_groups")
+    .select("*")
+    .eq("slug", slug);
+
+  if (!options.includeInactive) {
+    query = query.eq("active", true);
+  }
+
+  const { data, error } = await query.maybeSingle();
+
+  if (error) {
+    if (canFallbackToLegacyEventGroups(error)) {
+      if (slug === LEGACY_EVENT_GROUP.slug) {
+        return LEGACY_EVENT_GROUP;
+      }
+
+      return null;
+    }
+
+    throw error;
+  }
+
+  if (!data && slug === LEGACY_EVENT_GROUP.slug && (await hasLegacyUngroupedEvents())) {
+    return LEGACY_EVENT_GROUP;
+  }
+
+  return (data as EventGroup | null) ?? null;
+}
+
+export async function getEventBySlugForGroup(eventSlug: string, groupId: string) {
+  if (isDemoMode()) {
+    return groupId === LEGACY_EVENT_GROUP.id
+      ? demoEvents.find((event) => event.slug === eventSlug) ?? null
+      : demoEvents.find((event) => event.slug === eventSlug && event.event_group_id === groupId) ?? null;
+  }
+
+  if (groupId === LEGACY_EVENT_GROUP.id) {
+    const event = await getEventBySlug(eventSlug);
+
+    if (!event) {
+      return null;
+    }
+
+    try {
+      const groups = await listEventGroups();
+      const groupIds = new Set(groups.map((group) => group.id));
+      return groupIds.has(event.event_group_id) ? null : event;
+    } catch (error) {
+      if (canFallbackToLegacyEventGroups(error as { code?: string; message?: string })) {
+        return event;
+      }
+
+      throw error;
+    }
+  }
+
+  const supabase = createAdminSupabaseClient();
+
+  const { data, error } = await supabase
+    .from("events")
+    .select("*")
+    .eq("slug", eventSlug)
+    .eq("event_group_id", groupId)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return (data as EventRecord | null) ?? null;
+}
+
 export async function listUpcomingEventGroups(): Promise<EventGroupWithEvents[]> {
   const events = await listUpcomingEvents();
   let eventGroups: EventGroup[];
@@ -133,7 +249,10 @@ export async function listUpcomingEventGroups(): Promise<EventGroupWithEvents[]>
   for (const event of events) {
     const group = groupsById.get(event.event_group_id);
     if (group) {
-      group.events.push(event);
+      group.events.push({
+        ...event,
+        event_group: group
+      });
     } else {
       ungroupedEvents.push(event);
     }

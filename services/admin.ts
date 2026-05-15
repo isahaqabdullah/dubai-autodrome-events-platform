@@ -266,7 +266,7 @@ function buildEventGroupPayload(input: AdminEventGroupInput) {
   const slug = slugify(input.slug);
 
   if (!slug) {
-    throw new Error("Enter a valid group slug.");
+    throw new Error("Enter a valid category slug.");
   }
 
   return {
@@ -278,8 +278,59 @@ function buildEventGroupPayload(input: AdminEventGroupInput) {
   };
 }
 
+async function assertEventSlugDoesNotMatchGroupSlug(slug: string) {
+  if (isDemoMode()) {
+    if (demoEventGroups.some((group) => group.slug === slug)) {
+      throw new Error("Event slug cannot match an event category slug. Choose a different event slug.");
+    }
+
+    return;
+  }
+
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from("event_groups")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (data) {
+    throw new Error("Event slug cannot match an event category slug. Choose a different event slug.");
+  }
+}
+
+async function assertGroupSlugDoesNotMatchEventSlug(slug: string) {
+  if (isDemoMode()) {
+    if (demoEvents.some((event) => event.slug === slug)) {
+      throw new Error("Event category slug cannot match an event slug. Choose a different category slug.");
+    }
+
+    return;
+  }
+
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from("events")
+    .select("id")
+    .eq("slug", slug)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  if (data) {
+    throw new Error("Event category slug cannot match an event slug. Choose a different category slug.");
+  }
+}
+
 export async function createEventGroup(input: AdminEventGroupInput, actor: AuthenticatedAppUser) {
   const payload = buildEventGroupPayload(input);
+  await assertGroupSlugDoesNotMatchEventSlug(payload.slug);
 
   if (isDemoMode()) {
     return {
@@ -316,14 +367,16 @@ export async function updateEventGroup(input: AdminEventGroupInput, actor: Authe
   const payload = buildEventGroupPayload(input);
 
   if (!input.id) {
-    throw new Error("Event group id is required for updates.");
+    throw new Error("Event category id is required for updates.");
   }
+
+  await assertGroupSlugDoesNotMatchEventSlug(payload.slug);
 
   if (isDemoMode()) {
     const existing = demoEventGroups.find((group) => group.id === input.id);
 
     if (!existing) {
-      throw new Error("Demo event group not found.");
+      throw new Error("Demo event category not found.");
     }
 
     return {
@@ -369,10 +422,10 @@ export async function updateEventGroup(input: AdminEventGroupInput, actor: Authe
 
 export async function createEvent(input: AdminEventInput, actor: AuthenticatedAppUser) {
   assertCatalogReadyForPublicStatus(input);
+  const payload = buildEventPayload(input);
+  await assertEventSlugDoesNotMatchGroupSlug(payload.slug);
 
   if (isDemoMode()) {
-    const payload = buildEventPayload(input);
-
     return {
       id: "demo-created-event",
       ...payload,
@@ -382,7 +435,6 @@ export async function createEvent(input: AdminEventInput, actor: AuthenticatedAp
   }
 
   const supabase = createAdminSupabaseClient();
-  const payload = buildEventPayload(input);
 
   const { data, error } = await supabase.from("events").insert(payload).select("*").single();
 
@@ -405,6 +457,8 @@ export async function createEvent(input: AdminEventInput, actor: AuthenticatedAp
 
 export async function updateEvent(input: AdminEventInput, actor: AuthenticatedAppUser) {
   assertCatalogReadyForPublicStatus(input);
+  const payload = buildEventPayload(input);
+  await assertEventSlugDoesNotMatchGroupSlug(payload.slug);
 
   if (isDemoMode()) {
     const existing = demoEvents.find((event) => event.id === input.id);
@@ -415,7 +469,7 @@ export async function updateEvent(input: AdminEventInput, actor: AuthenticatedAp
 
     return {
       ...existing,
-      ...buildEventPayload(input),
+      ...payload,
       updated_at: new Date().toISOString()
     } as EventRecord;
   }
@@ -439,7 +493,6 @@ export async function updateEvent(input: AdminEventInput, actor: AuthenticatedAp
     throw beforeError;
   }
 
-  const payload = buildEventPayload(input);
   assertRegistrationLinkedOptionsAreStillValid({
     before: before as EventRecord,
     after: payload,

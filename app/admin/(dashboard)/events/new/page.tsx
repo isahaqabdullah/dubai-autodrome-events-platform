@@ -27,10 +27,15 @@ export default async function NewEventPage({
     try {
       const input = parseAdminEventFormData(formData);
       const createdEvent = await createEvent(input, actor);
+      const group = eventGroups.find((item) => item.id === createdEvent.event_group_id);
       revalidatePath("/admin");
       revalidatePath("/admin/registrations");
       revalidatePath("/events");
       revalidatePath(`/events/${createdEvent.slug}`);
+      if (group) {
+        revalidatePath(`/events/${group.slug}`);
+        revalidatePath(`/events/${group.slug}/${createdEvent.slug}`);
+      }
       revalidatePath(`/check-in/${createdEvent.slug}`);
       return { ok: true };
     } catch (error) {

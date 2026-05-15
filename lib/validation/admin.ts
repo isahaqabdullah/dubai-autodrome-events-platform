@@ -19,7 +19,7 @@ function hasAvailableOption(options: Array<z.infer<typeof eventTicketOptionSchem
 export const adminEventSchema = z
   .object({
     id: z.string().uuid().optional(),
-    eventGroupId: z.string().uuid("Choose an event group."),
+    eventGroupId: z.string().uuid("Choose an event category."),
     slug: z.string().trim().min(2).max(80),
     title: z.string().trim().min(2).max(160),
     venue: z.string().trim().max(255).optional().or(z.literal("")),

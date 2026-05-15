@@ -151,6 +151,11 @@ export function buildAbsoluteUrl(baseUrl: string, path: string) {
   return new URL(path, baseUrl).toString();
 }
 
+export function getPublicEventPath(event: Pick<EventRecord, "slug" | "event_group">) {
+  const groupSlug = event.event_group?.slug?.trim();
+  return groupSlug ? `/events/${groupSlug}/${event.slug}` : `/events/${event.slug}`;
+}
+
 export function isSyntheticEmail(email: string) {
   return email.endsWith(`@${SYNTHETIC_EMAIL_DOMAIN}`);
 }

@@ -53,12 +53,22 @@ export default async function EditEventPage({
     try {
       const input = parseAdminEventFormData(formData);
       const updatedEvent = await updateEvent(input, actor);
+      const currentGroup = eventGroups.find((item) => item.id === currentEvent.event_group_id);
+      const nextGroup = eventGroups.find((item) => item.id === updatedEvent.event_group_id);
       revalidatePath("/admin");
       revalidatePath("/admin/registrations");
       revalidatePath(`/admin/events/${id}/edit`);
       revalidatePath("/events");
       revalidatePath(`/events/${currentEvent.slug}`);
       revalidatePath(`/events/${updatedEvent.slug}`);
+      if (currentGroup) {
+        revalidatePath(`/events/${currentGroup.slug}`);
+        revalidatePath(`/events/${currentGroup.slug}/${currentEvent.slug}`);
+      }
+      if (nextGroup) {
+        revalidatePath(`/events/${nextGroup.slug}`);
+        revalidatePath(`/events/${nextGroup.slug}/${updatedEvent.slug}`);
+      }
       revalidatePath(`/check-in/${currentEvent.slug}`);
       revalidatePath(`/check-in/${updatedEvent.slug}`);
       return { ok: true };

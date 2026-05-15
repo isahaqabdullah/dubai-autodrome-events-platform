@@ -5,7 +5,7 @@ import { DeleteEventButton } from "@/components/admin/delete-event-button";
 import { StatusPill } from "@/components/ui/status-pill";
 import { appendReturnTo } from "@/lib/admin-navigation";
 import type { EventRecord } from "@/lib/types";
-import { formatEventDateRange, getRegistrationWindowState } from "@/lib/utils";
+import { formatEventDateRange, getPublicEventPath, getRegistrationWindowState } from "@/lib/utils";
 import { listAdminEvents } from "@/services/events";
 
 export const dynamic = "force-dynamic";
@@ -111,7 +111,7 @@ function EventSection({
                     {formatEventDateRange(event.start_at, event.end_at, event.timezone)}
                   </p>
                   <p className="mt-0.5 text-[11px] font-medium uppercase tracking-[0.16em] text-slate">
-                    {event.event_group?.name ?? "No group assigned"}
+                    {event.event_group?.name ?? "No category assigned"}
                   </p>
                 </div>
 
@@ -128,7 +128,7 @@ function EventSection({
                   <ActionLink href={appendReturnTo(`/admin/events/${event.id}/edit`, "/admin")} compact>
                     Edit
                   </ActionLink>
-                  <ActionLink href={`/events/${event.slug}`} compact>
+                  <ActionLink href={getPublicEventPath(event)} compact>
                     Public
                   </ActionLink>
                   <DeleteEventButton eventId={event.id} eventTitle={event.title} />

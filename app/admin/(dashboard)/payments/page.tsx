@@ -1,11 +1,12 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import type { Route } from "next";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { PaymentActions } from "@/components/admin/payment-actions";
 import { PaymentsFilter } from "@/components/admin/payments-filter";
 import { StatusPill } from "@/components/ui/status-pill";
 import { appendReturnTo, buildPathWithSearch, getAdminBackLabel, normalizeAdminReturnTo } from "@/lib/admin-navigation";
-import { formatEventDateRange, getRegistrationWindowState } from "@/lib/utils";
+import { formatEventDateRange, getPublicEventPath, getRegistrationWindowState } from "@/lib/utils";
 import { listAdminEvents } from "@/services/events";
 
 export const dynamic = "force-dynamic";
@@ -220,7 +221,7 @@ export default async function AdminPaymentsPage({
                   >
                     Edit
                   </a>
-                  <Link href={`/events/${selectedEvent.slug}`} className="admin-action">
+                  <Link href={getPublicEventPath(selectedEvent) as Route} className="admin-action">
                     Public
                   </Link>
                 </>

@@ -22,7 +22,7 @@ const navItems = [
   },
   {
     href: "/admin/event-groups",
-    label: "Event groups",
+    label: "Event categories",
     primary: false,
     match: (pathname: string) => pathname.startsWith("/admin/event-groups")
   },

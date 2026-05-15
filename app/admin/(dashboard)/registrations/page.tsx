@@ -1,5 +1,6 @@
 import { ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import type { Route } from "next";
 import { AnalyticsCards } from "@/components/admin/analytics-cards";
 import { DownloadDropdown } from "@/components/admin/download-dropdown";
 import { Pagination } from "@/components/admin/pagination";
@@ -10,7 +11,7 @@ import { appendReturnTo, buildPathWithSearch } from "@/lib/admin-navigation";
 import { DEFAULT_CATEGORY } from "@/lib/constants";
 import { isRetryableUpstreamError, withTransientRetry } from "@/lib/transient-retry";
 import type { EventRecord } from "@/lib/types";
-import { formatEventDateRange, formatShortDateTime, getRegistrationWindowState } from "@/lib/utils";
+import { formatEventDateRange, formatShortDateTime, getPublicEventPath, getRegistrationWindowState } from "@/lib/utils";
 import { getScanAnalytics } from "@/services/checkin";
 import { listRegistrations } from "@/services/admin";
 import { getEventById, listAdminEvents } from "@/services/events";
@@ -303,7 +304,7 @@ export default async function RegistrationsPage({
                   >
                     Edit
                   </a>
-                  <Link href={`/events/${selectedEvent.slug}`} className="admin-action">
+                  <Link href={getPublicEventPath(selectedEvent) as Route} className="admin-action">
                     Public
                   </Link>
                 </>

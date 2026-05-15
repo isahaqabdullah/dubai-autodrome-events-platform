@@ -8,6 +8,7 @@ const testState = vi.hoisted(() => ({
     ticketCounts: {} as Record<string, number>,
     categoryCounts: {} as Record<string, number>
   },
+  eventGroupSlugCollision: false,
   lastUpdatePayload: null as Record<string, unknown> | null,
   auditRows: [] as Array<Record<string, unknown>>
 }));
@@ -17,6 +18,7 @@ vi.mock("@/lib/demo-mode", () => ({
 }));
 
 vi.mock("@/lib/demo-data", () => ({
+  demoEventGroups: [],
   demoEvents: [],
   demoRegistrations: []
 }));
@@ -102,6 +104,19 @@ vi.mock("@/lib/supabase/admin", () => ({
             testState.auditRows.push(payload);
             return { error: null };
           })
+        };
+      }
+
+      if (table === "event_groups") {
+        return {
+          select: vi.fn(() => ({
+            eq: vi.fn(() => ({
+              maybeSingle: vi.fn(async () => ({
+                data: testState.eventGroupSlugCollision ? { id: "event-category-1" } : null,
+                error: null
+              }))
+            }))
+          }))
         };
       }
 
@@ -240,11 +255,23 @@ describe("updateEvent", () => {
     testState.beforeEvent = createBeforeEvent();
     testState.registrationSummary = {
       count: 2,
-    ticketCounts: { "addon-session": 2 },
-    categoryCounts: { "track-access": 2 }
+      ticketCounts: { "addon-session": 2 },
+      categoryCounts: { "track-access": 2 }
     };
+    testState.eventGroupSlugCollision = false;
     testState.lastUpdatePayload = null;
     testState.auditRows = [];
+  });
+
+  it("rejects event slugs that would collide with category URLs", async () => {
+    testState.eventGroupSlugCollision = true;
+
+    await expect(updateEvent(createUpdateInput(), actor)).rejects.toThrow(
+      "Event slug cannot match an event category slug"
+    );
+
+    expect(testState.lastUpdatePayload).toBeNull();
+    expect(testState.auditRows).toHaveLength(0);
   });
 
   it("rejects removing and recreating an activity category that already has registrations", async () => {

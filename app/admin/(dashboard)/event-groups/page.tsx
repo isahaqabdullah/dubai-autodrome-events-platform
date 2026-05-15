@@ -21,8 +21,9 @@ async function createEventGroupAction(formData: FormData) {
 
   const actor = await requireAuthenticatedUser("admin");
   const input = parseAdminEventGroupFormData(formData);
-  await createEventGroup(input, actor);
+  const createdGroup = await createEventGroup(input, actor);
   revalidateEventGroupViews();
+  revalidatePath(`/events/${createdGroup.slug}`);
 }
 
 async function updateEventGroupAction(formData: FormData) {
@@ -30,8 +31,13 @@ async function updateEventGroupAction(formData: FormData) {
 
   const actor = await requireAuthenticatedUser("admin");
   const input = parseAdminEventGroupFormData(formData);
+  const previousSlug = String(formData.get("previousSlug") ?? "");
   await updateEventGroup(input, actor);
   revalidateEventGroupViews();
+  if (previousSlug) {
+    revalidatePath(`/events/${previousSlug}`);
+  }
+  revalidatePath(`/events/${input.slug}`);
 }
 
 export default async function EventGroupsPage() {
@@ -48,19 +54,19 @@ export default async function EventGroupsPage() {
   return (
     <main className="admin-page">
       <section className="admin-card p-4 sm:p-6">
-        <p className="admin-label">Event groups</p>
+        <p className="admin-label">Event categories</p>
         <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">
-          Organize upcoming events
+          Organize events
         </h1>
         <p className="mt-2 max-w-2xl text-sm leading-relaxed text-slate">
-          Groups appear as headings on the public upcoming events page. Every event must be assigned to one group.
+          Categories appear on the public events page. Every event must be assigned to one category.
         </p>
       </section>
 
       <section className="admin-card p-3 sm:p-4">
         <div className="mb-3">
-          <p className="admin-label">Create group</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink">New public grouping</h2>
+          <p className="admin-label">Create category</p>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink">New public category</h2>
         </div>
 
         <form action={createEventGroupAction} className="grid gap-3">
@@ -107,13 +113,13 @@ export default async function EventGroupsPage() {
 
       <section className="grid gap-2 sm:gap-3">
         <div>
-          <p className="admin-label">Existing groups</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink">Edit grouping labels</h2>
+          <p className="admin-label">Existing categories</p>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink">Edit category labels</h2>
         </div>
 
         {eventGroups.length === 0 ? (
           <div className="admin-card px-4 py-8 text-center text-sm text-slate">
-            No groups have been created yet.
+            No categories have been created yet.
           </div>
         ) : null}
 
@@ -124,6 +130,7 @@ export default async function EventGroupsPage() {
             <form key={group.id} action={updateEventGroupAction} className="admin-card grid gap-3 p-3 sm:p-4">
               <input type="hidden" name="id" value={group.id} />
               <input type="hidden" name="active" value="true" />
+              <input type="hidden" name="previousSlug" value={group.slug} />
 
               <div className="grid gap-3 xl:grid-cols-[220px_minmax(0,1fr)] xl:items-end">
                 <div className="flex min-w-0 items-start justify-between gap-3 xl:block">

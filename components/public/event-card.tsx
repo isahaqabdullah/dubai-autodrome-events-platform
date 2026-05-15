@@ -1,8 +1,9 @@
 import Link from "next/link";
+import type { Route } from "next";
 import type { EventRecord } from "@/lib/types";
-import { formatEventDateRange } from "@/lib/utils";
+import { formatEventDateRange, getPublicEventPath } from "@/lib/utils";
 
-export function EventCard({ event }: { event: EventRecord }) {
+export function EventCard({ event, href }: { event: EventRecord; href?: string }) {
   return (
     <article className="card-panel flex h-full flex-col gap-2.5 p-3.5 sm:gap-5 sm:p-5 md:p-6">
       <div className="min-w-0 space-y-1 sm:space-y-2">
@@ -18,7 +19,7 @@ export function EventCard({ event }: { event: EventRecord }) {
 
       <div className="mt-auto">
         <Link
-          href={`/events/${event.slug}`}
+          href={(href ?? getPublicEventPath(event)) as Route}
           className="inline-flex items-center rounded-xl px-3.5 py-2 text-[13px] font-semibold text-white transition hover:bg-ink/90 bg-ink sm:rounded-2xl sm:px-4 sm:py-2.5 sm:text-sm"
         >
           View event
