@@ -2,7 +2,6 @@ import { revalidatePath } from "next/cache";
 import { Button } from "@/components/ui/button";
 import { Field } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import { requireAuthenticatedUser } from "@/lib/auth";
 import { parseAdminEventGroupFormData } from "@/lib/form-data";
 import { createEventGroup, updateEventGroup } from "@/services/admin";
@@ -58,29 +57,29 @@ export default async function EventGroupsPage() {
         </p>
       </section>
 
-      <section className="admin-card p-4 sm:p-6">
-        <div className="mb-4">
+      <section className="admin-card p-3 sm:p-4">
+        <div className="mb-3">
           <p className="admin-label">Create group</p>
           <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink">New public grouping</h2>
         </div>
 
-        <form action={createEventGroupAction} className="grid gap-4">
+        <form action={createEventGroupAction} className="grid gap-3">
           <input type="hidden" name="active" value="true" />
-          <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px_120px]">
+          <div className="grid gap-3 lg:grid-cols-[minmax(180px,1fr)_220px_90px_minmax(220px,1.2fr)_auto] lg:items-end">
             <Field label="Name">
               <Input
                 name="name"
                 required
                 placeholder="Track Experiences"
-                className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+                className="rounded-xl border-slate/20 bg-white px-3 py-2.5"
               />
             </Field>
-            <Field label="Slug" hint="Used internally for stable grouping">
+            <Field label="Slug">
               <Input
                 name="slug"
                 required
                 placeholder="track-experiences"
-                className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+                className="rounded-xl border-slate/20 bg-white px-3 py-2.5"
               />
             </Field>
             <Field label="Order">
@@ -89,31 +88,27 @@ export default async function EventGroupsPage() {
                 type="number"
                 min={0}
                 defaultValue={eventGroups.length}
-                className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
+                className="rounded-xl border-slate/20 bg-white px-3 py-2.5"
               />
             </Field>
-          </div>
-
-          <Field label="Description" hint="Optional">
-            <Textarea
-              name="description"
-              placeholder="Short public description shown above this group of events."
-              className="min-h-[90px] rounded-2xl border-slate/20 bg-white px-3.5 py-3"
-            />
-          </Field>
-
-          <div>
-            <Button type="submit" className="rounded-2xl">
-              Create group
+            <Field label="Description" hint="Optional">
+              <Input
+                name="description"
+                placeholder="Short public description"
+                className="rounded-xl border-slate/20 bg-white px-3 py-2.5"
+              />
+            </Field>
+            <Button type="submit" className="rounded-xl px-3.5 py-2.5 text-sm">
+              Create
             </Button>
           </div>
         </form>
       </section>
 
-      <section className="grid gap-3 sm:gap-4">
+      <section className="grid gap-2 sm:gap-3">
         <div>
           <p className="admin-label">Existing groups</p>
-          <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink">Assign these from event create/edit</h2>
+          <h2 className="mt-1 text-lg font-semibold tracking-tight text-ink">Edit grouping labels</h2>
         </div>
 
         {eventGroups.length === 0 ? (
@@ -122,64 +117,66 @@ export default async function EventGroupsPage() {
           </div>
         ) : null}
 
-        {eventGroups.map((group) => (
-          <form key={group.id} action={updateEventGroupAction} className="admin-card grid gap-4 p-4 sm:p-5">
-            <input type="hidden" name="id" value={group.id} />
-            <input type="hidden" name="active" value="true" />
+        {eventGroups.map((group) => {
+          const eventCount = eventCounts.get(group.id) ?? 0;
 
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-              <div>
-                <p className="admin-label">/{group.slug}</p>
-                <h3 className="mt-1 text-base font-semibold tracking-tight text-ink">{group.name}</h3>
+          return (
+            <form key={group.id} action={updateEventGroupAction} className="admin-card grid gap-3 p-3 sm:p-4">
+              <input type="hidden" name="id" value={group.id} />
+              <input type="hidden" name="active" value="true" />
+
+              <div className="grid gap-3 xl:grid-cols-[220px_minmax(0,1fr)] xl:items-end">
+                <div className="flex min-w-0 items-start justify-between gap-3 xl:block">
+                  <div className="min-w-0">
+                    <p className="admin-label">/{group.slug}</p>
+                    <h3 className="mt-1 truncate text-base font-semibold tracking-tight text-ink">{group.name}</h3>
+                  </div>
+                  <span className="shrink-0 rounded-full border border-slate/15 bg-white/80 px-2.5 py-0.5 text-xs font-medium text-slate xl:mt-3 xl:inline-flex">
+                    {eventCount} event{eventCount === 1 ? "" : "s"}
+                  </span>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-[minmax(160px,1fr)_180px_80px] lg:grid-cols-[minmax(160px,1fr)_180px_80px_minmax(180px,1fr)_auto] lg:items-end">
+                  <Field label="Name">
+                    <Input
+                      name="name"
+                      required
+                      defaultValue={group.name}
+                      className="rounded-xl border-slate/20 bg-white px-3 py-2.5"
+                    />
+                  </Field>
+                  <Field label="Slug">
+                    <Input
+                      name="slug"
+                      required
+                      defaultValue={group.slug}
+                      className="rounded-xl border-slate/20 bg-white px-3 py-2.5"
+                    />
+                  </Field>
+                  <Field label="Order">
+                    <Input
+                      name="sortOrder"
+                      type="number"
+                      min={0}
+                      defaultValue={group.sort_order}
+                      className="rounded-xl border-slate/20 bg-white px-3 py-2.5"
+                    />
+                  </Field>
+                  <Field label="Description" hint="Optional">
+                    <Input
+                      name="description"
+                      defaultValue={group.description ?? ""}
+                      className="rounded-xl border-slate/20 bg-white px-3 py-2.5"
+                    />
+                  </Field>
+                  <Button type="submit" variant="secondary" className="rounded-xl px-3.5 py-2.5 text-sm">
+                    Save
+                  </Button>
+                </div>
               </div>
-              <span className="rounded-full border border-slate/15 bg-white/80 px-3 py-1 text-xs font-medium text-slate">
-                {eventCounts.get(group.id) ?? 0} event{eventCounts.get(group.id) === 1 ? "" : "s"}
-              </span>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_260px_120px]">
-              <Field label="Name">
-                <Input
-                  name="name"
-                  required
-                  defaultValue={group.name}
-                  className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
-                />
-              </Field>
-              <Field label="Slug">
-                <Input
-                  name="slug"
-                  required
-                  defaultValue={group.slug}
-                  className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
-                />
-              </Field>
-              <Field label="Order">
-                <Input
-                  name="sortOrder"
-                  type="number"
-                  min={0}
-                  defaultValue={group.sort_order}
-                  className="rounded-2xl border-slate/20 bg-white px-3.5 py-3"
-                />
-              </Field>
-            </div>
-
-            <Field label="Description" hint="Optional">
-              <Textarea
-                name="description"
-                defaultValue={group.description ?? ""}
-                className="min-h-[80px] rounded-2xl border-slate/20 bg-white px-3.5 py-3"
-              />
-            </Field>
-
-            <div>
-              <Button type="submit" variant="secondary" className="rounded-2xl">
-                Save group
-              </Button>
-            </div>
-          </form>
-        ))}
+            </form>
+          );
+        })}
       </section>
     </main>
   );
