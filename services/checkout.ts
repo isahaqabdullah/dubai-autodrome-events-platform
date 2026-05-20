@@ -835,21 +835,11 @@ async function completeBookingAttendees(
       }
     })),
     (async () => {
-      const { error: deleteAddonError } = await supabase
-        .from("booking_intent_items")
-        .delete()
-        .eq("booking_intent_id", booking.id)
-        .eq("item_type", "addon");
-
-      if (deleteAddonError) {
-        throw deleteAddonError;
-      }
-
       if (addonRows.length === 0) return;
 
       const { error: addonError } = await supabase
         .from("booking_intent_items")
-        .insert(addonRows);
+        .upsert(addonRows, { onConflict: "booking_intent_id,attendee_id,item_type" });
 
       if (addonError) {
         throw addonError;

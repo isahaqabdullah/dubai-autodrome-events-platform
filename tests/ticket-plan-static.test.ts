@@ -90,6 +90,17 @@ describe("ticket plan static safeguards", () => {
     expect(checkoutService).toContain("const completed = await completeBookingAttendees(supabase, booking, catalog.categories, catalog.addons, attendees);");
   });
 
+  it("keeps checkout attendee item assignment idempotent under repeated payment requests", () => {
+    const migration = readProjectFile("supabase/migrations/20260520162000_harden_checkout_item_idempotency.sql");
+    const checkoutService = readProjectFile("services/checkout.ts");
+
+    expect(migration).toContain("booking_intent_items_attendee_type_unique");
+    expect(migration).toContain("partition by i.booking_intent_id, i.attendee_id, i.item_type");
+    expect(migration).toContain("delete from public.booking_intent_items");
+    expect(checkoutService).toContain('.upsert(addonRows, { onConflict: "booking_intent_id,attendee_id,item_type" })');
+    expect(checkoutService).not.toContain('.delete()\n        .eq("booking_intent_id", booking.id)\n        .eq("item_type", "addon")');
+  });
+
   it("does not require attendee ticket assignment before email verification", () => {
     const publicBookingFlow = readProjectFile("components/public/event-booking-flow.tsx");
 
