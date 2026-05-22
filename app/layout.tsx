@@ -14,8 +14,12 @@ export const metadata: Metadata = {
   description: "Dubai Autodrome event registration",
   manifest: "/manifest.webmanifest",
   icons: {
-    icon: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }],
-    shortcut: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }]
+    icon: [
+      { url: "/icon.png", type: "image/png", sizes: "32x32" },
+      { url: "/icon1.png", type: "image/png", sizes: "192x192" }
+    ],
+    shortcut: [{ url: "/icon.png", type: "image/png", sizes: "32x32" }],
+    apple: [{ url: "/apple-icon.png", type: "image/png", sizes: "180x180" }]
   }
 };
 
