@@ -9,14 +9,22 @@ const openSans = Open_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Dubai Autodrome Events"
+  title: "Dubai Autodrome Events",
+  applicationName: "Dubai Autodrome Events",
+  description: "Dubai Autodrome event registration",
+  manifest: "/manifest.webmanifest",
+  icons: {
+    icon: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }],
+    shortcut: [{ url: "/icon.svg", type: "image/svg+xml", sizes: "any" }]
+  }
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   maximumScale: 1,
-  viewportFit: "cover"
+  viewportFit: "cover",
+  themeColor: "#0c1723"
 };
 
 export default function RootLayout({
