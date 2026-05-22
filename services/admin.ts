@@ -1,4 +1,5 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { createAdminSupabaseClient } from "@/lib/supabase/admin";
 import { demoEventGroups, demoEvents, demoRegistrations } from "@/lib/demo-data";
 import { isDemoMode } from "@/lib/demo-mode";
@@ -6,6 +7,11 @@ import { env } from "@/lib/env";
 import { buildQrEmailAttachment, buildQrEmailCid } from "@/lib/qr";
 import { generateOpaqueToken, hashOpaqueToken } from "@/lib/tokens";
 import type { AuthenticatedAppUser } from "@/lib/auth";
+import {
+  normalizeEventFormTemplateValues,
+  type EventFormTemplate,
+  type SaveEventFormTemplateInput
+} from "@/lib/event-form-templates";
 import type { EventFormConfig, EventGroup, EventRecord, EventTicketOption } from "@/lib/types";
 import { blankToNull, buildAbsoluteUrl, isSyntheticEmail, resolveCategories, slugify, zonedInputToUtcIso } from "@/lib/utils";
 import { adminEventGroupSchema, adminEventSchema } from "@/lib/validation/admin";
@@ -17,6 +23,54 @@ import type { z } from "zod";
 
 type AdminEventInput = z.infer<typeof adminEventSchema>;
 type AdminEventGroupInput = z.infer<typeof adminEventGroupSchema>;
+
+const EVENT_FORM_TEMPLATE_SELECT = "id,name,values,created_at,updated_at";
+let demoEventFormTemplates: EventFormTemplate[] = [];
+
+function normalizeTemplateName(name: string) {
+  const trimmed = name.trim();
+
+  if (!trimmed) {
+    throw new Error("Enter a template name before saving.");
+  }
+
+  if (trimmed.length > 120) {
+    throw new Error("Template name must be 120 characters or fewer.");
+  }
+
+  return trimmed;
+}
+
+function normalizeImportedTemplateName(name: string) {
+  const trimmed = name.trim();
+  return trimmed ? trimmed.slice(0, 120) : "Event template";
+}
+
+function mapEventFormTemplateRow(row: Record<string, unknown>): EventFormTemplate {
+  return {
+    id: typeof row.id === "string" ? row.id : String(row.id ?? ""),
+    name: typeof row.name === "string" && row.name.trim() ? row.name : "Event template",
+    createdAt: typeof row.created_at === "string" ? row.created_at : "",
+    updatedAt: typeof row.updated_at === "string" ? row.updated_at : "",
+    values: normalizeEventFormTemplateValues(row.values)
+  };
+}
+
+function createDemoTemplate(input: SaveEventFormTemplateInput): EventFormTemplate {
+  const timestamp = new Date().toISOString();
+
+  return {
+    id: randomUUID(),
+    name: normalizeTemplateName(input.name),
+    createdAt: timestamp,
+    updatedAt: timestamp,
+    values: normalizeEventFormTemplateValues(input.values)
+  };
+}
+
+function templateIdentity(template: Pick<EventFormTemplate, "name" | "values">) {
+  return `${template.name}\u0000${JSON.stringify(normalizeEventFormTemplateValues(template.values))}`;
+}
 
 function splitParagraphs(text: string | undefined | null): string[] | undefined {
   if (!text?.trim()) return undefined;
@@ -260,6 +314,181 @@ export async function logAuditEvent(input: {
     before_json: input.beforeJson ?? null,
     after_json: input.afterJson ?? null
   });
+}
+
+export async function listEventFormTemplates() {
+  if (isDemoMode()) {
+    return demoEventFormTemplates;
+  }
+
+  const supabase = createAdminSupabaseClient({ noStore: true });
+  const { data, error } = await supabase
+    .from("event_form_templates")
+    .select(EVENT_FORM_TEMPLATE_SELECT)
+    .order("updated_at", { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return ((data ?? []) as Array<Record<string, unknown>>).map(mapEventFormTemplateRow);
+}
+
+export async function saveEventFormTemplate(input: SaveEventFormTemplateInput, actor: AuthenticatedAppUser) {
+  const name = normalizeTemplateName(input.name);
+  const values = normalizeEventFormTemplateValues(input.values);
+
+  if (isDemoMode()) {
+    const template = createDemoTemplate({ name, values });
+    demoEventFormTemplates = [template, ...demoEventFormTemplates];
+    return template;
+  }
+
+  const supabase = createAdminSupabaseClient();
+  const { data, error } = await supabase
+    .from("event_form_templates")
+    .insert({
+      name,
+      values,
+      created_by: actor.id,
+      updated_by: actor.id
+    })
+    .select(EVENT_FORM_TEMPLATE_SELECT)
+    .single();
+
+  if (error) {
+    throw error;
+  }
+
+  const template = mapEventFormTemplateRow(data as Record<string, unknown>);
+
+  await logAuditEvent({
+    actor,
+    action: "event_form_template.created",
+    entityType: "event_form_template",
+    entityId: template.id,
+    afterJson: { ...template }
+  });
+
+  return template;
+}
+
+export async function importEventFormTemplates(
+  templates: EventFormTemplate[],
+  actor: AuthenticatedAppUser
+) {
+  const normalizedTemplates = templates.map((template) => ({
+    name: normalizeImportedTemplateName(template.name),
+    values: normalizeEventFormTemplateValues(template.values)
+  }));
+
+  if (normalizedTemplates.length === 0) {
+    return { templates: await listEventFormTemplates(), importedCount: 0 };
+  }
+
+  const existingTemplates = await listEventFormTemplates();
+  const existingKeys = new Set(existingTemplates.map(templateIdentity));
+  const templatesToImport = normalizedTemplates.filter((template) => {
+    const key = templateIdentity(template);
+
+    if (existingKeys.has(key)) {
+      return false;
+    }
+
+    existingKeys.add(key);
+    return true;
+  });
+
+  if (templatesToImport.length === 0) {
+    return { templates: existingTemplates, importedCount: 0 };
+  }
+
+  if (isDemoMode()) {
+    const timestamp = new Date().toISOString();
+    const imported = templatesToImport.map((template) => ({
+      id: randomUUID(),
+      name: template.name,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      values: template.values
+    }));
+    demoEventFormTemplates = [...imported, ...demoEventFormTemplates];
+    return { templates: demoEventFormTemplates, importedCount: imported.length };
+  }
+
+  const supabase = createAdminSupabaseClient();
+  const { error } = await supabase.from("event_form_templates").insert(
+    templatesToImport.map((template) => ({
+      name: template.name,
+      values: template.values,
+      created_by: actor.id,
+      updated_by: actor.id
+    }))
+  );
+
+  if (error) {
+    throw error;
+  }
+
+  await logAuditEvent({
+    actor,
+    action: "event_form_template.imported",
+    entityType: "event_form_template",
+    entityId: "bulk",
+    afterJson: { count: templatesToImport.length }
+  });
+
+  return {
+    templates: await listEventFormTemplates(),
+    importedCount: templatesToImport.length
+  };
+}
+
+export async function deleteEventFormTemplate(templateId: string, actor: AuthenticatedAppUser) {
+  if (isDemoMode()) {
+    const template = demoEventFormTemplates.find((item) => item.id === templateId);
+
+    if (!template) {
+      throw new Error("Template not found.");
+    }
+
+    demoEventFormTemplates = demoEventFormTemplates.filter((item) => item.id !== templateId);
+    return templateId;
+  }
+
+  const supabase = createAdminSupabaseClient();
+  const { data: before, error: beforeError } = await supabase
+    .from("event_form_templates")
+    .select(EVENT_FORM_TEMPLATE_SELECT)
+    .eq("id", templateId)
+    .maybeSingle();
+
+  if (beforeError) {
+    throw beforeError;
+  }
+
+  if (!before) {
+    throw new Error("Template not found.");
+  }
+
+  const { error } = await supabase
+    .from("event_form_templates")
+    .delete()
+    .eq("id", templateId);
+
+  if (error) {
+    throw error;
+  }
+
+  await logAuditEvent({
+    actor,
+    action: "event_form_template.deleted",
+    entityType: "event_form_template",
+    entityId: templateId,
+    beforeJson: { ...mapEventFormTemplateRow(before as Record<string, unknown>) }
+  });
+
+  return templateId;
 }
 
 function buildEventGroupPayload(input: AdminEventGroupInput) {

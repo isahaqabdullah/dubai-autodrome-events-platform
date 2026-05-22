@@ -9,8 +9,13 @@ import { StatusPill } from "@/components/ui/status-pill";
 import { requireAuthenticatedUser } from "@/lib/auth";
 import { parseAdminEventFormData } from "@/lib/form-data";
 import { formatEventDateRange, getRegistrationWindowState } from "@/lib/utils";
-import { updateEvent } from "@/services/admin";
+import { listEventFormTemplates, updateEvent } from "@/services/admin";
 import { getEventById, listEventGroups } from "@/services/events";
+import {
+  deleteEventFormTemplateAction,
+  importLocalEventFormTemplatesAction,
+  saveEventFormTemplateAction
+} from "../../template-actions";
 
 export default async function EditEventPage({
   params,
@@ -20,9 +25,10 @@ export default async function EditEventPage({
   searchParams: Promise<{ returnTo?: string }>;
 }) {
   const [{ id }, { returnTo }] = await Promise.all([params, searchParams]);
-  const [event, eventGroups] = await Promise.all([
+  const [event, eventGroups, initialTemplates] = await Promise.all([
     getEventById(id),
-    listEventGroups({ includeInactive: true })
+    listEventGroups({ includeInactive: true }),
+    listEventFormTemplates()
   ]);
 
   if (!event) {
@@ -142,7 +148,11 @@ export default async function EditEventPage({
         <EventForm
           event={currentEvent}
           eventGroups={eventGroups}
+          initialTemplates={initialTemplates}
           action={updateEventAction}
+          saveTemplateAction={saveEventFormTemplateAction}
+          deleteTemplateAction={deleteEventFormTemplateAction}
+          importLocalTemplatesAction={importLocalEventFormTemplatesAction}
           hideRegistrationSections
           cancelHref={backHref}
           successHref={backHref}

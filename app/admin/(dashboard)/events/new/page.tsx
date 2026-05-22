@@ -6,8 +6,13 @@ import type { EventFormResult } from "@/components/admin/event-form";
 import { getAdminBackLabel, normalizeAdminReturnTo } from "@/lib/admin-navigation";
 import { requireAuthenticatedUser } from "@/lib/auth";
 import { parseAdminEventFormData } from "@/lib/form-data";
-import { createEvent } from "@/services/admin";
+import { createEvent, listEventFormTemplates } from "@/services/admin";
 import { listEventGroups } from "@/services/events";
+import {
+  deleteEventFormTemplateAction,
+  importLocalEventFormTemplatesAction,
+  saveEventFormTemplateAction
+} from "../template-actions";
 
 export default async function NewEventPage({
   searchParams
@@ -15,7 +20,10 @@ export default async function NewEventPage({
   searchParams: Promise<{ returnTo?: string }>;
 }) {
   const { returnTo } = await searchParams;
-  const eventGroups = await listEventGroups();
+  const [eventGroups, initialTemplates] = await Promise.all([
+    listEventGroups(),
+    listEventFormTemplates()
+  ]);
   const backHref = normalizeAdminReturnTo(returnTo, "/admin");
   const backLabel = getAdminBackLabel(backHref);
 
@@ -64,7 +72,16 @@ export default async function NewEventPage({
           <p className="admin-label">Create event</p>
           <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink sm:text-3xl">New event</h1>
         </div>
-        <EventForm eventGroups={eventGroups} action={createEventAction} cancelHref={backHref} successHref={backHref} />
+        <EventForm
+          eventGroups={eventGroups}
+          initialTemplates={initialTemplates}
+          action={createEventAction}
+          saveTemplateAction={saveEventFormTemplateAction}
+          deleteTemplateAction={deleteEventFormTemplateAction}
+          importLocalTemplatesAction={importLocalEventFormTemplatesAction}
+          cancelHref={backHref}
+          successHref={backHref}
+        />
       </section>
     </main>
   );

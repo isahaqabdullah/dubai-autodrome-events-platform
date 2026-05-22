@@ -56,7 +56,7 @@ describe("admin event form static safeguards", () => {
 
     expect(eventForm).toContain("const trimmedTemplateName = templateName.trim();");
     expect(eventForm).toContain("Enter a template name before saving.");
-    expect(eventForm).toContain("disabled={!templateName.trim()}");
+    expect(eventForm).toContain("disabled={!templateName.trim() || isTemplatePending}");
     expect(eventForm).not.toContain("templateName.trim() || fallbackName");
   });
 });

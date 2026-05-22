@@ -35,6 +35,23 @@ export interface EventFormTemplate {
   values: EventFormTemplateValues;
 }
 
+export interface SaveEventFormTemplateInput {
+  name: string;
+  values: EventFormTemplateValues;
+}
+
+export type EventFormTemplateSaveResult =
+  | { ok: true; template: EventFormTemplate }
+  | { ok: false; error: string };
+
+export type EventFormTemplateDeleteResult =
+  | { ok: true; templateId: string }
+  | { ok: false; error: string };
+
+export type EventFormTemplateImportResult =
+  | { ok: true; templates: EventFormTemplate[]; importedCount: number }
+  | { ok: false; error: string };
+
 const EMPTY_TEMPLATE_VALUES: EventFormTemplateValues = {
   venue: "",
   timezone: "",
@@ -94,6 +111,30 @@ function parseOptions(value: FormDataEntryValue | null) {
   }
 }
 
+export function normalizeEventFormTemplateValues(rawValues: unknown): EventFormTemplateValues {
+  const values = rawValues && typeof rawValues === "object" && !Array.isArray(rawValues)
+    ? rawValues as Partial<EventFormTemplateValues>
+    : {};
+
+  return {
+    ...EMPTY_TEMPLATE_VALUES,
+    ...Object.fromEntries(
+      EVENT_FORM_TEMPLATE_TEXT_FIELDS.map((field) => [
+        field,
+        typeof values[field] === "string" ? values[field] : ""
+      ])
+    ),
+    posterImage: typeof values.posterImage === "string" ? values.posterImage : "",
+    disclaimerPdfUrl: typeof values.disclaimerPdfUrl === "string" ? values.disclaimerPdfUrl : "",
+    categories: Array.isArray(values.categories)
+      ? values.categories.map(normalizeOption).filter((option): option is EventTicketOption => Boolean(option))
+      : [],
+    ticketOptions: Array.isArray(values.ticketOptions)
+      ? values.ticketOptions.map(normalizeOption).filter((option): option is EventTicketOption => Boolean(option))
+      : []
+  };
+}
+
 export function extractEventFormTemplateValues(
   formData: FormData,
   assets: { posterImage: string; disclaimerPdfUrl: string }
@@ -131,27 +172,7 @@ function normalizeTemplate(raw: unknown): EventFormTemplate | null {
   }
 
   const row = raw as Record<string, unknown>;
-  const rawValues = row.values && typeof row.values === "object" && !Array.isArray(row.values)
-    ? row.values as Partial<EventFormTemplateValues>
-    : {};
-
-  const values = {
-    ...EMPTY_TEMPLATE_VALUES,
-    ...Object.fromEntries(
-      EVENT_FORM_TEMPLATE_TEXT_FIELDS.map((field) => [
-        field,
-        typeof rawValues[field] === "string" ? rawValues[field] : ""
-      ])
-    ),
-    posterImage: typeof rawValues.posterImage === "string" ? rawValues.posterImage : "",
-    disclaimerPdfUrl: typeof rawValues.disclaimerPdfUrl === "string" ? rawValues.disclaimerPdfUrl : "",
-    categories: Array.isArray(rawValues.categories)
-      ? rawValues.categories.map(normalizeOption).filter((option): option is EventTicketOption => Boolean(option))
-      : [],
-    ticketOptions: Array.isArray(rawValues.ticketOptions)
-      ? rawValues.ticketOptions.map(normalizeOption).filter((option): option is EventTicketOption => Boolean(option))
-      : []
-  };
+  const values = normalizeEventFormTemplateValues(row.values);
 
   return {
     id: typeof row.id === "string" && row.id.trim() ? row.id : `template-${Math.random().toString(36).slice(2, 10)}`,

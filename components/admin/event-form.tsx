@@ -10,12 +10,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { CategoriesEditor } from "@/components/admin/categories-editor";
 import { TicketOptionsEditor } from "@/components/admin/ticket-options-editor";
 import {
-  createEventFormTemplate,
   EVENT_FORM_TEMPLATE_STORAGE_KEY,
   EVENT_FORM_TEMPLATE_TEXT_FIELDS,
   extractEventFormTemplateValues,
   parseStoredEventFormTemplates,
   type EventFormTemplate,
+  type EventFormTemplateDeleteResult,
+  type EventFormTemplateImportResult,
+  type EventFormTemplateSaveResult,
+  type SaveEventFormTemplateInput,
   type EventFormTemplateTextField
 } from "@/lib/event-form-templates";
 import type { EventFormConfig, EventGroup, EventRecord, EventTicketOption } from "@/lib/types";
@@ -79,10 +82,19 @@ export interface EventFormResult {
   error?: string;
 }
 
+type TemplateMessage = {
+  text: string;
+  tone: "success" | "error";
+};
+
 interface EventFormProps {
   event?: EventRecord | null;
   eventGroups: EventGroup[];
+  initialTemplates: EventFormTemplate[];
   action: (formData: FormData) => Promise<EventFormResult>;
+  saveTemplateAction: (input: SaveEventFormTemplateInput) => Promise<EventFormTemplateSaveResult>;
+  deleteTemplateAction: (templateId: string) => Promise<EventFormTemplateDeleteResult>;
+  importLocalTemplatesAction: (templates: EventFormTemplate[]) => Promise<EventFormTemplateImportResult>;
   hideRegistrationSections?: boolean;
   cancelHref?: string;
   successHref?: string;
@@ -247,14 +259,20 @@ function FileUploadField({
 export function EventForm({
   event,
   eventGroups,
+  initialTemplates,
   action,
+  saveTemplateAction,
+  deleteTemplateAction,
+  importLocalTemplatesAction,
   hideRegistrationSections = false,
   cancelHref = "/admin",
   successHref
 }: EventFormProps) {
   const config = (event?.form_config ?? {}) as EventFormConfig;
   const formRef = useRef<HTMLFormElement>(null);
+  const localTemplatesImportedRef = useRef(false);
   const [isPending, startTransition] = useTransition();
+  const [isTemplatePending, startTemplateTransition] = useTransition();
   const [showSuccess, setShowSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const formVersion = event ? `${event.id}:${event.updated_at}` : "new";
@@ -268,10 +286,10 @@ export function EventForm({
   const dateInputTimeZone = event?.timezone?.trim() || "UTC";
   const [posterImage, setPosterImage] = useState(initialPosterImage);
   const [disclaimerPdfUrl, setDisclaimerPdfUrl] = useState(initialDisclaimerPdfUrl);
-  const [templates, setTemplates] = useState<EventFormTemplate[]>([]);
+  const [templates, setTemplates] = useState<EventFormTemplate[]>(initialTemplates);
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
   const [templateName, setTemplateName] = useState("");
-  const [templateMessage, setTemplateMessage] = useState<string | null>(null);
+  const [templateMessage, setTemplateMessage] = useState<TemplateMessage | null>(null);
   const [templateCategories, setTemplateCategories] = useState<EventTicketOption[] | null>(null);
   const [templateTicketOptions, setTemplateTicketOptions] = useState<EventTicketOption[] | null>(null);
   const [templateEditorVersion, setTemplateEditorVersion] = useState(0);
@@ -287,15 +305,49 @@ export function EventForm({
   }, [formVersion, initialPosterImage, initialDisclaimerPdfUrl]);
 
   useEffect(() => {
-    setTemplates(parseStoredEventFormTemplates(window.localStorage.getItem(EVENT_FORM_TEMPLATE_STORAGE_KEY)));
-  }, []);
+    setTemplates(initialTemplates);
+  }, [initialTemplates]);
 
-  function persistTemplates(nextTemplates: EventFormTemplate[]) {
-    setTemplates(nextTemplates);
-    window.localStorage.setItem(EVENT_FORM_TEMPLATE_STORAGE_KEY, JSON.stringify(nextTemplates));
-    if (!nextTemplates.some((template) => template.id === selectedTemplateId)) {
-      setSelectedTemplateId(nextTemplates[0]?.id ?? "");
+  useEffect(() => {
+    if (localTemplatesImportedRef.current) {
+      return;
     }
+
+    localTemplatesImportedRef.current = true;
+
+    try {
+      const localTemplates = parseStoredEventFormTemplates(
+        window.localStorage.getItem(EVENT_FORM_TEMPLATE_STORAGE_KEY)
+      );
+
+      if (localTemplates.length === 0) {
+        return;
+      }
+
+      startTemplateTransition(async () => {
+        const result = await importLocalTemplatesAction(localTemplates);
+
+        if (!result.ok) {
+          setTemplateMessage({ text: result.error, tone: "error" });
+          return;
+        }
+
+        setTemplates(result.templates);
+        window.localStorage.removeItem(EVENT_FORM_TEMPLATE_STORAGE_KEY);
+        setTemplateMessage({
+          text: result.importedCount > 0
+            ? `Imported ${result.importedCount} local template${result.importedCount === 1 ? "" : "s"} into Supabase.`
+            : "Local templates were already available in Supabase.",
+          tone: "success"
+        });
+      });
+    } catch {
+      setTemplateMessage({ text: "Unable to import local browser templates.", tone: "error" });
+    }
+  }, [importLocalTemplatesAction]);
+
+  function showTemplateMessage(text: string, tone: TemplateMessage["tone"] = "success") {
+    setTemplateMessage({ text, tone });
   }
 
   function handleSaveTemplate() {
@@ -306,7 +358,7 @@ export function EventForm({
     const trimmedTemplateName = templateName.trim();
 
     if (!trimmedTemplateName) {
-      setTemplateMessage("Enter a template name before saving.");
+      showTemplateMessage("Enter a template name before saving.", "error");
       return;
     }
 
@@ -314,15 +366,28 @@ export function EventForm({
     formData.set("posterImage", posterImage);
     formData.set("disclaimerPdfUrl", disclaimerPdfUrl);
 
-    const template = createEventFormTemplate(
-      trimmedTemplateName,
-      extractEventFormTemplateValues(formData, { posterImage, disclaimerPdfUrl })
-    );
-    const nextTemplates = [template, ...templates];
-    persistTemplates(nextTemplates);
-    setSelectedTemplateId(template.id);
-    setTemplateName("");
-    setTemplateMessage(`Saved "${template.name}" as a local template.`);
+    const values = extractEventFormTemplateValues(formData, { posterImage, disclaimerPdfUrl });
+
+    startTemplateTransition(async () => {
+      const result = await saveTemplateAction({
+        name: trimmedTemplateName,
+        values
+      });
+
+      if (!result.ok) {
+        showTemplateMessage(result.error, "error");
+        return;
+      }
+
+      const nextTemplates = [
+        result.template,
+        ...templates.filter((template) => template.id !== result.template.id)
+      ];
+      setTemplates(nextTemplates);
+      setSelectedTemplateId(result.template.id);
+      setTemplateName("");
+      showTemplateMessage(`Saved "${result.template.name}" as a shared template.`);
+    });
   }
 
   function handleLoadTemplate() {
@@ -349,7 +414,7 @@ export function EventForm({
     setTemplateCategories(template.values.categories);
     setTemplateTicketOptions(template.values.ticketOptions);
     setTemplateEditorVersion((current) => current + 1);
-    setTemplateMessage(`Loaded "${template.name}".`);
+    showTemplateMessage(`Loaded "${template.name}".`);
   }
 
   function handleResetTemplate() {
@@ -375,7 +440,7 @@ export function EventForm({
     setTemplateTicketOptions(null);
     setSelectedTemplateId("");
     setTemplateEditorVersion((current) => current + 1);
-    setTemplateMessage("Template fields reset.");
+    showTemplateMessage("Template fields reset.");
   }
 
   function handleDeleteTemplate() {
@@ -385,14 +450,25 @@ export function EventForm({
       return;
     }
 
-    const confirmed = window.confirm(`Delete local template "${template.name}"?`);
+    const confirmed = window.confirm(`Delete shared template "${template.name}"?`);
 
     if (!confirmed) {
       return;
     }
 
-    persistTemplates(templates.filter((item) => item.id !== template.id));
-    setTemplateMessage(`Deleted "${template.name}".`);
+    startTemplateTransition(async () => {
+      const result = await deleteTemplateAction(template.id);
+
+      if (!result.ok) {
+        showTemplateMessage(result.error, "error");
+        return;
+      }
+
+      const nextTemplates = templates.filter((item) => item.id !== result.templateId);
+      setTemplates(nextTemplates);
+      setSelectedTemplateId(nextTemplates[0]?.id ?? "");
+      showTemplateMessage(`Deleted "${template.name}".`);
+    });
   }
 
   function handleSubmit(eventObject: React.FormEvent<HTMLFormElement>) {
@@ -424,8 +500,14 @@ export function EventForm({
               <h3 className="mt-1 text-base font-semibold tracking-tight text-ink sm:text-lg">Reuse event setup</h3>
             </div>
             {templateMessage ? (
-              <p className="rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800">
-                {templateMessage}
+              <p
+                className={
+                  templateMessage.tone === "error"
+                    ? "rounded-xl bg-rose-50 px-3 py-2 text-xs font-medium text-rose-800"
+                    : "rounded-xl bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800"
+                }
+              >
+                {templateMessage.text}
               </p>
             ) : null}
           </div>
@@ -448,7 +530,7 @@ export function EventForm({
                 <Button
                   type="button"
                   variant="secondary"
-                  disabled={!selectedTemplateId}
+                  disabled={!selectedTemplateId || isTemplatePending}
                   onClick={handleLoadTemplate}
                   className="rounded-xl px-3 py-2 text-xs sm:text-sm"
                 >
@@ -458,7 +540,7 @@ export function EventForm({
                 <Button
                   type="button"
                   variant="ghost"
-                  disabled={!selectedTemplateId}
+                  disabled={!selectedTemplateId || isTemplatePending}
                   onClick={handleDeleteTemplate}
                   className="rounded-xl px-3 py-2 text-xs sm:text-sm"
                 >
@@ -482,17 +564,18 @@ export function EventForm({
                 value={templateName}
                 onChange={(eventObject) => setTemplateName(eventObject.target.value)}
                 placeholder="Template name (required)"
+                maxLength={120}
                 className="rounded-xl border-slate/20 bg-white px-3 py-2 text-sm"
               />
               <Button
                 type="button"
                 variant="secondary"
                 onClick={handleSaveTemplate}
-                disabled={!templateName.trim()}
+                disabled={!templateName.trim() || isTemplatePending}
                 className="rounded-xl px-3 py-2 text-xs sm:text-sm"
               >
                 <BookmarkPlus className="h-4 w-4" />
-                Save as template
+                {isTemplatePending ? "Saving..." : "Save as template"}
               </Button>
             </div>
           </div>
@@ -819,17 +902,18 @@ export function EventForm({
                 onChange={(eventObject) => setTemplateName(eventObject.target.value)}
                 placeholder="Template name (required)"
                 aria-label="Template name for bottom save"
+                maxLength={120}
                 className="w-full rounded-xl border-slate/20 bg-white px-3 py-2 text-sm sm:min-w-[220px] lg:w-64"
               />
               <Button
                 type="button"
                 variant="secondary"
                 onClick={handleSaveTemplate}
-                disabled={!templateName.trim()}
+                disabled={!templateName.trim() || isTemplatePending}
                 className="rounded-xl px-3 py-2 text-xs sm:text-sm"
               >
                 <BookmarkPlus className="h-4 w-4" />
-                Save template
+                {isTemplatePending ? "Saving..." : "Save template"}
               </Button>
             </div>
             <div className="flex shrink-0 items-center justify-end gap-2">
